@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,8 +7,10 @@ import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
-import { login } from '@/lib/vdoc-api'
+import { type TFunction } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { login } from '@/lib/vdoc-api'
+import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -21,15 +23,22 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 
-const formSchema = z.object({
-  email: z.email({
-    error: (iss) => (iss.input === '' ? 'Please enter your email.' : undefined),
-  }),
-  password: z
-    .string()
-    .min(1, 'Please enter your password.')
-    .min(7, 'Password must be at least 7 characters long.'),
-})
+type UserAuthFormValues = {
+  email: string
+  password: string
+}
+
+const createFormSchema = (t: TFunction) =>
+  z.object({
+    email: z.email({
+      error: (iss) =>
+        iss.input === '' ? t('auth.validation.email') : undefined,
+    }),
+    password: z
+      .string()
+      .min(1, t('auth.validation.password'))
+      .min(7, t('auth.validation.passwordLength')),
+  })
 
 interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
@@ -43,8 +52,10 @@ export function UserAuthForm({
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
   const { auth } = useAuthStore()
+  const { t } = useLanguage()
+  const formSchema = useMemo(() => createFormSchema(t), [t])
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<UserAuthFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
@@ -52,14 +63,18 @@ export function UserAuthForm({
     },
   })
 
-  async function onSubmit(data: z.infer<typeof formSchema>) {
+  async function onSubmit(data: UserAuthFormValues) {
     setIsLoading(true)
 
     try {
       const session = await login(data)
       auth.setUser(session.user)
       auth.setAccessToken(session.token)
-      toast.success(`Welcome back, ${session.user.name || session.user.email}.`)
+      toast.success(
+        t('auth.signIn.welcomeBack', {
+          name: session.user.name || session.user.email,
+        })
+      )
       await navigate({ to: redirectTo || '/', replace: true })
     } catch (error) {
       handleServerError(error)
@@ -80,9 +95,13 @@ export function UserAuthForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t('auth.email')}</FormLabel>
               <FormControl>
-                <Input placeholder='admin@vdoc.local' autoComplete='email' {...field} />
+                <Input
+                  placeholder='admin@vdoc.local'
+                  autoComplete='email'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -93,7 +112,7 @@ export function UserAuthForm({
           name='password'
           render={({ field }) => (
             <FormItem className='relative'>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{t('auth.password')}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='********'
@@ -106,14 +125,14 @@ export function UserAuthForm({
                 to='/forgot-password'
                 className='absolute inset-e-0 -top-0.5 text-sm font-medium text-muted-foreground hover:opacity-75'
               >
-                Forgot password?
+                {t('auth.signIn.forgotPassword')}
               </Link>
             </FormItem>
           )}
         />
         <Button className='mt-2' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
-          Sign in to Vdoc
+          {t('auth.signIn.submit')}
         </Button>
       </form>
     </Form>

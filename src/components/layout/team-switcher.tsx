@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { ChevronsUpDown, Plus } from 'lucide-react'
+import { useLanguage } from '@/context/language-provider'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,18 +16,22 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { type Team } from './types'
 
 type TeamSwitcherProps = {
-  teams: {
-    name: string
-    logo: React.ElementType
-    plan: string
-  }[]
+  teams: Team[]
 }
 
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const { isMobile } = useSidebar()
+  const { t } = useLanguage()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
+  const activeTeamName = activeTeam.nameKey
+    ? t(activeTeam.nameKey)
+    : activeTeam.name
+  const activeTeamPlan = activeTeam.planKey
+    ? t(activeTeam.planKey)
+    : activeTeam.plan
 
   return (
     <SidebarMenu>
@@ -41,10 +46,8 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <activeTeam.logo className='size-4' />
               </div>
               <div className='grid flex-1 text-start text-sm leading-tight'>
-                <span className='truncate font-semibold'>
-                  {activeTeam.name}
-                </span>
-                <span className='truncate text-xs'>{activeTeam.plan}</span>
+                <span className='truncate font-semibold'>{activeTeamName}</span>
+                <span className='truncate text-xs'>{activeTeamPlan}</span>
               </div>
               <ChevronsUpDown className='ms-auto' />
             </SidebarMenuButton>
@@ -56,27 +59,33 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
             sideOffset={4}
           >
             <DropdownMenuLabel className='text-xs text-muted-foreground'>
-              Teams
+              {t('team.label')}
             </DropdownMenuLabel>
-            {teams.map((team, index) => (
-              <DropdownMenuItem
-                key={team.name}
-                onClick={() => setActiveTeam(team)}
-                className='gap-2 p-2'
-              >
-                <div className='flex size-6 items-center justify-center rounded-sm border'>
-                  <team.logo className='size-4 shrink-0' />
-                </div>
-                {team.name}
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
+            {teams.map((team, index) => {
+              const teamName = team.nameKey ? t(team.nameKey) : team.name
+
+              return (
+                <DropdownMenuItem
+                  key={team.name}
+                  onClick={() => setActiveTeam(team)}
+                  className='gap-2 p-2'
+                >
+                  <div className='flex size-6 items-center justify-center rounded-sm border'>
+                    <team.logo className='size-4 shrink-0' />
+                  </div>
+                  {teamName}
+                  <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              )
+            })}
             <DropdownMenuSeparator />
             <DropdownMenuItem className='gap-2 p-2'>
               <div className='flex size-6 items-center justify-center rounded-md border bg-background'>
                 <Plus className='size-4' />
               </div>
-              <div className='font-medium text-muted-foreground'>Add team</div>
+              <div className='font-medium text-muted-foreground'>
+                {t('team.add')}
+              </div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

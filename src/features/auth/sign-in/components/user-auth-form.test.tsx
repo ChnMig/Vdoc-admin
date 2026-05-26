@@ -9,29 +9,32 @@ const FORM_MESSAGES = {
   passwordShort: 'Password must be at least 7 characters long.',
 } as const
 
-const navigate = vi.fn()
-const setUserMock = vi.fn()
-const setAccessTokenMock = vi.fn()
-const loginMock = vi.fn()
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  setUser: vi.fn(),
+  setAccessToken: vi.fn(),
+  login: vi.fn(),
+}))
 
 vi.mock('@/stores/auth-store', () => ({
   useAuthStore: () => ({
     auth: {
-      setUser: setUserMock,
-      setAccessToken: setAccessTokenMock,
+      setUser: mocks.setUser,
+      setAccessToken: mocks.setAccessToken,
     },
   }),
 }))
 
-vi.mock('@/lib/vdoc-api', () => ({
-  login: loginMock,
+vi.mock('@/lib/vdoc-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdoc-api')>()),
+  login: mocks.login,
 }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
     ...actual,
-    useNavigate: () => navigate,
+    useNavigate: () => mocks.navigate,
     Link: ({
       children,
       to,
@@ -52,7 +55,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 describe('UserAuthForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    loginMock.mockResolvedValue({
+    mocks.login.mockResolvedValue({
       token: 'vdoc-session-token',
       user: {
         id: 'user-1',
@@ -103,18 +106,18 @@ describe('UserAuthForm', () => {
 
       await userEvent.click(signInButton)
 
-      await vi.waitFor(() => expect(loginMock).toHaveBeenCalledOnce())
-      expect(loginMock).toHaveBeenCalledWith({
+      await vi.waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
+      expect(mocks.login).toHaveBeenCalledWith({
         email: 'a@b.com',
         password: '1234567',
       })
-      expect(setUserMock).toHaveBeenCalledWith(
+      expect(mocks.setUser).toHaveBeenCalledWith(
         expect.objectContaining({ email: 'a@b.com' })
       )
-      expect(setAccessTokenMock).toHaveBeenCalledWith('vdoc-session-token')
+      expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
 
       await vi.waitFor(() =>
-        expect(navigate).toHaveBeenCalledWith({ to: '/', replace: true })
+        expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
       )
     })
   })
@@ -129,11 +132,11 @@ describe('UserAuthForm', () => {
 
     await userEvent.click(getByRole('button', { name: /Sign in/i }))
 
-    await vi.waitFor(() => expect(setUserMock).toHaveBeenCalledOnce())
-    expect(setAccessTokenMock).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(mocks.setUser).toHaveBeenCalledOnce())
+    expect(mocks.setAccessToken).toHaveBeenCalledOnce()
 
     await vi.waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith({
+      expect(mocks.navigate).toHaveBeenCalledWith({
         to: '/settings',
         replace: true,
       })

@@ -1,4 +1,5 @@
 import { Link, useSearch } from '@tanstack/react-router'
+import { useLanguage } from '@/context/language-provider'
 import {
   Card,
   CardContent,
@@ -12,21 +13,23 @@ import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
+  const { t } = useLanguage()
 
   return (
     <AuthLayout>
       <Card className='max-w-sm gap-4'>
         <CardHeader>
-          <CardTitle className='text-lg tracking-tight'>Sign in</CardTitle>
+          <CardTitle className='text-lg tracking-tight'>
+            {t('auth.signIn.title')}
+          </CardTitle>
           <CardDescription>
-            Enter your email and password below to log into{' '}
-            <br className='max-sm:hidden' /> your account. Don't have an
-            account?{' '}
+            {t('auth.signIn.description')} <br className='max-sm:hidden' />
+            {t('auth.signIn.noAccount')}{' '}
             <Link
               to='/sign-up'
               className='text-nowrap underline underline-offset-4 hover:text-primary'
             >
-              Sign Up
+              {t('auth.signIn.link')}
             </Link>
           </CardDescription>
         </CardHeader>
@@ -35,19 +38,19 @@ export function SignIn() {
         </CardContent>
         <CardFooter>
           <p className='px-8 text-center text-sm text-muted-foreground'>
-            By clicking sign in, you agree to our{' '}
+            {t('auth.signIn.footerPrefix')}{' '}
             <a
               href='/terms'
               className='underline underline-offset-4 hover:text-primary'
             >
-              Terms of Service
+              {t('auth.terms')}
             </a>{' '}
-            and{' '}
+            {t('auth.signIn.footerConnector')}{' '}
             <a
               href='/privacy'
               className='underline underline-offset-4 hover:text-primary'
             >
-              Privacy Policy
+              {t('auth.privacy')}
             </a>
             .
           </p>

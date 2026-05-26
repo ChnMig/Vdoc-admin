@@ -4,9 +4,9 @@ import { VdocPlaceholderPage } from '@/components/vdoc-placeholder-page'
 export const Route = createFileRoute('/_authenticated/documents/')({
   component: () => (
     <VdocPlaceholderPage
-      title='Documents'
-      description='Browse OpenAPI and Markdown documents managed by Vdoc.'
-      endpoint='/api/v1/private/projects/{project_id}/documents'
+      titleKey='placeholder.documents.title'
+      descriptionKey='placeholder.documents.description'
+      endpoint='GET /api/v1/private/documents'
     />
   ),
 })

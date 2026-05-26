@@ -3,11 +3,13 @@ import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent, type Locator } from 'vitest/browser'
 import { ForgotPasswordForm } from './forgot-password-form'
 
-const navigateMock = vi.fn()
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+}))
 
 vi.mock('@tanstack/react-router', async (orig) => {
   const actual = await orig<typeof import('@tanstack/react-router')>()
-  return { ...actual, useNavigate: () => navigateMock }
+  return { ...actual, useNavigate: () => mocks.navigate }
 })
 
 vi.mock('@/lib/utils', async (orig) => ({
@@ -45,7 +47,7 @@ describe('ForgotPasswordForm', () => {
     await userEvent.click(continueButton)
 
     await vi.waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith({ to: '/otp' })
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: '/otp' })
     )
 
     // Form should reset on success

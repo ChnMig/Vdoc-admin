@@ -31,6 +31,8 @@ pnpm dev
 
 Copy `.env.example` to `.env` before local development if your backend is not running at the example URL.
 
+Browser tests are configured to use the local Microsoft Edge Beta executable instead of downloading Playwright Chromium. Override `VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH` if Edge Beta is installed somewhere else.
+
 ## Attribution
 
 This starter is adapted from `satnaing/shadcn-admin`, Copyright (c) 2024 Sat Naing, under the MIT License. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for the retained upstream notice. The project license remains the Vdoc Admin license in [LICENSE](./LICENSE).

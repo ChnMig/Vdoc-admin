@@ -4,9 +4,9 @@ import { VdocPlaceholderPage } from '@/components/vdoc-placeholder-page'
 export const Route = createFileRoute('/_authenticated/drafts/')({
   component: () => (
     <VdocPlaceholderPage
-      title='Drafts'
-      description='Review submitted document drafts before publication.'
-      endpoint='/api/v1/private/projects/{project_id}/documents/{document_id}/drafts'
+      titleKey='placeholder.drafts.title'
+      descriptionKey='placeholder.drafts.description'
+      endpoint='GET /api/v1/private/drafts'
     />
   ),
 })

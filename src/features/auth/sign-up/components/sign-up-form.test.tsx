@@ -10,13 +10,34 @@ const FORM_MESSAGES = {
   passwordMismatch: "Passwords don't match.",
 } as const
 
-const toastPromise = vi.hoisted(() =>
-  vi.fn((p: Promise<unknown>, opts: { success?: () => unknown }) => {
-    p.then(() => opts.success?.())
-  })
-)
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  register: vi.fn(),
+  setUser: vi.fn(),
+  setAccessToken: vi.fn(),
+  toastSuccess: vi.fn(),
+}))
 
-vi.mock('sonner', () => ({ toast: { promise: toastPromise } }))
+vi.mock('sonner', () => ({ toast: { success: mocks.toastSuccess } }))
+
+vi.mock('@/stores/auth-store', () => ({
+  useAuthStore: () => ({
+    auth: {
+      setUser: mocks.setUser,
+      setAccessToken: mocks.setAccessToken,
+    },
+  }),
+}))
+
+vi.mock('@/lib/vdoc-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdoc-api')>()),
+  register: mocks.register,
+}))
+
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-router')>()
+  return { ...actual, useNavigate: () => mocks.navigate }
+})
 
 describe('SignUpForm', () => {
   let screen: RenderResult
@@ -27,12 +48,22 @@ describe('SignUpForm', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    mocks.register.mockResolvedValue({
+      token: 'vdoc-session-token',
+      user: {
+        id: 'user-1',
+        email: 'a@b.com',
+        name: 'Vdoc User',
+        is_super_admin: true,
+        status: 1,
+      },
+    })
 
     screen = await render(<SignUpForm />)
     emailInput = screen.getByRole('textbox', { name: /^Email$/i })
     passwordInput = screen.getByLabelText(/^Password$/i)
     confirmPasswordInput = screen.getByLabelText(/^Confirm Password$/i)
-    submitButton = screen.getByRole('button', { name: /^Create Account$/i })
+    submitButton = screen.getByRole('button', { name: /^Create Vdoc account$/i })
   })
 
   afterEach(() => {
@@ -71,18 +102,24 @@ describe('SignUpForm', () => {
       .toBeInTheDocument()
   })
 
-  it('disables submit while submitting and re-enables after timeout', async () => {
-    vi.useFakeTimers()
-
+  it('registers through Vdoc and navigates to dashboard on success', async () => {
     await userEvent.fill(emailInput, 'a@b.com')
     await userEvent.fill(passwordInput, '1234567')
     await userEvent.fill(confirmPasswordInput, '1234567')
 
     await userEvent.click(submitButton)
-    await expect.element(submitButton).toBeDisabled()
 
-    await vi.advanceTimersByTimeAsync(2000)
-    await expect.element(submitButton).toBeEnabled()
-    expect(toastPromise).toHaveBeenCalledOnce()
+    await vi.waitFor(() => expect(mocks.register).toHaveBeenCalledOnce())
+    expect(mocks.register).toHaveBeenCalledWith({
+      name: '',
+      email: 'a@b.com',
+      password: '1234567',
+    })
+    expect(mocks.setUser).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'a@b.com' })
+    )
+    expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Vdoc account created.')
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
   })
 })

@@ -6,6 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { playwright } from '@vitest/browser-playwright'
 
+const edgeBetaExecutablePath =
+  process.env.VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH ||
+  '/Applications/Microsoft Edge Beta.app/Contents/MacOS/Microsoft Edge Beta'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -21,12 +25,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: ['@radix-ui/react-dropdown-menu'],
+  },
   test: {
     silent: 'passed-only',
     unstubEnvs: true,
     browser: {
       enabled: true,
-      provider: playwright(),
+      provider: playwright({
+        launchOptions: {
+          executablePath: edgeBetaExecutablePath,
+        },
+      }),
       instances: [{ browser: 'chromium' }],
     },
     coverage: {

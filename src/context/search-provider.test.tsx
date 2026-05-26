@@ -109,23 +109,23 @@ describe('SearchProvider and CommandMenu', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.click(screen.getByText('Tasks'))
+    await userEvent.click(screen.getByText('Projects'))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/tasks' })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/projects' })
     await expect
       .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
       .not.toBeInTheDocument()
   })
 
-  it('navigates for nested sidebar items (group with sub-items)', async () => {
+  it('navigates to the MCP Tokens route', async () => {
     const screen = await renderWithSearchProvider()
     const { getByPlaceholder, getByRole } = screen
 
     await openCommandPalette(screen)
 
-    await userEvent.click(getByRole('option', { name: 'Settings Account' }))
+    await userEvent.click(getByRole('option', { name: 'MCP Tokens' }))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/settings/account' })
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/mcp-tokens' })
     await expect
       .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
       .not.toBeInTheDocument()

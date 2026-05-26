@@ -10,14 +10,19 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
+import { getStoredLanguage, translate } from '@/lib/i18n'
 import { VdocApiError } from '@/lib/vdoc-api'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
+import { LanguageProvider } from './context/language-provider'
 import { ThemeProvider } from './context/theme-provider'
 // Generated Routes
 import { routeTree } from './routeTree.gen'
 // Styles
 import './styles/index.css'
+
+const toastMessage = (key: Parameters<typeof translate>[1]) =>
+  translate(getStoredLanguage(), key)
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,7 +48,7 @@ const queryClient = new QueryClient({
 
         if (error instanceof AxiosError) {
           if (error.response?.status === 304) {
-            toast.error('Content not modified!')
+            toast.error(toastMessage('toasts.contentNotModified'))
           }
         }
       },
@@ -52,7 +57,7 @@ const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error) => {
       if (error instanceof VdocApiError && error.code === 401) {
-        toast.error('Session expired!')
+        toast.error(toastMessage('toasts.sessionExpired'))
         useAuthStore.getState().auth.reset()
         const redirect = `${router.history.location.href}`
         router.navigate({ to: '/sign-in', search: { redirect } })
@@ -60,13 +65,13 @@ const queryClient = new QueryClient({
 
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
-          toast.error('Session expired!')
+          toast.error(toastMessage('toasts.sessionExpired'))
           useAuthStore.getState().auth.reset()
           const redirect = `${router.history.location.href}`
           router.navigate({ to: '/sign-in', search: { redirect } })
         }
         if (error.response?.status === 500) {
-          toast.error('Internal Server Error!')
+          toast.error(toastMessage('toasts.internalServerError'))
           // Only navigate to error page in production to avoid disrupting HMR in development
           if (import.meta.env.PROD) {
             router.navigate({ to: '/500' })
@@ -105,7 +110,9 @@ if (!rootElement.innerHTML) {
         <ThemeProvider>
           <FontProvider>
             <DirectionProvider>
-              <RouterProvider router={router} />
+              <LanguageProvider>
+                <RouterProvider router={router} />
+              </LanguageProvider>
             </DirectionProvider>
           </FontProvider>
         </ThemeProvider>

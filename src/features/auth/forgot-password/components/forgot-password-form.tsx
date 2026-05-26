@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { type TFunction } from '@/lib/i18n'
 import { sleep, cn } from '@/lib/utils'
+import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -17,11 +19,17 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 
-const formSchema = z.object({
-  email: z.email({
-    error: (iss) => (iss.input === '' ? 'Please enter your email.' : undefined),
-  }),
-})
+type ForgotPasswordFormValues = {
+  email: string
+}
+
+const createFormSchema = (t: TFunction) =>
+  z.object({
+    email: z.email({
+      error: (iss) =>
+        iss.input === '' ? t('auth.validation.email') : undefined,
+    }),
+  })
 
 export function ForgotPasswordForm({
   className,
@@ -29,24 +37,26 @@ export function ForgotPasswordForm({
 }: React.HTMLAttributes<HTMLFormElement>) {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
+  const { t } = useLanguage()
+  const formSchema = useMemo(() => createFormSchema(t), [t])
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: '' },
   })
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
+  function onSubmit(data: ForgotPasswordFormValues) {
     setIsLoading(true)
 
     toast.promise(sleep(2000), {
-      loading: 'Sending email...',
+      loading: t('auth.forgotPassword.sending'),
       success: () => {
         setIsLoading(false)
         form.reset()
         navigate({ to: '/otp' })
-        return `Email sent to ${data.email}`
+        return t('auth.forgotPassword.sent', { email: data.email })
       },
-      error: 'Error',
+      error: t('auth.forgotPassword.error'),
     })
   }
 
@@ -62,7 +72,7 @@ export function ForgotPasswordForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t('auth.email')}</FormLabel>
               <FormControl>
                 <Input placeholder='name@example.com' {...field} />
               </FormControl>
@@ -71,7 +81,7 @@ export function ForgotPasswordForm({
           )}
         />
         <Button className='mt-2' disabled={isLoading}>
-          Continue
+          {t('auth.forgotPassword.continue')}
           {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
         </Button>
       </form>

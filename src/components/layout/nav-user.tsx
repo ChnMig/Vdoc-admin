@@ -1,7 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronsUpDown, LogOut, Settings } from 'lucide-react'
-import useDialogState from '@/hooks/use-dialog-state'
 import { useAuthStore } from '@/stores/auth-store'
+import { useLanguage } from '@/context/language-provider'
+import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -30,6 +31,7 @@ type NavUserProps = {
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()
+  const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
   const displayUser = authUser
     ? {
@@ -56,11 +58,18 @@ export function NavUser({ user }: NavUserProps) {
                 className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
               >
                 <Avatar className='h-8 w-8 rounded-lg'>
-                  <AvatarImage src={displayUser.avatar} alt={displayUser.name} />
-                  <AvatarFallback className='rounded-lg'>{initials}</AvatarFallback>
+                  <AvatarImage
+                    src={displayUser.avatar}
+                    alt={displayUser.name}
+                  />
+                  <AvatarFallback className='rounded-lg'>
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className='grid flex-1 text-start text-sm leading-tight'>
-                  <span className='truncate font-semibold'>{displayUser.name}</span>
+                  <span className='truncate font-semibold'>
+                    {displayUser.name}
+                  </span>
                   <span className='truncate text-xs'>{displayUser.email}</span>
                 </div>
                 <ChevronsUpDown className='ms-auto size-4' />
@@ -75,14 +84,21 @@ export function NavUser({ user }: NavUserProps) {
               <DropdownMenuLabel className='p-0 font-normal'>
                 <div className='flex items-center gap-2 px-1 py-1.5 text-start text-sm'>
                   <Avatar className='h-8 w-8 rounded-lg'>
-                    <AvatarImage src={displayUser.avatar} alt={displayUser.name} />
-                    <AvatarFallback className='rounded-lg'>{initials}</AvatarFallback>
+                    <AvatarImage
+                      src={displayUser.avatar}
+                      alt={displayUser.name}
+                    />
+                    <AvatarFallback className='rounded-lg'>
+                      {initials}
+                    </AvatarFallback>
                   </Avatar>
                   <div className='grid flex-1 text-start text-sm leading-tight'>
                     <span className='truncate font-semibold'>
                       {displayUser.name}
                     </span>
-                    <span className='truncate text-xs'>{displayUser.email}</span>
+                    <span className='truncate text-xs'>
+                      {displayUser.email}
+                    </span>
                   </div>
                 </div>
               </DropdownMenuLabel>
@@ -90,13 +106,16 @@ export function NavUser({ user }: NavUserProps) {
               <DropdownMenuItem asChild>
                 <Link to='/settings'>
                   <Settings />
-                  Settings
+                  {t('profile.settings')}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant='destructive' onClick={() => setOpen(true)}>
+              <DropdownMenuItem
+                variant='destructive'
+                onClick={() => setOpen(true)}
+              >
                 <LogOut />
-                Sign out
+                {t('profile.signOut')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

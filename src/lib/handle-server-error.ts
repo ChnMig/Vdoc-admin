@@ -1,6 +1,10 @@
 import { AxiosError } from 'axios'
 import { toast } from 'sonner'
+import { getStoredLanguage, translate } from '@/lib/i18n'
 import { VdocApiError } from '@/lib/vdoc-api'
+
+const message = (key: Parameters<typeof translate>[1]) =>
+  translate(getStoredLanguage(), key)
 
 export function handleServerError(error: unknown) {
   if (import.meta.env.DEV) {
@@ -8,7 +12,7 @@ export function handleServerError(error: unknown) {
     console.log(error)
   }
 
-  let errMsg = 'Something went wrong!'
+  let errMsg = message('toasts.somethingWrong')
 
   if (
     error &&
@@ -16,7 +20,7 @@ export function handleServerError(error: unknown) {
     'status' in error &&
     Number(error.status) === 204
   ) {
-    errMsg = 'No content.'
+    errMsg = message('toasts.noContent')
   }
 
   if (error instanceof VdocApiError) {
@@ -25,9 +29,9 @@ export function handleServerError(error: unknown) {
 
   if (error instanceof AxiosError) {
     const title = error.response?.data?.title
-    const message = error.response?.data?.message
-    if (typeof message === 'string' && message.length > 0) {
-      errMsg = message
+    const responseMessage = error.response?.data?.message
+    if (typeof responseMessage === 'string' && responseMessage.length > 0) {
+      errMsg = responseMessage
     }
     if (typeof title === 'string' && title.length > 0) {
       errMsg = title

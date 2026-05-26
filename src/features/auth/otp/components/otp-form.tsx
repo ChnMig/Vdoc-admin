@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
+import { type TFunction } from '@/lib/i18n'
 import { showSubmittedData } from '@/lib/show-submitted-data'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -21,20 +23,27 @@ import {
   InputOTPSeparator,
 } from '@/components/ui/input-otp'
 
-const formSchema = z.object({
-  otp: z
-    .string()
-    .min(6, 'Please enter the 6-digit code.')
-    .max(6, 'Please enter the 6-digit code.'),
-})
+type OtpFormValues = {
+  otp: string
+}
+
+const createFormSchema = (t: TFunction) =>
+  z.object({
+    otp: z
+      .string()
+      .min(6, t('auth.validation.otp'))
+      .max(6, t('auth.validation.otp')),
+  })
 
 type OtpFormProps = React.HTMLAttributes<HTMLFormElement>
 
 export function OtpForm({ className, ...props }: OtpFormProps) {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
+  const { t } = useLanguage()
+  const formSchema = useMemo(() => createFormSchema(t), [t])
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<OtpFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { otp: '' },
   })
@@ -42,7 +51,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
   // eslint-disable-next-line react-hooks/incompatible-library
   const otp = form.watch('otp')
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
+  function onSubmit(data: OtpFormValues) {
     setIsLoading(true)
     showSubmittedData(data)
 
@@ -64,7 +73,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
           name='otp'
           render={({ field }) => (
             <FormItem>
-              <FormLabel className='sr-only'>One-Time Password</FormLabel>
+              <FormLabel className='sr-only'>{t('auth.otp.label')}</FormLabel>
               <FormControl>
                 <InputOTP
                   maxLength={6}
@@ -92,7 +101,7 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
           )}
         />
         <Button className='mt-2' disabled={otp.length < 6 || isLoading}>
-          Verify
+          {t('auth.otp.verify')}
         </Button>
       </form>
     </Form>

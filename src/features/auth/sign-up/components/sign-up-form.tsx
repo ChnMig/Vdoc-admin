@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -7,8 +7,10 @@ import { Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
-import { register } from '@/lib/vdoc-api'
+import { type TFunction } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { register } from '@/lib/vdoc-api'
+import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -21,23 +23,31 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 
-const formSchema = z
-  .object({
-    name: z.string().trim().optional(),
-    email: z.email({
-      error: (iss) =>
-        iss.input === '' ? 'Please enter your email.' : undefined,
-    }),
-    password: z
-      .string()
-      .min(1, 'Please enter your password.')
-      .min(7, 'Password must be at least 7 characters long.'),
-    confirmPassword: z.string().min(1, 'Please confirm your password.'),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match.",
-    path: ['confirmPassword'],
-  })
+type SignUpFormValues = {
+  name?: string
+  email: string
+  password: string
+  confirmPassword: string
+}
+
+const createFormSchema = (t: TFunction) =>
+  z
+    .object({
+      name: z.string().trim().optional(),
+      email: z.email({
+        error: (iss) =>
+          iss.input === '' ? t('auth.validation.email') : undefined,
+      }),
+      password: z
+        .string()
+        .min(1, t('auth.validation.password'))
+        .min(7, t('auth.validation.passwordLength')),
+      confirmPassword: z.string().min(1, t('auth.validation.confirmPassword')),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: t('auth.validation.passwordMismatch'),
+      path: ['confirmPassword'],
+    })
 
 export function SignUpForm({
   className,
@@ -46,8 +56,10 @@ export function SignUpForm({
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
   const { auth } = useAuthStore()
+  const { t } = useLanguage()
+  const formSchema = useMemo(() => createFormSchema(t), [t])
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<SignUpFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -57,7 +69,7 @@ export function SignUpForm({
     },
   })
 
-  async function onSubmit(data: z.infer<typeof formSchema>) {
+  async function onSubmit(data: SignUpFormValues) {
     setIsLoading(true)
 
     try {
@@ -68,7 +80,7 @@ export function SignUpForm({
       })
       auth.setUser(session.user)
       auth.setAccessToken(session.token)
-      toast.success('Vdoc account created.')
+      toast.success(t('auth.signUp.created'))
       await navigate({ to: '/', replace: true })
     } catch (error) {
       handleServerError(error)
@@ -89,9 +101,13 @@ export function SignUpForm({
           name='name'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name</FormLabel>
+              <FormLabel>{t('auth.name')}</FormLabel>
               <FormControl>
-                <Input placeholder='Vdoc Admin' autoComplete='name' {...field} />
+                <Input
+                  placeholder='Vdoc Admin'
+                  autoComplete='name'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -102,9 +118,13 @@ export function SignUpForm({
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t('auth.email')}</FormLabel>
               <FormControl>
-                <Input placeholder='admin@vdoc.local' autoComplete='email' {...field} />
+                <Input
+                  placeholder='admin@vdoc.local'
+                  autoComplete='email'
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -115,7 +135,7 @@ export function SignUpForm({
           name='password'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{t('auth.password')}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='********'
@@ -132,7 +152,7 @@ export function SignUpForm({
           name='confirmPassword'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
+              <FormLabel>{t('auth.confirmPassword')}</FormLabel>
               <FormControl>
                 <PasswordInput
                   placeholder='********'
@@ -146,7 +166,7 @@ export function SignUpForm({
         />
         <Button className='mt-2' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <UserPlus />}
-          Create Vdoc account
+          {t('auth.signUp.submit')}
         </Button>
       </form>
     </Form>
