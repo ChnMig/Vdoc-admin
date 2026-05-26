@@ -1,0 +1,36 @@
+# Vdoc Admin
+
+Vdoc Admin is the Vite + React + TypeScript service admin console for the Vdoc backend. It is adapted from [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin) and keeps the template's TanStack and shadcn UI foundation while replacing template authentication with Vdoc's raw-JWT API contract.
+
+## Stack
+
+- Vite, React, and TypeScript
+- TanStack Router, Query, and Table
+- Tailwind CSS v4 and shadcn/ui components
+- React Hook Form, Zod, Zustand, Axios, and Sonner
+
+## Vdoc Backend Expectations
+
+Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin, for example `http://127.0.0.1:8080`.
+
+Authentication uses the Vdoc backend directly:
+
+- `POST /api/v1/open/auth/login`
+- `POST /api/v1/open/auth/register`
+- `GET /api/v1/private/identity/me`
+
+Private requests send the JWT as the raw `Authorization` header value with no `Bearer` prefix. Vdoc responses are HTTP 200 envelopes with `code`, `status`, `message`, `detail`, `total`, `trace_id`, and `timestamp`; the starter API helper unwraps successful envelopes and raises errors for non-OK envelopes.
+
+## Development
+
+```sh
+pnpm install
+pnpm build
+pnpm dev
+```
+
+Copy `.env.example` to `.env` before local development if your backend is not running at the example URL.
+
+## Attribution
+
+This starter is adapted from `satnaing/shadcn-admin`, Copyright (c) 2024 Sat Naing, under the MIT License. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for the retained upstream notice. The project license remains the Vdoc Admin license in [LICENSE](./LICENSE).
