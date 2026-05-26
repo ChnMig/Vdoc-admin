@@ -477,16 +477,16 @@ const zhCN = {
   },
 } satisfies Messages
 
-export const messages = {
+const messages = {
   en,
   'zh-CN': zhCN,
 } as const satisfies Record<Language, Messages>
 
-export function isLanguage(value: string | undefined): value is Language {
+function isLanguage(value: string | undefined): value is Language {
   return languages.includes(value as Language)
 }
 
-export function normalizeLanguage(value: string | undefined): Language {
+function normalizeLanguage(value: string | undefined): Language {
   return isLanguage(value) ? value : DEFAULT_LANGUAGE
 }
 
