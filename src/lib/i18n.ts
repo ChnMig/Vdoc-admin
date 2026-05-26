@@ -14,6 +14,8 @@ const en = {
     consoleLabel: 'Vdoc Console',
     dashboardPreviewAlt: 'Vdoc Admin dashboard preview',
     skipToMain: 'Skip to main content',
+    sidebarTitle: 'Sidebar',
+    mobileSidebarDescription: 'Displays the mobile sidebar.',
     toggleSidebar: 'Toggle Sidebar',
     toggleNavigation: 'Toggle navigation menu',
   },
@@ -64,6 +66,14 @@ const en = {
     signOut: 'Sign out',
     dialogDescription:
       'Are you sure you want to sign out? You will need to sign in again to access your account.',
+  },
+  common: {
+    cancel: 'Cancel',
+    continue: 'Continue',
+  },
+  passwordInput: {
+    show: 'Show password',
+    hide: 'Hide password',
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
@@ -166,7 +176,6 @@ const en = {
       passwordLength: 'Password must be at least 7 characters long.',
       confirmPassword: 'Please confirm your password.',
       passwordMismatch: "Passwords don't match.",
-      otp: 'Please enter the 6-digit code.',
     },
     signIn: {
       title: 'Sign in',
@@ -177,7 +186,6 @@ const en = {
       submit: 'Sign in to Vdoc',
       footerPrefix: 'By clicking sign in, you agree to our',
       footerConnector: 'and',
-      forgotPassword: 'Forgot password?',
       welcomeBack: 'Welcome back, {name}.',
     },
     signUp: {
@@ -188,26 +196,6 @@ const en = {
       submit: 'Create Vdoc account',
       footerPrefix: 'By creating an account, you agree to our',
       created: 'Vdoc account created.',
-    },
-    forgotPassword: {
-      title: 'Forgot Password',
-      description:
-        'Enter your registered email and we will send you a link to reset your password.',
-      noAccount: "Don't have an account?",
-      signUp: 'Sign up',
-      continue: 'Continue',
-      sending: 'Sending email...',
-      sent: 'Email sent to {email}',
-      error: 'Error',
-    },
-    otp: {
-      title: 'Two-factor Authentication',
-      description:
-        'Please enter the authentication code. We have sent the authentication code to your email.',
-      label: 'One-Time Password',
-      verify: 'Verify',
-      notReceived: "Haven't received it?",
-      resend: 'Resend a new code.',
     },
   },
   toasts: {
@@ -265,6 +253,8 @@ const zhCN = {
     consoleLabel: 'Vdoc 控制台',
     dashboardPreviewAlt: 'Vdoc Admin 仪表盘预览',
     skipToMain: '跳到主内容',
+    sidebarTitle: '侧边栏',
+    mobileSidebarDescription: '显示移动端侧边栏。',
     toggleSidebar: '切换侧边栏',
     toggleNavigation: '切换导航菜单',
   },
@@ -314,6 +304,14 @@ const zhCN = {
     settings: '设置',
     signOut: '退出登录',
     dialogDescription: '确定要退出登录吗？你需要重新登录才能访问账号。',
+  },
+  common: {
+    cancel: '取消',
+    continue: '继续',
+  },
+  passwordInput: {
+    show: '显示密码',
+    hide: '隐藏密码',
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
@@ -412,7 +410,6 @@ const zhCN = {
       passwordLength: '密码至少需要 7 个字符。',
       confirmPassword: '请确认密码。',
       passwordMismatch: '两次输入的密码不一致。',
-      otp: '请输入 6 位验证码。',
     },
     signIn: {
       title: '登录',
@@ -422,7 +419,6 @@ const zhCN = {
       submit: '登录 Vdoc',
       footerPrefix: '点击登录即表示你同意我们的',
       footerConnector: '和',
-      forgotPassword: '忘记密码？',
       welcomeBack: '欢迎回来，{name}。',
     },
     signUp: {
@@ -433,24 +429,6 @@ const zhCN = {
       submit: '创建 Vdoc 账号',
       footerPrefix: '创建账号即表示你同意我们的',
       created: 'Vdoc 账号已创建。',
-    },
-    forgotPassword: {
-      title: '忘记密码',
-      description: '请输入注册邮箱，我们会发送重置密码链接。',
-      noAccount: '还没有账号？',
-      signUp: '注册',
-      continue: '继续',
-      sending: '正在发送邮件...',
-      sent: '邮件已发送至 {email}',
-      error: '错误',
-    },
-    otp: {
-      title: '双因素认证',
-      description: '请输入认证码。我们已将认证码发送到你的邮箱。',
-      label: '一次性密码',
-      verify: '验证',
-      notReceived: '没有收到？',
-      resend: '重新发送验证码。',
     },
   },
   toasts: {
