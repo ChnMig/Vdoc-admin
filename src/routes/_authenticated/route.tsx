@@ -15,7 +15,8 @@ export const Route = createFileRoute('/_authenticated')({
 
     try {
       auth.setUser(await getIdentity())
-    } catch {
+    } catch (error) {
+      void error
       useAuthStore.getState().auth.reset()
       throw redirect({
         to: '/sign-in',

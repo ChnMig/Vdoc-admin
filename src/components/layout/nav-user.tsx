@@ -39,7 +39,11 @@ export function NavUser({ user }: NavUserProps) {
         email: authUser.email,
         avatar: user.avatar,
       }
-    : user
+    : {
+        name: t('app.name'),
+        email: t('profile.notSignedIn'),
+        avatar: user.avatar,
+      }
   const initials = displayUser.name
     .split(' ')
     .map((part) => part[0])

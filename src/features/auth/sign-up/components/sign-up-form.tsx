@@ -121,7 +121,7 @@ export function SignUpForm({
               <FormLabel>{t('auth.email')}</FormLabel>
               <FormControl>
                 <Input
-                  placeholder='admin@vdoc.local'
+                  placeholder='admin@example.com'
                   autoComplete='email'
                   {...field}
                 />

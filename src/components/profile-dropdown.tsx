@@ -19,7 +19,7 @@ export function ProfileDropdown() {
   const { t } = useLanguage()
   const user = useAuthStore((state) => state.auth.user)
   const name = user?.name || user?.email || t('app.name')
-  const email = user?.email || 'admin@vdoc.local'
+  const email = user?.email || t('profile.notSignedIn')
   const initials = name
     .split(' ')
     .map((part) => part[0])

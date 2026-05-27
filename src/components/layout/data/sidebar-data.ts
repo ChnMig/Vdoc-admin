@@ -15,8 +15,8 @@ import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
-    name: 'Vdoc Admin',
-    email: 'admin@vdoc.local',
+    name: 'Vdoc',
+    email: '',
     avatar: '/images/favicon.svg',
   },
   teams: [

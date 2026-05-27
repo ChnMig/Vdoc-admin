@@ -9,13 +9,11 @@ const config: KnipConfig = {
   ignoreFiles: [
     'src/assets/brand-icons/**',
     'src/components/data-table/**',
-    'src/components/coming-soon.tsx',
     'src/components/date-picker.tsx',
     'src/components/learn-more.tsx',
     'src/components/long-text.tsx',
     'src/components/select-dropdown.tsx',
     'src/components/layout/top-nav.tsx',
-    'src/features/dashboard/components/**',
     'src/test-utils/tanstack-table.ts',
   ],
   ignoreDependencies: [

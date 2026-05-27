@@ -1,12 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { VdocPlaceholderPage } from '@/components/vdoc-placeholder-page'
+import { DiffsPage } from '@/features/vdoc-admin/pages'
 
 export const Route = createFileRoute('/_authenticated/diffs/')({
-  component: () => (
-    <VdocPlaceholderPage
-      titleKey='placeholder.diffs.title'
-      descriptionKey='placeholder.diffs.description'
-      endpoint='GET /api/v1/private/diffs'
-    />
-  ),
+  component: DiffsPage,
 })
