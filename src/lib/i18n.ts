@@ -148,7 +148,8 @@ const en = {
       unknown: 'Unknown',
       generated: 'Generated',
       tokenWarning: 'Copy this token now. The backend may not return it again.',
-      attribution: 'Vdoc Admin keeps the upstream template attribution while replacing starter template data with Vdoc backend API calls.',
+      attribution:
+        'Vdoc Admin keeps the upstream template attribution while replacing starter template data with Vdoc backend API calls.',
     },
     fields: {
       id: 'ID',
@@ -210,7 +211,8 @@ const en = {
       },
       users: {
         title: 'Users',
-        description: 'List users, create accounts, patch status, and oversee user MCP tokens.',
+        description:
+          'List users, create accounts, patch status, and oversee user MCP tokens.',
       },
       teams: {
         title: 'Teams',
@@ -218,7 +220,8 @@ const en = {
       },
       projects: {
         title: 'Projects',
-        description: 'Manage projects and project membership using real backend APIs.',
+        description:
+          'Manage projects and project membership using real backend APIs.',
       },
       documents: {
         title: 'Documents',
@@ -230,19 +233,23 @@ const en = {
       },
       versions: {
         title: 'Versions',
-        description: 'Browse published versions, content, and OpenAPI endpoints.',
+        description:
+          'Browse published versions, content, and OpenAPI endpoints.',
       },
       diffs: {
         title: 'Diffs',
-        description: 'Compare two versions on demand. Vdoc has no diff history list endpoint.',
+        description:
+          'Compare two versions on demand. Vdoc has no diff history list endpoint.',
       },
       mcpTokens: {
         title: 'MCP Tokens',
-        description: 'List, create, inspect, and revoke current-user MCP tokens.',
+        description:
+          'List, create, inspect, and revoke current-user MCP tokens.',
       },
       settings: {
         title: 'Settings',
-        description: 'Read-only runtime settings from the current admin session.',
+        description:
+          'Read-only runtime settings from the current admin session.',
       },
     },
     sections: {
@@ -513,7 +520,8 @@ const zhCN = {
       unknown: '未知',
       generated: '已生成',
       tokenWarning: '请立即复制此令牌。后端可能不会再次返回。',
-      attribution: 'Vdoc Admin 保留上游模板署名，同时用 Vdoc 后端 API 调用替换模板起始数据。',
+      attribution:
+        'Vdoc Admin 保留上游模板署名，同时用 Vdoc 后端 API 调用替换模板起始数据。',
     },
     fields: {
       id: 'ID',

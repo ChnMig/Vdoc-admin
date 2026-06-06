@@ -3,8 +3,8 @@ import { Slot } from '@radix-ui/react-slot'
 import { VariantProps, cva } from 'class-variance-authority'
 import { PanelLeftIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useIsMobile } from '@/hooks/use-mobile'
 import { useLanguage } from '@/context/language-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -196,7 +196,9 @@ function Sidebar({
         >
           <SheetHeader className='sr-only'>
             <SheetTitle>{t('app.sidebarTitle')}</SheetTitle>
-            <SheetDescription>{t('app.mobileSidebarDescription')}</SheetDescription>
+            <SheetDescription>
+              {t('app.mobileSidebarDescription')}
+            </SheetDescription>
           </SheetHeader>
           <div className='flex h-full w-full flex-col'>{children}</div>
         </SheetContent>

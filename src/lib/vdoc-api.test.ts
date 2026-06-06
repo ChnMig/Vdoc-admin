@@ -113,7 +113,10 @@ describe('vdoc-api', () => {
     })
     useAuthStore.getState().auth.setAccessToken('admin.jwt')
 
-    await expect(listUsers()).resolves.toEqual({ items: [sampleUser], total: 1 })
+    await expect(listUsers()).resolves.toEqual({
+      items: [sampleUser],
+      total: 1,
+    })
 
     expect(requests[0]?.url).toBe('/api/v1/private/system/users')
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBe('admin.jwt')

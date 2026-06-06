@@ -168,7 +168,10 @@ export type DraftDTO = {
   updated_at: string
 }
 
-export type VersionDTO = Omit<DraftDTO, 'status' | 'diff_preview' | 'created_by' | 'submitted_at'> & {
+export type VersionDTO = Omit<
+  DraftDTO,
+  'status' | 'diff_preview' | 'created_by' | 'submitted_at'
+> & {
   draft_id: string
   status: number
   published_by: string
@@ -326,7 +329,9 @@ vdocApi.interceptors.request.use((config) => {
   return config
 })
 
-export async function unwrapEnvelope<T>(request: Promise<{ data: VdocEnvelope<T> }>) {
+export async function unwrapEnvelope<T>(
+  request: Promise<{ data: VdocEnvelope<T> }>
+) {
   const response = await request
   const envelope = response.data
 
@@ -349,7 +354,7 @@ export async function unwrapListEnvelope<T>(
 
   return {
     items: envelope.detail ?? [],
-    total: envelope.total ?? (envelope.detail?.length ?? 0),
+    total: envelope.total ?? envelope.detail?.length ?? 0,
   }
 }
 
@@ -374,11 +379,15 @@ export function getHealth() {
 }
 
 export function listUsers() {
-  return unwrapListEnvelope<UserDTO>(vdocApi.get('/api/v1/private/system/users'))
+  return unwrapListEnvelope<UserDTO>(
+    vdocApi.get('/api/v1/private/system/users')
+  )
 }
 
 export function createUser(payload: CreateUserPayload) {
-  return unwrapEnvelope<UserDTO>(vdocApi.post('/api/v1/private/system/users', payload))
+  return unwrapEnvelope<UserDTO>(
+    vdocApi.post('/api/v1/private/system/users', payload)
+  )
 }
 
 export function patchUser(userId: string, payload: PatchUserPayload) {
@@ -431,7 +440,10 @@ export function createProject(payload: CreateProjectPayload) {
   )
 }
 
-export function updateProject(projectId: string, payload: NameDescriptionPayload) {
+export function updateProject(
+  projectId: string,
+  payload: NameDescriptionPayload
+) {
   return unwrapEnvelope<ProjectDTO>(
     vdocApi.patch(`/api/v1/private/projects/${projectId}`, payload)
   )
@@ -449,7 +461,10 @@ export function listProjectMembers(projectId: string) {
   )
 }
 
-export function addProjectMember(projectId: string, payload: AddProjectMemberPayload) {
+export function addProjectMember(
+  projectId: string,
+  payload: AddProjectMemberPayload
+) {
   return unwrapEnvelope<ProjectMemberDTO>(
     vdocApi.post(`/api/v1/private/projects/${projectId}/members`, payload)
   )
@@ -542,7 +557,11 @@ export function updateBranch(
   )
 }
 
-export function archiveBranch(projectId: string, documentId: string, branchId: string) {
+export function archiveBranch(
+  projectId: string,
+  documentId: string,
+  branchId: string
+) {
   return unwrapEnvelope<BranchDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/branches/${branchId}/archive`
@@ -598,7 +617,12 @@ export function getDraftContent(
   )
 }
 
-function draftAction(projectId: string, documentId: string, draftId: string, action: string) {
+function draftAction(
+  projectId: string,
+  documentId: string,
+  draftId: string,
+  action: string
+) {
   return unwrapEnvelope<DraftDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/${action}`
@@ -606,11 +630,19 @@ function draftAction(projectId: string, documentId: string, draftId: string, act
   )
 }
 
-export function submitDraft(projectId: string, documentId: string, draftId: string) {
+export function submitDraft(
+  projectId: string,
+  documentId: string,
+  draftId: string
+) {
   return draftAction(projectId, documentId, draftId, 'submit')
 }
 
-export function approveDraft(projectId: string, documentId: string, draftId: string) {
+export function approveDraft(
+  projectId: string,
+  documentId: string,
+  draftId: string
+) {
   return draftAction(projectId, documentId, draftId, 'approve')
 }
 
@@ -622,11 +654,19 @@ export function requestDraftChanges(
   return draftAction(projectId, documentId, draftId, 'request-changes')
 }
 
-export function rejectDraft(projectId: string, documentId: string, draftId: string) {
+export function rejectDraft(
+  projectId: string,
+  documentId: string,
+  draftId: string
+) {
   return draftAction(projectId, documentId, draftId, 'reject')
 }
 
-export function promoteDraft(projectId: string, documentId: string, draftId: string) {
+export function promoteDraft(
+  projectId: string,
+  documentId: string,
+  draftId: string
+) {
   return unwrapEnvelope<DraftDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/promote`,
@@ -696,7 +736,11 @@ export function compareDiff(
   )
 }
 
-export function getDiffSummary(projectId: string, documentId: string, diffId: string) {
+export function getDiffSummary(
+  projectId: string,
+  documentId: string,
+  diffId: string
+) {
   return unwrapEnvelope<DiffSummaryDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}/summary`
@@ -705,7 +749,9 @@ export function getDiffSummary(projectId: string, documentId: string, diffId: st
 }
 
 export function listMCPTokens() {
-  return unwrapListEnvelope<MCPTokenDTO>(vdocApi.get('/api/v1/private/mcp-tokens'))
+  return unwrapListEnvelope<MCPTokenDTO>(
+    vdocApi.get('/api/v1/private/mcp-tokens')
+  )
 }
 
 export function createMCPToken(payload: CreateMCPTokenPayload) {
