@@ -7,8 +7,11 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { playwright } from '@vitest/browser-playwright'
 
 const edgeBetaExecutablePath =
-  process.env.VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH ||
-  '/Applications/Microsoft Edge Beta.app/Contents/MacOS/Microsoft Edge Beta'
+  process.env.VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH
+
+const browserLaunchOptions = edgeBetaExecutablePath
+  ? { executablePath: edgeBetaExecutablePath }
+  : undefined
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -34,9 +37,7 @@ export default defineConfig({
     browser: {
       enabled: true,
       provider: playwright({
-        launchOptions: {
-          executablePath: edgeBetaExecutablePath,
-        },
+        launchOptions: browserLaunchOptions,
       }),
       instances: [{ browser: 'chromium' }],
     },
