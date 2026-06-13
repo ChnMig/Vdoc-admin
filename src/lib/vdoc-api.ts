@@ -178,6 +178,8 @@ export type VersionDTO = Omit<
   published_at: string
 }
 
+type DraftActionResultDTO = DraftDTO | VersionDTO
+
 type ContentDTO = {
   owner_type: string
   owner_id: string
@@ -202,7 +204,7 @@ export type EndpointSummaryDTO = {
   updated_at: string
 }
 
-type EndpointDTO = EndpointSummaryDTO & {
+export type EndpointDTO = EndpointSummaryDTO & {
   parameters?: unknown
   request_body?: unknown
   responses?: unknown
@@ -288,6 +290,13 @@ type DraftPayload = {
 type CompareDiffPayload = {
   from_version_id: string
   to_version_id: string
+}
+
+type PromoteDraftPayload = {
+  source_branch_id: string
+  target_branch_id: string
+  version_name: string
+  changelog: string
 }
 
 type CreateMCPTokenPayload = {
@@ -623,7 +632,7 @@ function draftAction(
   draftId: string,
   action: string
 ) {
-  return unwrapEnvelope<DraftDTO>(
+  return unwrapEnvelope<DraftActionResultDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/${action}`
     )
@@ -665,12 +674,12 @@ export function rejectDraft(
 export function promoteDraft(
   projectId: string,
   documentId: string,
-  draftId: string
+  payload: PromoteDraftPayload
 ) {
   return unwrapEnvelope<DraftDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/promote`,
-      { draft_id: draftId }
+      payload
     )
   )
 }

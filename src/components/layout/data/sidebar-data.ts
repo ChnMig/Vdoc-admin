@@ -24,7 +24,7 @@ export const sidebarData: SidebarData = {
       name: 'Vdoc Admin',
       nameKey: 'app.name',
       logo: Logo,
-      plan: 'Service Console',
+      plan: 'Workbench + Portal',
       planKey: 'team.serviceConsolePlan',
     },
   ],

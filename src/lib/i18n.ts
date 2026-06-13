@@ -10,7 +10,7 @@ export const LANGUAGE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 const en = {
   app: {
     name: 'Vdoc Admin',
-    serviceConsole: 'Service Console',
+    serviceConsole: 'Product Workbench',
     consoleLabel: 'Vdoc Console',
     dashboardPreviewAlt: 'Vdoc Admin dashboard preview',
     skipToMain: 'Skip to main content',
@@ -43,7 +43,7 @@ const en = {
   team: {
     label: 'Teams',
     add: 'Add team',
-    serviceConsolePlan: 'Service Console',
+    serviceConsolePlan: 'Workbench + Portal',
   },
   search: {
     button: 'Search',
@@ -78,9 +78,9 @@ const en = {
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
-    title: 'Service Console',
+    title: 'Product Workbench',
     description:
-      'Starter shell for managing Vdoc users, teams, projects, documents, drafts, versions, diffs, and MCP tokens.',
+      'Product workbench for onboarding, review, versioned documents, developer-portal browsing, diffs, and MCP tokens.',
     overview: {
       projects: {
         title: 'Projects',
@@ -151,6 +151,196 @@ const en = {
       attribution:
         'Vdoc Admin keeps the upstream template attribution while replacing starter template data with Vdoc backend API calls.',
     },
+    workbench: {
+      eyebrow: 'Product workbench',
+      title: 'Plan, review, and ship docs from one admin surface.',
+      description:
+        'Use the console as the product operating room: invite people, organize teams and projects, publish versioned documents, compare breaking changes, and issue MCP tokens for agents.',
+      roleTitle: 'Role guidance',
+      superAdminRole: 'Super admin workspace',
+      adminRole: 'Project admin workspace',
+      superAdminGuidance:
+        'Start with users and teams, then create projects with an accountable admin before writers publish drafts.',
+      adminGuidance:
+        'Focus on project membership, document branches, draft review, version browsing, and token hygiene.',
+      usersStat: 'People who can collaborate in Vdoc',
+      teamsStat: 'Ownership boundaries for projects',
+      projectsStat: 'Product spaces ready for docs',
+      tokensStat: 'Agent credentials issued from Vdoc',
+      nextStepsTitle: 'Recommended setup path',
+      nextStepsDescription:
+        'Follow these cards when backend data is empty or a workspace needs a clean first configuration.',
+      done: 'Done',
+      steps: {
+        team: {
+          title: 'Create a team',
+          description: 'Group owners around a product or service boundary.',
+        },
+        project: {
+          title: 'Create a project',
+          description:
+            'Attach the team and first admin so documents have a home.',
+        },
+        document: {
+          title: 'Add a document',
+          description:
+            'Choose OpenAPI or Markdown and set the repository-relative path.',
+        },
+        branch: {
+          title: 'Create a branch',
+          description:
+            'Give writers and agents a safe target before draft review.',
+        },
+        draft: {
+          title: 'Submit a draft',
+          description:
+            'Review content, request changes, approve, and promote to a version.',
+        },
+        token: {
+          title: 'Issue an MCP token',
+          description:
+            'Create scoped agent access after the workspace shape is clear.',
+        },
+      },
+    },
+    emptyStates: {
+      generic: {
+        description: 'No backend data is available for this panel yet.',
+      },
+      users: {
+        title: 'No users yet',
+        description:
+          'Create the first user before assigning project admins or auditing user MCP tokens.',
+        action: 'Use the Create user form above.',
+      },
+      teams: {
+        title: 'No teams yet',
+        description:
+          'Teams are the ownership boundary for Vdoc projects and should be created before project setup.',
+        action: 'Create a team with a clear product or service name.',
+      },
+      projects: {
+        title: 'No projects yet',
+        description:
+          'Projects connect a team, admin, documents, members, branches, drafts, versions, and diffs.',
+        action: 'Create a project after at least one team and user exist.',
+      },
+      members: {
+        title: 'No project members yet',
+        description:
+          'Select a project, then add readers, writers, and admins so review responsibility is explicit.',
+        action: 'Use the member form after selecting a project.',
+      },
+      documents: {
+        title: 'No documents in this project',
+        description:
+          'Add an OpenAPI or Markdown document so branches, drafts, versions, endpoints, and diffs have a source.',
+        action: 'Select a project and use Create document.',
+      },
+      branches: {
+        title: 'No branches for this document',
+        description:
+          'Branches give drafts a stable review target before content is promoted to versions.',
+        action: 'Select a document and create a branch.',
+      },
+      drafts: {
+        title: 'No drafts waiting for review',
+        description:
+          'Create a draft from a branch, inspect its content, then submit, approve, and promote it.',
+        action: 'Select project, document, and branch before creating a draft.',
+      },
+      versions: {
+        title: 'No published versions yet',
+        description:
+          'Versions appear after an approved draft is promoted and become the source for content browsing and diffs.',
+        action: 'Approve and promote a draft to publish the first version.',
+      },
+      endpoints: {
+        title: 'No endpoints match this version',
+        description:
+          'Endpoint rows appear for OpenAPI versions. Adjust the search or publish an OpenAPI document version.',
+        action: 'Select another version or clear the endpoint search.',
+      },
+      diffs: {
+        title: 'No diff changes to review',
+        description:
+          'Compare two published versions, then filter by breaking, must-handle, or high-severity changes.',
+        action: 'Select from and to versions, then run Compare.',
+      },
+      tokens: {
+        title: 'No MCP tokens yet',
+        description:
+          'Tokens are created only through the supported Vdoc token API and should be scoped for agent use.',
+        action: 'Create a token and copy the one-time raw value immediately.',
+      },
+      userTokens: {
+        title: 'No user tokens selected',
+        description:
+          'Select a user to audit their MCP tokens or confirm that none have been issued.',
+        action: 'Click a user email in the users table.',
+      },
+    },
+    developerPortal: {
+      endpointCount: 'Endpoints',
+      endpointCountDescription: 'Returned by the selected version',
+      methodCount: 'Methods',
+      methodCountDescription: 'Unique HTTP methods in view',
+      tagCount: 'Tags',
+      tagCountDescription: 'Unique OpenAPI tags in view',
+      searchLabel: 'Endpoint search',
+      searchPlaceholder: 'Search method, path, tag, operation, or summary',
+      groupBy: 'Group endpoints by',
+      groupByTag: 'Tag',
+      groupByMethod: 'Method',
+      untagged: 'Untagged',
+      endpointBrowserDescription:
+        'Browse the selected version like a developer portal without assuming a specific OpenAPI shape.',
+      tag: 'Tag',
+      deprecated: 'Deprecated',
+      noEndpointSummary: 'No endpoint summary provided.',
+      operationId: 'Operation ID',
+      tags: 'Tags',
+      parameters: 'Parameters',
+      requestBody: 'Request body',
+      responses: 'Responses',
+      runtime: 'Security, servers, and schema refs',
+      security: 'Security',
+      servers: 'Servers',
+      schemaRefs: 'Schema refs',
+      normalizedOperation: 'Normalized operation',
+    },
+    diff: {
+      compareHint: 'Only existing compare and summary APIs are used.',
+      noDiffSelected: 'Run a comparison to review changes.',
+      addedEndpoints: 'Added endpoints',
+      removedEndpoints: 'Removed endpoints',
+      modifiedEndpoints: 'Modified endpoints',
+      breakingChanges: 'Breaking changes',
+      addedDescription: 'New operations in the target version',
+      removedDescription: 'Removed operations from the source version',
+      modifiedDescription: 'Changed operations requiring review',
+      breakingDescription: 'Changes marked as breaking',
+      searchLabel: 'Search changes',
+      searchPlaceholder: 'Search method, path, message, location, or impact',
+      filterLabel: 'Review filter',
+      filterAll: 'All changes',
+      filterBreaking: 'Breaking only',
+      filterMustHandle: 'Must handle',
+      filterHigh: 'High severity',
+      highSeverity: 'High severity',
+      mediumSeverity: 'Medium severity',
+      lowSeverity: 'Low severity',
+      infoSeverity: 'Informational',
+      added: 'Added',
+      removed: 'Removed',
+      modified: 'Modified',
+      breaking: 'Breaking',
+      mustHandle: 'Must handle',
+      changeCount: 'changes',
+      severity: 'Severity',
+      oldValue: 'Old value',
+      newValue: 'New value',
+    },
     fields: {
       id: 'ID',
       name: 'Name',
@@ -204,7 +394,7 @@ const en = {
     },
     pages: {
       dashboard: {
-        title: 'Live Service Console',
+        title: 'Live Product Workbench',
         description: 'Real-time status and counts from the Vdoc backend APIs.',
         health: 'Backend health',
         identity: 'Signed-in identity',
@@ -269,6 +459,7 @@ const en = {
       contentViewer: 'Content viewer',
       dependencies: 'Dependencies',
       userTokens: 'Selected user MCP tokens',
+      tokenDetails: 'Redacted token details',
     },
     statuses: {
       enabled: 'Enabled',
@@ -383,7 +574,7 @@ export type TFunction = (
 const zhCN = {
   app: {
     name: 'Vdoc Admin',
-    serviceConsole: '服务控制台',
+    serviceConsole: '产品工作台',
     consoleLabel: 'Vdoc 控制台',
     dashboardPreviewAlt: 'Vdoc Admin 仪表盘预览',
     skipToMain: '跳到主内容',
@@ -416,7 +607,7 @@ const zhCN = {
   team: {
     label: '团队',
     add: '添加团队',
-    serviceConsolePlan: '服务控制台',
+    serviceConsolePlan: '工作台 + 门户',
   },
   search: {
     button: '搜索',
@@ -450,9 +641,9 @@ const zhCN = {
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
-    title: '服务控制台',
+    title: '产品工作台',
     description:
-      '用于管理 Vdoc 用户、团队、项目、文档、草稿、版本、差异和 MCP 令牌的起始管理外壳。',
+      '用于 onboarding、审阅、版本化文档、开发者门户浏览、差异和 MCP 令牌的产品工作台。',
     overview: {
       projects: {
         title: '项目',
@@ -523,6 +714,184 @@ const zhCN = {
       attribution:
         'Vdoc Admin 保留上游模板署名，同时用 Vdoc 后端 API 调用替换模板起始数据。',
     },
+    workbench: {
+      eyebrow: '产品工作台',
+      title: '在一个管理界面中规划、审阅并发布文档。',
+      description:
+        '把控制台作为产品运营台：邀请成员、组织团队和项目、发布版本化文档、比较破坏性变更，并为智能体签发 MCP 令牌。',
+      roleTitle: '角色指引',
+      superAdminRole: '超级管理员工作区',
+      adminRole: '项目管理员工作区',
+      superAdminGuidance:
+        '先创建用户和团队，再创建带负责管理员的项目，让作者进入草稿发布流程。',
+      adminGuidance:
+        '重点关注项目成员、文档分支、草稿审阅、版本浏览和令牌治理。',
+      usersStat: '可在 Vdoc 中协作的成员',
+      teamsStat: '项目的归属边界',
+      projectsStat: '已准备承载文档的产品空间',
+      tokensStat: '由 Vdoc 签发的智能体凭据',
+      nextStepsTitle: '推荐配置路径',
+      nextStepsDescription:
+        '当后端数据为空或工作区需要首次配置时，按这些卡片推进。',
+      done: '已完成',
+      steps: {
+        team: {
+          title: '创建团队',
+          description: '围绕产品或服务边界组织负责人。',
+        },
+        project: {
+          title: '创建项目',
+          description: '绑定团队和首个管理员，让文档有明确归属。',
+        },
+        document: {
+          title: '添加文档',
+          description: '选择 OpenAPI 或 Markdown，并设置仓库相对路径。',
+        },
+        branch: {
+          title: '创建分支',
+          description: '给作者和智能体提供安全的草稿审阅目标。',
+        },
+        draft: {
+          title: '提交草稿',
+          description: '审阅内容、请求修改、批准并提升为版本。',
+        },
+        token: {
+          title: '签发 MCP 令牌',
+          description: '在工作区结构清晰后创建有范围限制的智能体访问。',
+        },
+      },
+    },
+    emptyStates: {
+      generic: {
+        description: '此面板暂时没有可用的后端数据。',
+      },
+      users: {
+        title: '还没有用户',
+        description: '先创建首个用户，再分配项目管理员或审计用户 MCP 令牌。',
+        action: '使用上方“创建用户”表单。',
+      },
+      teams: {
+        title: '还没有团队',
+        description: '团队是 Vdoc 项目的归属边界，应在项目配置前创建。',
+        action: '用清晰的产品或服务名称创建团队。',
+      },
+      projects: {
+        title: '还没有项目',
+        description:
+          '项目连接团队、管理员、文档、成员、分支、草稿、版本和差异。',
+        action: '至少存在一个团队和用户后创建项目。',
+      },
+      members: {
+        title: '还没有项目成员',
+        description: '选择项目后添加只读、写作和管理员角色，让审阅责任明确。',
+        action: '选择项目后使用成员表单。',
+      },
+      documents: {
+        title: '此项目还没有文档',
+        description:
+          '添加 OpenAPI 或 Markdown 文档后，分支、草稿、版本、端点和差异才有来源。',
+        action: '选择项目并使用“创建文档”。',
+      },
+      branches: {
+        title: '此文档还没有分支',
+        description: '分支为草稿提供稳定审阅目标，再提升为版本。',
+        action: '选择文档并创建分支。',
+      },
+      drafts: {
+        title: '没有待审阅草稿',
+        description: '从分支创建草稿，检查内容，然后提交、批准并提升。',
+        action: '创建草稿前先选择项目、文档和分支。',
+      },
+      versions: {
+        title: '还没有发布版本',
+        description: '批准的草稿提升后会生成版本，并用于内容浏览和差异比较。',
+        action: '批准并提升草稿以发布首个版本。',
+      },
+      endpoints: {
+        title: '此版本没有匹配端点',
+        description:
+          'OpenAPI 版本会显示端点。请调整搜索或发布 OpenAPI 文档版本。',
+        action: '选择其他版本或清空端点搜索。',
+      },
+      diffs: {
+        title: '没有可审阅的差异',
+        description:
+          '比较两个已发布版本后，可按破坏性、必须处理或高严重级别筛选。',
+        action: '选择源版本和目标版本，然后点击比较。',
+      },
+      tokens: {
+        title: '还没有 MCP 令牌',
+        description:
+          '令牌只通过受支持的 Vdoc 令牌 API 创建，并应按智能体用途限制范围。',
+        action: '创建令牌后立即复制一次性原始值。',
+      },
+      userTokens: {
+        title: '未选择用户令牌',
+        description: '选择用户后审计其 MCP 令牌，或确认尚未签发。',
+        action: '点击用户表格中的邮箱。',
+      },
+    },
+    developerPortal: {
+      endpointCount: '端点',
+      endpointCountDescription: '所选版本返回的端点',
+      methodCount: '方法',
+      methodCountDescription: '当前视图中的唯一 HTTP 方法',
+      tagCount: '标签',
+      tagCountDescription: '当前视图中的唯一 OpenAPI 标签',
+      searchLabel: '端点搜索',
+      searchPlaceholder: '搜索方法、路径、标签、操作或摘要',
+      groupBy: '端点分组',
+      groupByTag: '标签',
+      groupByMethod: '方法',
+      untagged: '未标记',
+      endpointBrowserDescription:
+        '像开发者门户一样浏览所选版本，同时不假设特定 OpenAPI 结构。',
+      tag: '标签',
+      deprecated: '已废弃',
+      noEndpointSummary: '未提供端点摘要。',
+      operationId: '操作 ID',
+      tags: '标签',
+      parameters: '参数',
+      requestBody: '请求体',
+      responses: '响应',
+      runtime: '安全、服务器和 Schema 引用',
+      security: '安全',
+      servers: '服务器',
+      schemaRefs: 'Schema 引用',
+      normalizedOperation: '规范化操作',
+    },
+    diff: {
+      compareHint: '仅使用现有比较和摘要 API。',
+      noDiffSelected: '运行比较后审阅变更。',
+      addedEndpoints: '新增端点',
+      removedEndpoints: '删除端点',
+      modifiedEndpoints: '修改端点',
+      breakingChanges: '破坏性变更',
+      addedDescription: '目标版本中的新增操作',
+      removedDescription: '从源版本删除的操作',
+      modifiedDescription: '需要审阅的已变更操作',
+      breakingDescription: '标记为破坏性的变更',
+      searchLabel: '搜索变更',
+      searchPlaceholder: '搜索方法、路径、消息、位置或影响',
+      filterLabel: '审阅筛选',
+      filterAll: '全部变更',
+      filterBreaking: '仅破坏性',
+      filterMustHandle: '必须处理',
+      filterHigh: '高严重级别',
+      highSeverity: '高严重级别',
+      mediumSeverity: '中严重级别',
+      lowSeverity: '低严重级别',
+      infoSeverity: '信息',
+      added: '新增',
+      removed: '删除',
+      modified: '修改',
+      breaking: '破坏性',
+      mustHandle: '必须处理',
+      changeCount: '项变更',
+      severity: '严重级别',
+      oldValue: '旧值',
+      newValue: '新值',
+    },
     fields: {
       id: 'ID',
       name: '名称',
@@ -576,7 +945,7 @@ const zhCN = {
     },
     pages: {
       dashboard: {
-        title: '实时服务控制台',
+        title: '实时产品工作台',
         description: '来自 Vdoc 后端 API 的实时状态和计数。',
         health: '后端健康状态',
         identity: '当前登录身份',
@@ -635,6 +1004,7 @@ const zhCN = {
       contentViewer: '内容查看器',
       dependencies: '依赖',
       userTokens: '所选用户 MCP 令牌',
+      tokenDetails: '脱敏令牌详情',
     },
     statuses: {
       enabled: '启用',

@@ -1,6 +1,8 @@
 # Vdoc Admin
 
-Vdoc Admin is the Vite + React + TypeScript service admin console for the Vdoc backend. It is adapted from [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin) and keeps the template's TanStack and shadcn UI foundation while replacing template authentication with Vdoc's raw-JWT API contract.
+Vdoc Admin is the Vite + React + TypeScript product workbench and developer portal for the Vdoc backend. It is adapted from [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin) and keeps the template's TanStack and shadcn UI foundation while replacing template authentication with Vdoc's raw-JWT API contract.
+
+The v0.1 surface is responsible for more than CRUD administration: it guides first-time users through Team, Project, Document, Branch, Draft, review, Version, and MCP Token setup; it also gives frontend developers a searchable endpoint browser, version content viewer, Markdown document viewer, and Diff / Breaking Change review flow.
 
 ## Stack
 

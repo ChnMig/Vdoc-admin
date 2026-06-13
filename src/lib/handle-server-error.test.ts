@@ -63,14 +63,30 @@ describe('handleServerError', () => {
     expect(toastError).toHaveBeenCalledWith('Something went wrong!')
   })
 
-  it('logs the error to the console in development', () => {
+  it('logs only a sanitized error summary to the console in development', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const err = new Error('logged')
+    const err = new AxiosError('logged')
+    err.config = {
+      headers: { Authorization: 'raw.jwt.token' },
+      method: 'get',
+      url: '/api/v1/private/identity/me',
+    } as AxiosError['config']
 
     handleServerError(err)
 
     expect(log).toHaveBeenCalledTimes(1)
-    expect(log).toHaveBeenCalledWith(err)
+    expect(log).toHaveBeenCalledWith('Vdoc request failed', {
+      name: 'AxiosError',
+      code: undefined,
+      message: 'logged',
+      method: 'get',
+      url: '/api/v1/private/identity/me',
+      responseStatus: undefined,
+      responseCode: undefined,
+      responseSemanticStatus: undefined,
+      responseMessage: undefined,
+    })
+    expect(JSON.stringify(log.mock.calls)).not.toContain('raw.jwt.token')
 
     log.mockRestore()
   })
