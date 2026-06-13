@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react'
+import { render, type RenderResult, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, type RenderResult } from 'vitest-browser-react'
-import { type Locator, userEvent } from 'vitest/browser'
 import { UserAuthForm } from './user-auth-form'
 
 const FORM_MESSAGES = {
@@ -41,7 +42,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
       className,
       ...rest
     }: {
-      children?: React.ReactNode
+      children?: ReactNode
       to: string
       className?: string
     }) => (
@@ -69,9 +70,9 @@ describe('UserAuthForm', () => {
 
   describe('Rendering without redirectTo', () => {
     let screen: RenderResult
-    let emailInput: Locator
-    let passwordInput: Locator
-    let signInButton: Locator
+    let emailInput: HTMLElement
+    let passwordInput: HTMLElement
+    let signInButton: HTMLElement
 
     beforeEach(async () => {
       screen = await render(<UserAuthForm />)
@@ -81,29 +82,29 @@ describe('UserAuthForm', () => {
     })
 
     it('renders fields and submit button', async () => {
-      await expect.element(emailInput).toBeInTheDocument()
-      await expect.element(passwordInput).toBeInTheDocument()
-      await expect.element(signInButton).toBeInTheDocument()
+      expect(emailInput).toBeInTheDocument()
+      expect(passwordInput).toBeInTheDocument()
+      expect(signInButton).toBeInTheDocument()
     })
 
     it('shows validation messages when submitting empty form', async () => {
       await userEvent.click(signInButton)
 
-      await expect
-        .element(screen.getByText(FORM_MESSAGES.emailEmpty))
-        .toBeInTheDocument()
-      await expect
-        .element(screen.getByText(FORM_MESSAGES.passwordEmpty))
-        .toBeInTheDocument()
+      expect(
+        await screen.findByText(FORM_MESSAGES.emailEmpty)
+      ).toBeInTheDocument()
+      expect(
+        await screen.findByText(FORM_MESSAGES.passwordEmpty)
+      ).toBeInTheDocument()
     })
 
     it('authenticates through Vdoc and navigates to default route on success', async () => {
-      await userEvent.fill(emailInput, 'a@b.com')
-      await userEvent.fill(passwordInput, '1234567')
+      await userEvent.type(emailInput, 'a@b.com')
+      await userEvent.type(passwordInput, '1234567')
 
       await userEvent.click(signInButton)
 
-      await vi.waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
+      await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
       expect(mocks.login).toHaveBeenCalledWith({
         email: 'a@b.com',
         password: '1234567',
@@ -113,7 +114,7 @@ describe('UserAuthForm', () => {
       )
       expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
 
-      await vi.waitFor(() =>
+      await waitFor(() =>
         expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
       )
     })
@@ -124,15 +125,15 @@ describe('UserAuthForm', () => {
       <UserAuthForm redirectTo='/settings' />
     )
 
-    await userEvent.fill(getByRole('textbox', { name: /Email/i }), 'a@b.com')
-    await userEvent.fill(getByLabelText('Password'), '1234567')
+    await userEvent.type(getByRole('textbox', { name: /Email/i }), 'a@b.com')
+    await userEvent.type(getByLabelText('Password'), '1234567')
 
     await userEvent.click(getByRole('button', { name: /Sign in/i }))
 
-    await vi.waitFor(() => expect(mocks.setUser).toHaveBeenCalledOnce())
+    await waitFor(() => expect(mocks.setUser).toHaveBeenCalledOnce())
     expect(mocks.setAccessToken).toHaveBeenCalledOnce()
 
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(mocks.navigate).toHaveBeenCalledWith({
         to: '/settings',
         replace: true,

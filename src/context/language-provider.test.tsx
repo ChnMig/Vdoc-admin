@@ -1,7 +1,7 @@
 import { clearCookies } from '@/test-utils/cookies'
+import { render } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render } from 'vitest-browser-react'
-import { userEvent } from 'vitest/browser'
 import { getCookie, setCookie } from '@/lib/cookies'
 import { LANGUAGE_COOKIE_NAME } from '@/lib/i18n'
 import { LanguageProvider, useLanguage } from './language-provider'
@@ -36,9 +36,7 @@ describe('LanguageProvider', () => {
       </LanguageProvider>
     )
 
-    await expect
-      .element(getByRole('button', { name: 'zh-CN:语言' }))
-      .toBeInTheDocument()
+    expect(getByRole('button', { name: 'zh-CN:语言' })).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('lang', 'zh-CN')
   })
 
@@ -49,16 +47,12 @@ describe('LanguageProvider', () => {
       </LanguageProvider>
     )
 
-    await expect
-      .element(getByRole('button', { name: 'en:Language' }))
-      .toBeInTheDocument()
+    expect(getByRole('button', { name: 'en:Language' })).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('lang', 'en')
 
     await userEvent.click(getByRole('button', { name: 'en:Language' }))
 
-    await expect
-      .element(getByRole('button', { name: 'zh-CN:语言' }))
-      .toBeInTheDocument()
+    expect(getByRole('button', { name: 'zh-CN:语言' })).toBeInTheDocument()
     expect(getCookie(LANGUAGE_COOKIE_NAME)).toBe('zh-CN')
     expect(document.documentElement).toHaveAttribute('lang', 'zh-CN')
   })

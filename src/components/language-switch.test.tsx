@@ -1,7 +1,7 @@
 import { clearCookies } from '@/test-utils/cookies'
+import { render } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render } from 'vitest-browser-react'
-import { userEvent } from 'vitest/browser'
 import { LANGUAGE_COOKIE_NAME } from '@/lib/i18n'
 import { LanguageProvider } from '@/context/language-provider'
 import { LanguageSwitch } from './language-switch'
@@ -27,9 +27,7 @@ describe('LanguageSwitch', () => {
     await userEvent.click(getByRole('button', { name: 'Language: English' }))
     await userEvent.click(getByRole('menuitem', { name: /Chinese/i }))
 
-    await expect
-      .element(getByRole('button', { name: '语言：中文' }))
-      .toBeInTheDocument()
+    expect(getByRole('button', { name: '语言：中文' })).toBeInTheDocument()
     expect(document.documentElement).toHaveAttribute('lang', 'zh-CN')
   })
 })

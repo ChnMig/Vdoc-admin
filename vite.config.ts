@@ -4,14 +4,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
-import { playwright } from '@vitest/browser-playwright'
-
-const edgeBetaExecutablePath =
-  process.env.VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH
-
-const browserLaunchOptions = edgeBetaExecutablePath
-  ? { executablePath: edgeBetaExecutablePath }
-  : undefined
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -32,15 +24,12 @@ export default defineConfig({
     include: ['@radix-ui/react-dropdown-menu'],
   },
   test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    css: true,
     silent: 'passed-only',
     unstubEnvs: true,
-    browser: {
-      enabled: true,
-      provider: playwright({
-        launchOptions: browserLaunchOptions,
-      }),
-      instances: [{ browser: 'chromium' }],
-    },
     coverage: {
       // include: ['src/**/*.{js,jsx,ts,tsx}'], // Uncomment to expand the report to all src/**/* so untested modules appear as 0% coverage.
       exclude: [

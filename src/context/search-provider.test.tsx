@@ -1,6 +1,11 @@
+import {
+  fireEvent,
+  render,
+  type RenderResult,
+  waitFor,
+} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, type RenderResult } from 'vitest-browser-react'
-import { userEvent } from 'vitest/browser'
 import { SearchProvider } from '@/context/search-provider'
 
 const COMMAND_MENU_PLACEHOLDER = 'Type a command or search...'
@@ -25,7 +30,7 @@ vi.mock('@/context/theme-provider', () => ({
 type ShortcutModifier = 'Control' | 'Meta'
 
 async function renderWithSearchProvider() {
-  return await render(<SearchProvider>{null}</SearchProvider>)
+  return render(<SearchProvider>{null}</SearchProvider>)
 }
 
 /**
@@ -36,23 +41,15 @@ async function openCommandPalette(
   screen: RenderResult,
   modifier: ShortcutModifier = 'Control'
 ) {
-  await vi.waitFor(
-    async () => {
-      const isCommandPaletteOpen =
-        document.querySelector(
-          `[placeholder="${COMMAND_MENU_PLACEHOLDER}"]`
-        ) !== null
+  fireEvent.keyDown(document, {
+    key: 'k',
+    ctrlKey: modifier === 'Control',
+    metaKey: modifier === 'Meta',
+  })
 
-      if (!isCommandPaletteOpen) {
-        await userEvent.keyboard(`{${modifier}>}k{/${modifier}}`)
-      }
-
-      await expect
-        .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-        .toBeInTheDocument()
-    },
-    { interval: 50, timeout: 5000 }
-  )
+  expect(
+    await screen.findByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+  ).toBeInTheDocument()
 }
 
 describe('SearchProvider and CommandMenu', () => {
@@ -62,26 +59,24 @@ describe('SearchProvider and CommandMenu', () => {
 
   it('renders the command palette when the palette is open', async () => {
     const screen = await renderWithSearchProvider()
-    const { getByPlaceholder, getByText } = screen
+    const { getByPlaceholderText, getByText } = screen
 
     await openCommandPalette(screen)
 
-    await expect
-      .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .toBeInTheDocument()
-    await expect.element(getByText('Theme')).toBeInTheDocument()
-    await expect.element(getByText('Light')).toBeInTheDocument()
-    await expect.element(getByText('Dark')).toBeInTheDocument()
-    await expect.element(getByText('System')).toBeInTheDocument()
-    await expect.element(getByText('Dashboard')).toBeInTheDocument()
+    expect(getByPlaceholderText(COMMAND_MENU_PLACEHOLDER)).toBeInTheDocument()
+    expect(getByText('Theme')).toBeInTheDocument()
+    expect(getByText('Light')).toBeInTheDocument()
+    expect(getByText('Dark')).toBeInTheDocument()
+    expect(getByText('System')).toBeInTheDocument()
+    expect(getByText('Dashboard')).toBeInTheDocument()
   })
 
   it('does not show the dialog content when search is closed', async () => {
-    const { getByPlaceholder } = await renderWithSearchProvider()
+    const { queryByPlaceholderText } = await renderWithSearchProvider()
 
-    await expect
-      .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .not.toBeInTheDocument()
+    expect(
+      queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+    ).not.toBeInTheDocument()
   })
 
   it.each([
@@ -92,15 +87,15 @@ describe('SearchProvider and CommandMenu', () => {
     async (_label, modifier) => {
       const screen = await renderWithSearchProvider()
 
-      await expect
-        .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-        .not.toBeInTheDocument()
+      expect(
+        screen.queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).not.toBeInTheDocument()
 
       await openCommandPalette(screen, modifier)
 
-      await expect
-        .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-        .toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).toBeInTheDocument()
     }
   )
 
@@ -112,23 +107,27 @@ describe('SearchProvider and CommandMenu', () => {
     await userEvent.click(screen.getByText('Projects'))
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/projects' })
-    await expect
-      .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('navigates to the MCP Tokens route', async () => {
     const screen = await renderWithSearchProvider()
-    const { getByPlaceholder, getByRole } = screen
+    const { getByRole, queryByPlaceholderText } = screen
 
     await openCommandPalette(screen)
 
     await userEvent.click(getByRole('option', { name: 'MCP Tokens' }))
 
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/mcp-tokens' })
-    await expect
-      .element(getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('applies theme and closes the palette when a theme command is chosen', async () => {
@@ -139,9 +138,11 @@ describe('SearchProvider and CommandMenu', () => {
     await userEvent.click(screen.getByText('Dark'))
 
     expect(mocks.setTheme).toHaveBeenCalledWith('dark')
-    await expect
-      .element(screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER))
-      .not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('shows empty state when the filter matches nothing', async () => {
@@ -149,13 +150,11 @@ describe('SearchProvider and CommandMenu', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.fill(
-      screen.getByPlaceholder(COMMAND_MENU_PLACEHOLDER),
+    await userEvent.type(
+      screen.getByPlaceholderText(COMMAND_MENU_PLACEHOLDER),
       'zzzz-no-match-xxxx'
     )
 
-    await expect
-      .element(screen.getByText('No results found.'))
-      .toBeInTheDocument()
+    expect(await screen.findByText('No results found.')).toBeInTheDocument()
   })
 })

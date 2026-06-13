@@ -33,16 +33,11 @@ pnpm dev
 
 Copy `.env.example` to `.env` before local development if your backend is not running at the example URL. Workspace-level pilot and deploy guidance lives in `../PILOT_RUNBOOK.md` and `../RELEASE_DEPLOY.md`.
 
-Browser tests use Playwright Chromium by default. Set `VDOC_ADMIN_TEST_BROWSER_EXECUTABLE_PATH` only when you intentionally want to run tests against a local browser executable such as Microsoft Edge Beta.
-
-Before the first local browser test run, install Chromium once:
+Tests run in Vitest's jsdom environment and do not require a Playwright or Chromium installation:
 
 ```sh
-pnpm exec playwright install chromium
 pnpm test
 ```
-
-CI uses `pnpm exec playwright install --with-deps chromium` to install Chromium and Linux system dependencies.
 
 ## Attribution
 
