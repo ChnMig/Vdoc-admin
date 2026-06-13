@@ -15,6 +15,18 @@
   }
   body {
     @apply min-h-svh w-full bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar;
+    background-image:
+      radial-gradient(
+        circle at top left,
+        var(--workspace-glow),
+        transparent 34rem
+      ),
+      radial-gradient(
+        circle at bottom right,
+        var(--workspace-vignette),
+        transparent 30rem
+      );
+    background-attachment: fixed;
   }
 
   /* Override Radix scroll locking for sticky headers */
