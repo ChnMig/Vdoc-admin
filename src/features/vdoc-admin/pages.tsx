@@ -297,16 +297,36 @@ function PageChrome({
         <ProfileDropdown />
       </Header>
       <Main>
-        <section className='mb-6 grid gap-2'>
-          <p className='text-sm font-medium text-muted-foreground'>
-            {t('app.consoleLabel')}
-          </p>
-          <h1 className='text-2xl font-bold tracking-tight'>
-            {t(`admin.pages.${page}.title`)}
-          </h1>
-          <p className='max-w-3xl text-muted-foreground'>
-            {t(`admin.pages.${page}.description`)}
-          </p>
+        <section className='mb-6 grid gap-4 rounded-xl border bg-card p-5 text-card-foreground md:grid-cols-[minmax(0,1fr)_20rem]'>
+          <div className='grid gap-3'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Badge variant='secondary'>
+                {t(`admin.pages.${page}.stage`)}
+              </Badge>
+              <span className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+                {t('app.consoleLabel')}
+              </span>
+            </div>
+            <div className='grid gap-2'>
+              <h1 className='text-2xl font-semibold tracking-tight'>
+                {t(`admin.pages.${page}.title`)}
+              </h1>
+              <p className='max-w-3xl text-sm text-muted-foreground md:text-base'>
+                {t(`admin.pages.${page}.description`)}
+              </p>
+            </div>
+            <p className='max-w-3xl text-sm text-muted-foreground'>
+              {t(`admin.pages.${page}.cue`)}
+            </p>
+          </div>
+          <aside className='grid content-start gap-2 rounded-lg border bg-muted/25 p-4 text-sm'>
+            <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+              {t('admin.common.nextAction')}
+            </p>
+            <p className='text-muted-foreground'>
+              {t(`admin.pages.${page}.next`)}
+            </p>
+          </aside>
         </section>
         <div className='grid gap-6'>{children}</div>
       </Main>
@@ -318,7 +338,7 @@ function LoadingErrorState({ state }: { state: QueryState }) {
   const { t } = useLanguage()
   if (state.isLoading) {
     return (
-      <Card>
+      <Card className='shadow-none'>
         <CardContent className='py-8 text-sm text-muted-foreground'>
           {t('admin.common.loading')}
         </CardContent>
@@ -349,15 +369,22 @@ function EmptyState({ preset }: { preset?: EmptyStatePreset }) {
     : t('admin.emptyStates.generic.description')
   const action = preset ? t(`admin.emptyStates.${preset}.action`) : undefined
   return (
-    <div className='grid gap-4 rounded-xl border border-dashed bg-muted/20 p-6 text-sm'>
-      <div className='grid gap-2'>
-        <p className='font-medium'>{title}</p>
-        <p className='max-w-2xl text-muted-foreground'>{description}</p>
+    <div className='grid gap-4 rounded-xl border border-dashed bg-muted/15 p-6 text-sm'>
+      <div className='flex items-start gap-3'>
+        <span className='mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-muted-foreground'>
+          <ArrowRight className='size-4' />
+        </span>
+        <div className='grid gap-2'>
+          <p className='font-medium'>{title}</p>
+          <p className='max-w-2xl text-muted-foreground'>{description}</p>
+        </div>
       </div>
       {action && (
-        <div className='flex items-center gap-2 text-xs font-medium text-muted-foreground'>
-          <ArrowRight className='size-3.5' />
-          {action}
+        <div className='rounded-lg border bg-background p-3'>
+          <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+            {t('admin.common.nextAction')}
+          </p>
+          <p className='mt-1 text-sm'>{action}</p>
         </div>
       )}
     </div>
@@ -405,7 +432,15 @@ function NativeSelect({
 }
 
 function SelectorGrid({ children }: { children: React.ReactNode }) {
-  return <div className='grid gap-4 md:grid-cols-3'>{children}</div>
+  const { t } = useLanguage()
+  return (
+    <section className='grid gap-3 rounded-xl border bg-card p-4'>
+      <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+        {t('admin.common.selectedContext')}
+      </p>
+      <div className='grid gap-4 md:grid-cols-3'>{children}</div>
+    </section>
+  )
 }
 
 function StatCard({
@@ -418,10 +453,14 @@ function StatCard({
   description: string
 }) {
   return (
-    <Card className='overflow-hidden'>
-      <CardHeader className='pb-2'>
-        <CardDescription>{title}</CardDescription>
-        <CardTitle className='text-3xl'>{value}</CardTitle>
+    <Card className='gap-3 py-5 shadow-none'>
+      <CardHeader className='gap-2 pb-0'>
+        <CardDescription className='text-xs font-medium tracking-wide uppercase'>
+          {title}
+        </CardDescription>
+        <CardTitle className='text-2xl font-semibold tabular-nums'>
+          {value}
+        </CardTitle>
       </CardHeader>
       <CardContent className='text-sm text-muted-foreground'>
         {description}
@@ -443,10 +482,15 @@ function FormCard({
   pending: boolean
   onSubmit: (formData: FormData) => void
 }) {
+  const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
+    <Card className='border-primary/30 shadow-none'>
+      <CardHeader className='border-b pb-5'>
+        <Badge variant='secondary'>{t('admin.common.operationPanel')}</Badge>
         <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          {t('admin.common.operationPanelDescription')}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -463,6 +507,41 @@ function FormCard({
           </Button>
         </form>
       </CardContent>
+    </Card>
+  )
+}
+
+function CollectionCard({
+  title,
+  description,
+  count,
+  children,
+}: {
+  title: string
+  description?: string
+  count?: number
+  children: React.ReactNode
+}) {
+  const { t } = useLanguage()
+  return (
+    <Card className='overflow-hidden'>
+      <CardHeader className='border-b pb-5'>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div className='grid gap-2'>
+            <Badge variant='secondary'>
+              {t('admin.common.resourceCollection')}
+            </Badge>
+            <CardTitle>{title}</CardTitle>
+            {description && <CardDescription>{description}</CardDescription>}
+          </div>
+          {typeof count === 'number' && (
+            <Badge variant='outline'>
+              {t('admin.common.total')}: {count}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className='grid gap-4 p-6'>{children}</CardContent>
     </Card>
   )
 }
@@ -583,22 +662,17 @@ function ContentViewer({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {content ? (
-          <pre className='max-h-[36rem] overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed'>
-            {content}
-          </pre>
-        ) : (
-          <p className='text-sm text-muted-foreground'>
-            {t('admin.common.empty')}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <CollectionCard title={title}>
+      {content ? (
+        <pre className='max-h-[36rem] overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed'>
+          {content}
+        </pre>
+      ) : (
+        <p className='text-sm text-muted-foreground'>
+          {t('admin.common.empty')}
+        </p>
+      )}
+    </CollectionCard>
   )
 }
 
@@ -800,37 +874,39 @@ export function DashboardPage() {
   return (
     <PageChrome page='dashboard'>
       <LoadingErrorState state={queryState} />
-      <Card className='overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-muted/40'>
-        <CardContent className='grid gap-6 p-6 lg:grid-cols-[1.2fr_0.8fr] lg:p-8'>
+      <Card className='overflow-hidden'>
+        <CardContent className='grid gap-6 p-6 lg:grid-cols-[1.25fr_0.75fr]'>
           <div className='grid gap-4'>
-            <Badge className='w-fit' variant='secondary'>
-              {t('admin.workbench.eyebrow')}
-            </Badge>
-            <div className='grid gap-3'>
-              <h2 className='max-w-3xl text-3xl font-bold tracking-tight md:text-4xl'>
-                {t('admin.workbench.title')}
-              </h2>
-              <p className='max-w-3xl text-muted-foreground'>
-                {t('admin.workbench.description')}
-              </p>
-            </div>
-            <div className='flex flex-wrap gap-2'>
-              <StatusBadge>
-                {identityQuery.data?.is_super_admin
-                  ? t('admin.workbench.superAdminRole')
-                  : t('admin.workbench.adminRole')}
-              </StatusBadge>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Badge className='w-fit' variant='secondary'>
+                {t('admin.workbench.eyebrow')}
+              </Badge>
               <StatusBadge muted={!healthQuery.data?.ready}>
                 {healthQuery.data?.ready
                   ? t('admin.statuses.ready')
                   : t('admin.statuses.degraded')}
               </StatusBadge>
             </div>
+            <div className='grid gap-3'>
+              <h2 className='max-w-3xl text-2xl font-semibold tracking-tight'>
+                {t('admin.workbench.title')}
+              </h2>
+              <p className='max-w-3xl text-sm text-muted-foreground md:text-base'>
+                {t('admin.workbench.description')}
+              </p>
+            </div>
           </div>
-          <div className='grid gap-3 rounded-xl border bg-background/70 p-4'>
-            <p className='text-sm font-medium'>
-              {t('admin.workbench.roleTitle')}
-            </p>
+          <div className='grid gap-3 rounded-xl border bg-muted/20 p-4'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <p className='text-sm font-medium'>
+                {t('admin.workbench.roleTitle')}
+              </p>
+              <StatusBadge>
+                {identityQuery.data?.is_super_admin
+                  ? t('admin.workbench.superAdminRole')
+                  : t('admin.workbench.adminRole')}
+              </StatusBadge>
+            </div>
             <p className='text-sm text-muted-foreground'>
               {identityQuery.data?.is_super_admin
                 ? t('admin.workbench.superAdminGuidance')
@@ -862,14 +938,11 @@ export function DashboardPage() {
         />
       </section>
       <section className='grid gap-4 lg:grid-cols-[1.25fr_0.75fr]'>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('admin.workbench.nextStepsTitle')}</CardTitle>
-            <CardDescription>
-              {t('admin.workbench.nextStepsDescription')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='grid gap-3 md:grid-cols-2'>
+        <CollectionCard
+          title={t('admin.workbench.nextStepsTitle')}
+          description={t('admin.workbench.nextStepsDescription')}
+        >
+          <div className='grid gap-3 md:grid-cols-2'>
             {onboardingSteps.map((step, index) => {
               const Icon = step.icon
               return (
@@ -879,7 +952,7 @@ export function DashboardPage() {
                 >
                   <div className='mb-3 flex items-center justify-between gap-3'>
                     <div className='flex items-center gap-2'>
-                      <span className='flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary'>
+                      <span className='flex size-8 items-center justify-center rounded-full border bg-background text-primary'>
                         <Icon className='size-4' />
                       </span>
                       <Badge variant={step.done ? 'outline' : 'secondary'}>
@@ -897,18 +970,15 @@ export function DashboardPage() {
                 </div>
               )
             })}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              <Server className='size-4' />
-              {t('admin.pages.dashboard.health')}
-            </CardTitle>
-            <CardDescription>/api/v1/open/health</CardDescription>
-          </CardHeader>
-          <CardContent className='grid gap-3 text-sm'>
-            <div className='flex flex-wrap gap-2'>
+          </div>
+        </CollectionCard>
+        <CollectionCard
+          title={t('admin.pages.dashboard.health')}
+          description='/api/v1/open/health'
+        >
+          <div className='grid gap-3 text-sm'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Server className='size-4 text-muted-foreground' />
               <StatusBadge>
                 {healthQuery.data?.status ?? t('admin.common.unknown')}
               </StatusBadge>
@@ -926,7 +996,7 @@ export function DashboardPage() {
                 dependencyEntries.map(([name, dependency]) => (
                   <div
                     key={name}
-                    className='flex items-center justify-between rounded-lg border p-3'
+                    className='flex items-center justify-between gap-3 rounded-lg border p-3'
                   >
                     <span className='font-medium'>{name}</span>
                     <StatusBadge muted={!dependency.ready}>
@@ -938,8 +1008,8 @@ export function DashboardPage() {
                 <EmptyState />
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollectionCard>
       </section>
     </PageChrome>
   )
@@ -1029,110 +1099,94 @@ export function UsersPage() {
           />
         </div>
       </FormCard>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('nav.users')}</CardTitle>
-          <CardDescription>
-            {t('admin.common.total')}: {usersQuery.data?.total ?? 0}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {usersQuery.data?.items.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('admin.fields.email')}</TableHead>
-                  <TableHead>{t('admin.fields.status')}</TableHead>
-                  <TableHead>{t('admin.fields.superAdmin')}</TableHead>
-                  <TableHead>{t('admin.fields.actions')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {usersQuery.data.items.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <button
-                        type='button'
-                        className='text-start font-medium underline-offset-4 hover:underline'
-                        onClick={() => setSelectedUserId(user.id)}
+      <CollectionCard
+        title={t('nav.users')}
+        count={usersQuery.data?.total ?? 0}
+      >
+        {usersQuery.data?.items.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('admin.fields.email')}</TableHead>
+                <TableHead>{t('admin.fields.status')}</TableHead>
+                <TableHead>{t('admin.fields.superAdmin')}</TableHead>
+                <TableHead>{t('admin.fields.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {usersQuery.data.items.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <button
+                      type='button'
+                      className='text-start font-medium underline-offset-4 hover:underline'
+                      onClick={() => setSelectedUserId(user.id)}
+                    >
+                      {user.email}
+                    </button>
+                    <div className='text-xs text-muted-foreground'>
+                      {user.name}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge>{statusLabel(user.status, t)}</StatusBadge>
+                  </TableCell>
+                  <TableCell>
+                    {user.is_super_admin
+                      ? t('admin.common.yes')
+                      : t('admin.common.no')}
+                  </TableCell>
+                  <TableCell>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() =>
+                          patchMutation.mutate({
+                            id: user.id,
+                            status:
+                              user.status === ACTIVE_STATUS
+                                ? ARCHIVED_OR_DISABLED_STATUS
+                                : ACTIVE_STATUS,
+                          })
+                        }
                       >
-                        {user.email}
-                      </button>
-                      <div className='text-xs text-muted-foreground'>
-                        {user.name}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge>{statusLabel(user.status, t)}</StatusBadge>
-                    </TableCell>
-                    <TableCell>
-                      {user.is_super_admin
-                        ? t('admin.common.yes')
-                        : t('admin.common.no')}
-                    </TableCell>
-                    <TableCell>
-                      <div className='flex flex-wrap gap-2'>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() =>
-                            patchMutation.mutate({
-                              id: user.id,
-                              status:
-                                user.status === ACTIVE_STATUS
-                                  ? ARCHIVED_OR_DISABLED_STATUS
-                                  : ACTIVE_STATUS,
-                            })
-                          }
-                        >
-                          {user.status === ACTIVE_STATUS
-                            ? t('admin.statuses.disabled')
-                            : t('admin.statuses.active')}
-                        </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() =>
-                            patchMutation.mutate({
-                              id: user.id,
-                              isSuperAdmin: !user.is_super_admin,
-                            })
-                          }
-                        >
-                          {t('admin.fields.superAdmin')}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <EmptyState preset='users' />
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('admin.sections.userTokens')}</CardTitle>
-          <CardDescription>
-            {selectedUser?.email ?? t('admin.placeholders.selectUser')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {userTokenQuery.data?.items.length ? (
-            <TokenTable
-              tokens={userTokenQuery.data.items}
-              onRevoke={(tokenId) =>
-                selectedUserId &&
-                revokeMutation.mutate({ userId: selectedUserId, tokenId })
-              }
-            />
-          ) : (
-            <EmptyState preset='userTokens' />
-          )}
-        </CardContent>
-      </Card>
+                        {user.status === ACTIVE_STATUS
+                          ? t('admin.statuses.disabled')
+                          : t('admin.statuses.active')}
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() =>
+                          patchMutation.mutate({
+                            id: user.id,
+                            isSuperAdmin: !user.is_super_admin,
+                          })
+                        }
+                      >
+                        {t('admin.fields.superAdmin')}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <EmptyState preset='users' />
+        )}
+      </CollectionCard>
+      <TokenTable
+        title={t('admin.sections.userTokens')}
+        description={selectedUser?.email ?? t('admin.placeholders.selectUser')}
+        tokens={userTokenQuery.data?.items ?? []}
+        emptyPreset='userTokens'
+        onRevoke={(tokenId) =>
+          selectedUserId &&
+          revokeMutation.mutate({ userId: selectedUserId, tokenId })
+        }
+      />
     </PageChrome>
   )
 }
@@ -1241,52 +1295,48 @@ function NameDescriptionTable({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {t('admin.common.total')}: {items.length}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {items.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.name')}</TableHead>
-                <TableHead>{t('admin.fields.id')}</TableHead>
-                <TableHead>{t('admin.fields.actions')}</TableHead>
+    <CollectionCard
+      title={emptyPreset === 'teams' ? t('nav.teams') : t('nav.projects')}
+      count={items.length}
+    >
+      {items.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.name')}</TableHead>
+              <TableHead>{t('admin.fields.id')}</TableHead>
+              <TableHead>{t('admin.fields.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className='min-w-80'>
+                  <InlineNameDescriptionForm
+                    item={item}
+                    onUpdate={onUpdate}
+                    pending={pending}
+                  />
+                </TableCell>
+                <TableCell className='font-mono text-xs'>{item.id}</TableCell>
+                <TableCell>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    disabled={pending}
+                    onClick={() => onArchive(item.id)}
+                  >
+                    {t('admin.common.archive')}
+                  </Button>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className='min-w-80'>
-                    <InlineNameDescriptionForm
-                      item={item}
-                      onUpdate={onUpdate}
-                      pending={pending}
-                    />
-                  </TableCell>
-                  <TableCell className='font-mono text-xs'>{item.id}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={pending}
-                      onClick={() => onArchive(item.id)}
-                    >
-                      {t('admin.common.archive')}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset={emptyPreset} />
-        )}
-      </CardContent>
-    </Card>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset={emptyPreset} />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -1402,58 +1452,57 @@ export function ProjectsPage() {
         onArchive={(id) => archiveMutation.mutate(id)}
         pending={updateMutation.isPending || archiveMutation.isPending}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('admin.sections.members')}</CardTitle>
-        </CardHeader>
-        <CardContent className='grid gap-4'>
+      <CollectionCard
+        title={t('admin.sections.members')}
+        description={t('admin.pages.projects.next')}
+        count={membersQuery.data?.items.length ?? 0}
+      >
+        <NativeSelect
+          label={t('admin.fields.project')}
+          value={projectId}
+          onChange={setProjectId}
+          placeholder={t('admin.placeholders.selectProject')}
+          options={projectOptions}
+        />
+        <form
+          className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
+          onSubmit={(event) => {
+            event.preventDefault()
+            const formData = new FormData(event.currentTarget)
+            addMemberMutation.mutate({
+              userId: fieldValue(formData, 'user_id'),
+              role: numberValue(formData, 'role', ROLE_READER),
+            })
+            event.currentTarget.reset()
+          }}
+        >
           <NativeSelect
-            label={t('admin.fields.project')}
-            value={projectId}
-            onChange={setProjectId}
-            placeholder={t('admin.placeholders.selectProject')}
-            options={projectOptions}
+            name='user_id'
+            label={t('admin.fields.user')}
+            placeholder={t('admin.placeholders.selectUser')}
+            options={userOptions}
           />
-          <form
-            className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
-            onSubmit={(event) => {
-              event.preventDefault()
-              const formData = new FormData(event.currentTarget)
-              addMemberMutation.mutate({
-                userId: fieldValue(formData, 'user_id'),
-                role: numberValue(formData, 'role', ROLE_READER),
-              })
-              event.currentTarget.reset()
-            }}
+          <NativeSelect
+            name='role'
+            label={t('admin.fields.role')}
+            placeholder={t('admin.roles.reader')}
+            options={roleOptions(t)}
+          />
+          <Button
+            type='submit'
+            className='self-end'
+            disabled={!projectId || addMemberMutation.isPending}
           >
-            <NativeSelect
-              name='user_id'
-              label={t('admin.fields.user')}
-              placeholder={t('admin.placeholders.selectUser')}
-              options={userOptions}
-            />
-            <NativeSelect
-              name='role'
-              label={t('admin.fields.role')}
-              placeholder={t('admin.roles.reader')}
-              options={roleOptions(t)}
-            />
-            <Button
-              type='submit'
-              className='self-end'
-              disabled={!projectId || addMemberMutation.isPending}
-            >
-              {t('admin.common.create')}
-            </Button>
-          </form>
-          <MembersTable
-            members={membersQuery.data?.items ?? []}
-            users={usersQuery.data?.items ?? []}
-            onRole={(userId, role) => roleMutation.mutate({ userId, role })}
-            onRemove={(userId) => removeMutation.mutate(userId)}
-          />
-        </CardContent>
-      </Card>
+            {t('admin.common.create')}
+          </Button>
+        </form>
+        <MembersTable
+          members={membersQuery.data?.items ?? []}
+          users={usersQuery.data?.items ?? []}
+          onRole={(userId, role) => roleMutation.mutate({ userId, role })}
+          onRemove={(userId) => removeMutation.mutate(userId)}
+        />
+      </CollectionCard>
     </PageChrome>
   )
 }
@@ -1707,63 +1756,58 @@ function DocumentsTable({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('nav.documents')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {documents.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.name')}</TableHead>
-                <TableHead>{t('admin.fields.type')}</TableHead>
-                <TableHead>{t('admin.fields.status')}</TableHead>
-                <TableHead>{t('admin.fields.actions')}</TableHead>
+    <CollectionCard title={t('nav.documents')} count={documents.length}>
+      {documents.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.name')}</TableHead>
+              <TableHead>{t('admin.fields.type')}</TableHead>
+              <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {documents.map((document) => (
+              <TableRow key={document.id}>
+                <TableCell>
+                  <div className='font-medium'>{document.name}</div>
+                  <div className='text-xs text-muted-foreground'>
+                    {document.relative_path}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {documentTypeLabel(document.document_type, t)}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge>{statusLabel(document.status, t)}</StatusBadge>
+                </TableCell>
+                <TableCell>
+                  <div className='flex gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onUpdate(document)}
+                    >
+                      {t('admin.common.update')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onArchive(document.id)}
+                    >
+                      {t('admin.common.archive')}
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documents.map((document) => (
-                <TableRow key={document.id}>
-                  <TableCell>
-                    <div className='font-medium'>{document.name}</div>
-                    <div className='text-xs text-muted-foreground'>
-                      {document.relative_path}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {documentTypeLabel(document.document_type, t)}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>{statusLabel(document.status, t)}</StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onUpdate(document)}
-                      >
-                        {t('admin.common.update')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onArchive(document.id)}
-                      >
-                        {t('admin.common.archive')}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset='documents' />
-        )}
-      </CardContent>
-    </Card>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset='documents' />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -1778,59 +1822,57 @@ function BranchesTable({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('admin.sections.branches')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {branches.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.name')}</TableHead>
-                <TableHead>{t('admin.fields.status')}</TableHead>
-                <TableHead>{t('admin.fields.actions')}</TableHead>
+    <CollectionCard
+      title={t('admin.sections.branches')}
+      count={branches.length}
+    >
+      {branches.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.name')}</TableHead>
+              <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {branches.map((branch) => (
+              <TableRow key={branch.id}>
+                <TableCell>
+                  <div className='font-medium'>{branch.name}</div>
+                  <div className='text-xs text-muted-foreground'>
+                    {branch.description}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge>{statusLabel(branch.status, t)}</StatusBadge>
+                </TableCell>
+                <TableCell>
+                  <div className='flex gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onUpdate(branch)}
+                    >
+                      {t('admin.common.update')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onArchive(branch.id)}
+                    >
+                      {t('admin.common.archive')}
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {branches.map((branch) => (
-                <TableRow key={branch.id}>
-                  <TableCell>
-                    <div className='font-medium'>{branch.name}</div>
-                    <div className='text-xs text-muted-foreground'>
-                      {branch.description}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>{statusLabel(branch.status, t)}</StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onUpdate(branch)}
-                      >
-                        {t('admin.common.update')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onArchive(branch.id)}
-                      >
-                        {t('admin.common.archive')}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset='branches' />
-        )}
-      </CardContent>
-    </Card>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset='branches' />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -2077,92 +2119,85 @@ function DraftsTable({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('admin.sections.drafts')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {drafts.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.versionName')}</TableHead>
-                <TableHead>{t('admin.fields.status')}</TableHead>
-                <TableHead>{t('admin.fields.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {drafts.map((draft) => (
-                <TableRow
-                  key={draft.id}
-                  data-state={selected === draft.id ? 'selected' : undefined}
-                >
-                  <TableCell>
-                    <button
-                      type='button'
-                      className='font-medium underline-offset-4 hover:underline'
+    <CollectionCard title={t('admin.sections.drafts')} count={drafts.length}>
+      {drafts.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.versionName')}</TableHead>
+              <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {drafts.map((draft) => (
+              <TableRow
+                key={draft.id}
+                data-state={selected === draft.id ? 'selected' : undefined}
+              >
+                <TableCell>
+                  <button
+                    type='button'
+                    className='font-medium underline-offset-4 hover:underline'
+                    onClick={() => onSelect(draft.id)}
+                  >
+                    {draft.version_name}
+                  </button>
+                  <div className='text-xs text-muted-foreground'>
+                    {draft.changelog}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge>{draftStatusLabel(draft.status, t)}</StatusBadge>
+                </TableCell>
+                <TableCell>
+                  <div className='flex flex-wrap gap-2'>
+                    <Button
+                      variant='outline'
+                      size='sm'
                       onClick={() => onSelect(draft.id)}
                     >
-                      {draft.version_name}
-                    </button>
-                    <div className='text-xs text-muted-foreground'>
-                      {draft.changelog}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>
-                      {draftStatusLabel(draft.status, t)}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>
-                    <div className='flex flex-wrap gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onSelect(draft.id)}
-                      >
-                        {t('admin.common.view')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onAction(draft.id, 'submit')}
-                      >
-                        {t('admin.common.submit')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        disabled={draft.status !== DRAFT_STATUS_SUBMITTED}
-                        onClick={() => onAction(draft.id, 'approve')}
-                      >
-                        {t('admin.common.approve')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onAction(draft.id, 'request')}
-                      >
-                        {t('admin.common.requestChanges')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() => onAction(draft.id, 'reject')}
-                      >
-                        {t('admin.common.reject')}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset='drafts' />
-        )}
-      </CardContent>
-    </Card>
+                      {t('admin.common.view')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onAction(draft.id, 'submit')}
+                    >
+                      {t('admin.common.submit')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      disabled={draft.status !== DRAFT_STATUS_SUBMITTED}
+                      onClick={() => onAction(draft.id, 'approve')}
+                    >
+                      {t('admin.common.approve')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onAction(draft.id, 'request')}
+                    >
+                      {t('admin.common.requestChanges')}
+                    </Button>
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onAction(draft.id, 'reject')}
+                    >
+                      {t('admin.common.reject')}
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset='drafts' />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -2390,51 +2425,49 @@ function VersionsTable({
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('admin.sections.versions')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {versions.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.versionName')}</TableHead>
-                <TableHead>{t('admin.fields.status')}</TableHead>
-                <TableHead>{t('admin.fields.createdAt')}</TableHead>
+    <CollectionCard
+      title={t('admin.sections.versions')}
+      count={versions.length}
+    >
+      {versions.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.versionName')}</TableHead>
+              <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.createdAt')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {versions.map((version) => (
+              <TableRow
+                key={version.id}
+                data-state={selected === version.id ? 'selected' : undefined}
+              >
+                <TableCell>
+                  <button
+                    type='button'
+                    className='font-medium underline-offset-4 hover:underline'
+                    onClick={() => onSelect(version.id)}
+                  >
+                    {version.version_name}
+                  </button>
+                  <div className='text-xs text-muted-foreground'>
+                    {version.changelog}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge>{statusLabel(version.status, t)}</StatusBadge>
+                </TableCell>
+                <TableCell>{formatDate(version.published_at)}</TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {versions.map((version) => (
-                <TableRow
-                  key={version.id}
-                  data-state={selected === version.id ? 'selected' : undefined}
-                >
-                  <TableCell>
-                    <button
-                      type='button'
-                      className='font-medium underline-offset-4 hover:underline'
-                      onClick={() => onSelect(version.id)}
-                    >
-                      {version.version_name}
-                    </button>
-                    <div className='text-xs text-muted-foreground'>
-                      {version.changelog}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>{statusLabel(version.status, t)}</StatusBadge>
-                  </TableCell>
-                  <TableCell>{formatDate(version.published_at)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset='versions' />
-        )}
-      </CardContent>
-    </Card>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset='versions' />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -2473,84 +2506,73 @@ function EndpointsCard({
   }, [endpoints, groupMode, untaggedLabel])
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className='flex items-center gap-2'>
-          <Route className='size-4' />
-          {t('admin.sections.endpoints')}
-        </CardTitle>
-        <CardDescription>
-          {t('admin.developerPortal.endpointBrowserDescription')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='grid gap-4'>
-        {groupedEndpoints.length ? (
-          groupedEndpoints.map(([group, groupEndpoints]) => (
-            <section key={group} className='grid gap-3 rounded-xl border p-4'>
-              <div className='flex flex-wrap items-center justify-between gap-2'>
-                <div>
-                  <p className='font-medium'>{group}</p>
-                  <p className='text-xs text-muted-foreground'>
-                    {groupEndpoints.length} {t('admin.common.endpoint')}
-                  </p>
-                </div>
-                <Badge variant='secondary'>
-                  {groupMode === 'method'
-                    ? t('admin.fields.method')
-                    : t('admin.developerPortal.tag')}
-                </Badge>
+    <CollectionCard
+      title={t('admin.sections.endpoints')}
+      description={t('admin.developerPortal.endpointBrowserDescription')}
+      count={endpoints.length}
+    >
+      {groupedEndpoints.length ? (
+        groupedEndpoints.map(([group, groupEndpoints]) => (
+          <section key={group} className='grid gap-3 rounded-xl border p-4'>
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <div>
+                <p className='font-medium'>{group}</p>
+                <p className='text-xs text-muted-foreground'>
+                  {groupEndpoints.length} {t('admin.common.endpoint')}
+                </p>
               </div>
-              <div className='grid gap-2'>
-                {groupEndpoints.map((endpoint) => (
-                  <button
-                    key={`${group}-${endpoint.id}`}
-                    type='button'
-                    data-state={
-                      selected === endpoint.id ? 'selected' : undefined
-                    }
-                    className='grid gap-3 rounded-lg border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/5 md:grid-cols-[7rem_1fr]'
-                    onClick={() => onSelect(endpoint.id)}
-                  >
-                    <div className='flex items-start gap-2'>
-                      <Badge variant='outline'>
-                        {methodLabel(endpoint.method)}
-                      </Badge>
+              <Badge variant='secondary'>
+                {groupMode === 'method'
+                  ? t('admin.fields.method')
+                  : t('admin.developerPortal.tag')}
+              </Badge>
+            </div>
+            <div className='grid gap-2'>
+              {groupEndpoints.map((endpoint) => (
+                <button
+                  key={`${group}-${endpoint.id}`}
+                  type='button'
+                  data-state={selected === endpoint.id ? 'selected' : undefined}
+                  className='grid gap-3 rounded-lg border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/5 md:grid-cols-[7rem_1fr]'
+                  onClick={() => onSelect(endpoint.id)}
+                >
+                  <div className='flex items-start gap-2'>
+                    <Badge variant='outline'>
+                      {methodLabel(endpoint.method)}
+                    </Badge>
+                  </div>
+                  <div className='grid gap-2'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      <code className='font-mono text-xs'>{endpoint.path}</code>
+                      {endpoint.deprecated && (
+                        <Badge variant='secondary'>
+                          {t('admin.developerPortal.deprecated')}
+                        </Badge>
+                      )}
                     </div>
-                    <div className='grid gap-2'>
-                      <div className='flex flex-wrap items-center gap-2'>
-                        <code className='font-mono text-xs'>
-                          {endpoint.path}
-                        </code>
-                        {endpoint.deprecated && (
-                          <Badge variant='secondary'>
-                            {t('admin.developerPortal.deprecated')}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className='text-sm text-muted-foreground'>
-                        {endpoint.summary ??
-                          endpoint.operation_id ??
-                          t('admin.developerPortal.noEndpointSummary')}
-                      </p>
-                      <div className='flex flex-wrap gap-1.5'>
-                        {endpointTags(endpoint, untaggedLabel).map((tag) => (
-                          <Badge key={tag} variant='secondary'>
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
+                    <p className='text-sm text-muted-foreground'>
+                      {endpoint.summary ??
+                        endpoint.operation_id ??
+                        t('admin.developerPortal.noEndpointSummary')}
+                    </p>
+                    <div className='flex flex-wrap gap-1.5'>
+                      {endpointTags(endpoint, untaggedLabel).map((tag) => (
+                        <Badge key={tag} variant='secondary'>
+                          {tag}
+                        </Badge>
+                      ))}
                     </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))
-        ) : (
-          <EmptyState preset='endpoints' />
-        )}
-        {detail && <EndpointDetailPanel endpoint={detail} />}
-      </CardContent>
-    </Card>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))
+      ) : (
+        <EmptyState preset='endpoints' />
+      )}
+      {detail && <EndpointDetailPanel endpoint={detail} />}
+    </CollectionCard>
   )
 }
 
@@ -2759,75 +2781,71 @@ export function DiffsPage() {
           {t('admin.diff.compareHint')}
         </p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('admin.sections.diffResult')}</CardTitle>
-          <CardDescription>
-            {activeDiff?.id ?? t('admin.diff.noDiffSelected')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='grid gap-4'>
-          {summary && (
-            <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-              <StatCard
-                title={t('admin.diff.addedEndpoints')}
-                value={String(summary.added_endpoints)}
-                description={t('admin.diff.addedDescription')}
-              />
-              <StatCard
-                title={t('admin.diff.removedEndpoints')}
-                value={String(summary.removed_endpoints)}
-                description={t('admin.diff.removedDescription')}
-              />
-              <StatCard
-                title={t('admin.diff.modifiedEndpoints')}
-                value={String(summary.modified_endpoints)}
-                description={t('admin.diff.modifiedDescription')}
-              />
-              <StatCard
-                title={t('admin.diff.breakingChanges')}
-                value={String(summary.breaking_changes)}
-                description={t('admin.diff.breakingDescription')}
-              />
-            </section>
-          )}
-          <SelectorGrid>
-            <div className='grid gap-2'>
-              <Label htmlFor='diff-search'>{t('admin.diff.searchLabel')}</Label>
-              <div className='relative'>
-                <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-                <Input
-                  id='diff-search'
-                  value={diffSearch}
-                  onChange={(event) => setDiffSearch(event.currentTarget.value)}
-                  placeholder={t('admin.diff.searchPlaceholder')}
-                  className='ps-9'
-                />
-              </div>
-            </div>
-            <NativeSelect
-              label={t('admin.diff.filterLabel')}
-              value={diffFilterValue}
-              onChange={(value) => setDiffFilterValue(diffFilter(value))}
-              placeholder={t('admin.diff.filterAll')}
-              options={[
-                { value: 'all', label: t('admin.diff.filterAll') },
-                { value: 'breaking', label: t('admin.diff.filterBreaking') },
-                {
-                  value: 'mustHandle',
-                  label: t('admin.diff.filterMustHandle'),
-                },
-                { value: 'high', label: t('admin.diff.filterHigh') },
-              ]}
+      <CollectionCard
+        title={t('admin.sections.diffResult')}
+        description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
+        count={visibleItems.length}
+      >
+        {summary && (
+          <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+            <StatCard
+              title={t('admin.diff.addedEndpoints')}
+              value={String(summary.added_endpoints)}
+              description={t('admin.diff.addedDescription')}
             />
-          </SelectorGrid>
-          {visibleItems.length ? (
-            <DiffReviewList items={visibleItems} />
-          ) : (
-            <EmptyState preset='diffs' />
-          )}
-        </CardContent>
-      </Card>
+            <StatCard
+              title={t('admin.diff.removedEndpoints')}
+              value={String(summary.removed_endpoints)}
+              description={t('admin.diff.removedDescription')}
+            />
+            <StatCard
+              title={t('admin.diff.modifiedEndpoints')}
+              value={String(summary.modified_endpoints)}
+              description={t('admin.diff.modifiedDescription')}
+            />
+            <StatCard
+              title={t('admin.diff.breakingChanges')}
+              value={String(summary.breaking_changes)}
+              description={t('admin.diff.breakingDescription')}
+            />
+          </section>
+        )}
+        <SelectorGrid>
+          <div className='grid gap-2'>
+            <Label htmlFor='diff-search'>{t('admin.diff.searchLabel')}</Label>
+            <div className='relative'>
+              <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+              <Input
+                id='diff-search'
+                value={diffSearch}
+                onChange={(event) => setDiffSearch(event.currentTarget.value)}
+                placeholder={t('admin.diff.searchPlaceholder')}
+                className='ps-9'
+              />
+            </div>
+          </div>
+          <NativeSelect
+            label={t('admin.diff.filterLabel')}
+            value={diffFilterValue}
+            onChange={(value) => setDiffFilterValue(diffFilter(value))}
+            placeholder={t('admin.diff.filterAll')}
+            options={[
+              { value: 'all', label: t('admin.diff.filterAll') },
+              { value: 'breaking', label: t('admin.diff.filterBreaking') },
+              {
+                value: 'mustHandle',
+                label: t('admin.diff.filterMustHandle'),
+              },
+              { value: 'high', label: t('admin.diff.filterHigh') },
+            ]}
+          />
+        </SelectorGrid>
+        {visibleItems.length ? (
+          <DiffReviewList items={visibleItems} />
+        ) : (
+          <EmptyState preset='diffs' />
+        )}
+      </CollectionCard>
     </PageChrome>
   )
 }
@@ -3034,74 +3052,79 @@ function TokenTable({
   tokens,
   onView,
   onRevoke,
+  title,
+  description,
+  emptyPreset = 'tokens',
 }: {
   tokens: MCPTokenDTO[]
   onView?: (tokenId: string) => void
   onRevoke: (tokenId: string) => void
+  title?: string
+  description?: string
+  emptyPreset?: EmptyStatePreset
 }) {
   const { t } = useLanguage()
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('nav.mcpTokens')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {tokens.length ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('admin.fields.name')}</TableHead>
-                <TableHead>{t('admin.fields.status')}</TableHead>
-                <TableHead>{t('admin.fields.expiresAt')}</TableHead>
-                <TableHead>{t('admin.fields.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tokens.map((token) => (
-                <TableRow key={token.id}>
-                  <TableCell>
-                    <div className='font-medium'>{token.name}</div>
-                    <div className='text-xs text-muted-foreground'>
-                      {token.id}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge>
-                      {token.status === ACTIVE_STATUS
-                        ? t('admin.common.active')
-                        : t('admin.common.revoked')}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell>{formatDate(token.expires_at)}</TableCell>
-                  <TableCell>
-                    <div className='flex gap-2'>
-                      {onView && (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => onView(token.id)}
-                        >
-                          {t('admin.common.view')}
-                        </Button>
-                      )}
+    <CollectionCard
+      title={title ?? t('nav.mcpTokens')}
+      description={description}
+      count={tokens.length}
+    >
+      {tokens.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('admin.fields.name')}</TableHead>
+              <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.expiresAt')}</TableHead>
+              <TableHead>{t('admin.fields.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tokens.map((token) => (
+              <TableRow key={token.id}>
+                <TableCell>
+                  <div className='font-medium'>{token.name}</div>
+                  <div className='text-xs text-muted-foreground'>
+                    {token.id}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge>
+                    {token.status === ACTIVE_STATUS
+                      ? t('admin.common.active')
+                      : t('admin.common.revoked')}
+                  </StatusBadge>
+                </TableCell>
+                <TableCell>{formatDate(token.expires_at)}</TableCell>
+                <TableCell>
+                  <div className='flex gap-2'>
+                    {onView && (
                       <Button
                         variant='outline'
                         size='sm'
-                        onClick={() => onRevoke(token.id)}
+                        onClick={() => onView(token.id)}
                       >
-                        {t('admin.common.revoke')}
+                        {t('admin.common.view')}
                       </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <EmptyState preset='tokens' />
-        )}
-      </CardContent>
-    </Card>
+                    )}
+                    <Button
+                      variant='outline'
+                      size='sm'
+                      onClick={() => onRevoke(token.id)}
+                    >
+                      {t('admin.common.revoke')}
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState preset={emptyPreset} />
+      )}
+    </CollectionCard>
   )
 }
 
@@ -3167,21 +3190,16 @@ function SettingsCard({
   rows: Array<[string, string]>
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className='grid gap-3'>
-        {rows.map(([label, value]) => (
-          <div
-            key={label}
-            className='flex justify-between gap-4 rounded-lg border p-3 text-sm'
-          >
-            <span className='text-muted-foreground'>{label}</span>
-            <span className='text-end font-medium'>{value}</span>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+    <CollectionCard title={title}>
+      {rows.map(([label, value]) => (
+        <div
+          key={label}
+          className='flex justify-between gap-4 rounded-lg border p-3 text-sm'
+        >
+          <span className='text-muted-foreground'>{label}</span>
+          <span className='text-end font-medium'>{value}</span>
+        </div>
+      ))}
+    </CollectionCard>
   )
 }

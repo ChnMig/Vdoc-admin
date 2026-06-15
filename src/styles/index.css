@@ -80,6 +80,13 @@
   animation: slideUp 300ms ease-out;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .CollapsibleContent[data-state='open'],
+  .CollapsibleContent[data-state='closed'] {
+    animation: none;
+  }
+}
+
 @keyframes slideDown {
   from {
     height: 0;

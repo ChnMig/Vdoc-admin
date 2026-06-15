@@ -28,7 +28,9 @@
   --workspace-vignette: oklch(0.78 0.035 264.45 / 12%);
   --shadow-card:
     0 1px 2px oklch(0.32 0.033 264.45 / 7%),
-    0 18px 40px oklch(0.32 0.033 264.45 / 5%);
+    0 6px 12px oklch(0.32 0.033 264.45 / 4%);
+  --z-sticky: 40;
+  --z-skip-link: 60;
 
   --sidebar: oklch(0.972 0.008 84.56);
   --sidebar-foreground: var(--foreground);
@@ -66,7 +68,7 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --workspace-glow: oklch(0.246 0.042 265.755 / 42%);
   --workspace-vignette: oklch(0.48 0.08 84.56 / 12%);
-  --shadow-card: 0 1px 2px oklch(0 0 0 / 22%), 0 20px 48px oklch(0 0 0 / 18%);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 20%), 0 8px 18px oklch(0 0 0 / 12%);
   --sidebar: oklch(0.146 0.038 264.695);
 }
 

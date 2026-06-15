@@ -30,8 +30,8 @@ export const sidebarData: SidebarData = {
   ],
   navGroups: [
     {
-      title: 'Vdoc',
-      titleKey: 'nav.groupVdoc',
+      title: 'Workspace setup',
+      titleKey: 'nav.groupWorkspaceSetup',
       items: [
         {
           title: 'Dashboard',
@@ -57,6 +57,12 @@ export const sidebarData: SidebarData = {
           url: '/projects',
           icon: Layers3,
         },
+      ],
+    },
+    {
+      title: 'Sources/documents',
+      titleKey: 'nav.groupSourcesDocuments',
+      items: [
         {
           title: 'Documents',
           titleKey: 'nav.documents',
@@ -69,6 +75,12 @@ export const sidebarData: SidebarData = {
           url: '/drafts',
           icon: SquarePen,
         },
+      ],
+    },
+    {
+      title: 'Versions/diffs',
+      titleKey: 'nav.groupVersionsDiffs',
+      items: [
         {
           title: 'Versions',
           titleKey: 'nav.versions',
@@ -81,12 +93,24 @@ export const sidebarData: SidebarData = {
           url: '/diffs',
           icon: Diff,
         },
+      ],
+    },
+    {
+      title: 'Agent access',
+      titleKey: 'nav.groupAgentAccess',
+      items: [
         {
           title: 'MCP Tokens',
           titleKey: 'nav.mcpTokens',
           url: '/mcp-tokens',
           icon: KeyRound,
         },
+      ],
+    },
+    {
+      title: 'System/settings',
+      titleKey: 'nav.groupSystemSettings',
+      items: [
         {
           title: 'Settings',
           titleKey: 'nav.settings',

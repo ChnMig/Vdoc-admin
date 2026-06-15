@@ -29,6 +29,11 @@ const en = {
   },
   nav: {
     groupVdoc: 'Vdoc',
+    groupWorkspaceSetup: 'Workspace setup',
+    groupSourcesDocuments: 'Sources/documents',
+    groupVersionsDiffs: 'Versions/diffs',
+    groupAgentAccess: 'Agent access',
+    groupSystemSettings: 'System/settings',
     dashboard: 'Dashboard',
     users: 'Users',
     teams: 'Teams',
@@ -141,6 +146,12 @@ const en = {
       yes: 'Yes',
       no: 'No',
       total: 'Total',
+      operationPanel: 'Operation panel',
+      operationPanelDescription:
+        'Use this panel for the next controlled change in the Vdoc lifecycle.',
+      resourceCollection: 'Resource collection',
+      selectedContext: 'Selected context',
+      nextAction: 'Next action',
       endpoint: 'Endpoint',
       active: 'Active',
       archived: 'Archived',
@@ -395,7 +406,11 @@ const en = {
     pages: {
       dashboard: {
         title: 'Live Product Workbench',
-        description: 'Real-time status and counts from the Vdoc backend APIs.',
+        description:
+          'Follow setup, review, version, and agent-access readiness from the Vdoc backend APIs.',
+        stage: 'Lifecycle overview',
+        cue: 'Start here when a workspace is new or state is unclear.',
+        next: 'Confirm the first incomplete lifecycle step before opening entity pages.',
         health: 'Backend health',
         identity: 'Signed-in identity',
       },
@@ -403,43 +418,70 @@ const en = {
         title: 'Users',
         description:
           'List users, create accounts, patch status, and oversee user MCP tokens.',
+        stage: 'Workspace setup',
+        cue: 'People and roles define who can administer projects and review drafts.',
+        next: 'Create users before assigning project membership or auditing user tokens.',
       },
       teams: {
         title: 'Teams',
         description: 'Create, update, and archive Vdoc teams.',
+        stage: 'Workspace setup',
+        cue: 'Teams create the ownership boundary that projects inherit.',
+        next: 'Create the team before connecting projects to owners.',
       },
       projects: {
         title: 'Projects',
         description:
           'Manage projects and project membership using real backend APIs.',
+        stage: 'Workspace setup',
+        cue: 'Projects bind teams, admins, members, documents, drafts, and versions.',
+        next: 'Select a project to confirm membership before adding documents.',
       },
       documents: {
         title: 'Documents',
         description: 'Select a project, then manage documents and branches.',
+        stage: 'Sources/documents',
+        cue: 'Documents and branches are the source targets for draft review.',
+        next: 'Create a document and branch before submitting drafts.',
       },
       drafts: {
         title: 'Drafts',
         description: 'Create, update, review, and inspect draft content.',
+        stage: 'Drafts/review',
+        cue: 'Drafts are untrusted until submitted, reviewed, and promoted.',
+        next: 'Inspect content before approve, reject, or request-changes actions.',
       },
       versions: {
         title: 'Versions',
         description:
           'Browse published versions, content, and OpenAPI endpoints.',
+        stage: 'Versions/developer portal',
+        cue: 'Published versions are the authoritative facts humans and agents consume.',
+        next: 'Select a version to inspect content and endpoint facts.',
       },
       diffs: {
         title: 'Diffs',
         description:
           'Compare two versions on demand. Vdoc has no diff history list endpoint.',
+        stage: 'Versions/diffs',
+        cue: 'Diffs expose risk between reviewed versions before downstream consumers rely on them.',
+        next: 'Choose source and target versions, then filter by breaking or must-handle changes.',
       },
       mcpTokens: {
         title: 'MCP Tokens',
         description:
           'List, create, inspect, and revoke current-user MCP tokens.',
+        stage: 'Agent access',
+        cue: 'Tokens give agents access to approved Vdoc facts, not direct publication rights.',
+        next: 'Issue scoped tokens only after the workspace and documents are clear.',
       },
       settings: {
         title: 'Settings',
         description:
           'Read-only runtime settings from the current admin session.',
+        stage: 'System/settings',
+        cue: 'Runtime context confirms the backend, identity, and local UI configuration in use.',
+        next: 'Use these values to verify environment before investigating data issues.',
       },
     },
     sections: {
@@ -593,6 +635,11 @@ const zhCN = {
   },
   nav: {
     groupVdoc: 'Vdoc',
+    groupWorkspaceSetup: '工作区配置',
+    groupSourcesDocuments: '来源/文档',
+    groupVersionsDiffs: '版本/差异',
+    groupAgentAccess: '智能体访问',
+    groupSystemSettings: '系统/设置',
     dashboard: '仪表盘',
     users: '用户',
     teams: '团队',
@@ -704,6 +751,12 @@ const zhCN = {
       yes: '是',
       no: '否',
       total: '总数',
+      operationPanel: '操作面板',
+      operationPanelDescription:
+        '在此面板中执行 Vdoc 生命周期的下一次受控变更。',
+      resourceCollection: '资源集合',
+      selectedContext: '当前上下文',
+      nextAction: '下一步',
       endpoint: '端点',
       active: '激活',
       archived: '已归档',
@@ -946,45 +999,76 @@ const zhCN = {
     pages: {
       dashboard: {
         title: '实时产品工作台',
-        description: '来自 Vdoc 后端 API 的实时状态和计数。',
+        description:
+          '根据 Vdoc 后端 API 跟踪配置、审阅、版本和智能体访问状态。',
+        stage: '生命周期总览',
+        cue: '当工作区刚开始配置或状态不清晰时从这里开始。',
+        next: '进入实体页面前，先确认第一个未完成的生命周期步骤。',
         health: '后端健康状态',
         identity: '当前登录身份',
       },
       users: {
         title: '用户',
         description: '列出用户、创建账号、修补状态，并监管用户 MCP 令牌。',
+        stage: '工作区配置',
+        cue: '成员和角色决定谁可以管理项目并审阅草稿。',
+        next: '先创建用户，再分配项目成员或审计用户令牌。',
       },
       teams: {
         title: '团队',
         description: '创建、更新和归档 Vdoc 团队。',
+        stage: '工作区配置',
+        cue: '团队为项目提供归属边界。',
+        next: '先创建团队，再把项目连接到负责人。',
       },
       projects: {
         title: '项目',
         description: '使用真实后端 API 管理项目和项目成员关系。',
+        stage: '工作区配置',
+        cue: '项目连接团队、管理员、成员、文档、草稿和版本。',
+        next: '选择项目并确认成员关系，再添加文档。',
       },
       documents: {
         title: '文档',
         description: '选择项目后管理文档和分支。',
+        stage: '来源/文档',
+        cue: '文档和分支是草稿审阅的来源目标。',
+        next: '先创建文档和分支，再提交草稿。',
       },
       drafts: {
         title: '草稿',
         description: '创建、更新、审阅并检查草稿内容。',
+        stage: '草稿/审阅',
+        cue: '草稿在提交、审阅和提升前都不是可信事实。',
+        next: '批准、拒绝或请求修改前，先检查内容。',
       },
       versions: {
         title: '版本',
         description: '浏览已发布版本、内容和 OpenAPI 端点。',
+        stage: '版本/开发者门户',
+        cue: '已发布版本是人和智能体消费的权威事实。',
+        next: '选择版本以检查内容和端点事实。',
       },
       diffs: {
         title: '差异',
         description: '按需比较两个版本。Vdoc 没有差异历史列表端点。',
+        stage: '版本/差异',
+        cue: '差异揭示已审阅版本之间的风险，避免下游消费者误用。',
+        next: '选择来源和目标版本，再按破坏性或必须处理变更过滤。',
       },
       mcpTokens: {
         title: 'MCP 令牌',
         description: '列出、创建、查看和撤销当前用户的 MCP 令牌。',
+        stage: '智能体访问',
+        cue: '令牌允许智能体访问已批准的 Vdoc 事实，而不是直接发布。',
+        next: '工作区和文档清晰后，再签发限定范围的令牌。',
       },
       settings: {
         title: '设置',
         description: '从当前管理会话读取运行时设置。',
+        stage: '系统/设置',
+        cue: '运行时上下文确认正在使用的后端、身份和本地 UI 配置。',
+        next: '排查数据问题前，先用这些值确认环境。',
       },
     },
     sections: {
