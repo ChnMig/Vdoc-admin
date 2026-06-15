@@ -319,9 +319,22 @@ export class VdocApiError extends Error {
   }
 }
 
-export const apiBaseUrl =
-  import.meta.env.VITE_VDOC_API_BASE_URL?.replace(/\/$/, '') ||
-  'http://127.0.0.1:8080'
+const localApiBaseUrl = 'http://127.0.0.1:8080'
+
+function normalizeApiBaseUrl(url: string) {
+  return url.trim().replace(/\/+$/, '')
+}
+
+export function resolveApiBaseUrl() {
+  const configuredApiBaseUrl =
+    window.__VDOC_ADMIN_CONFIG__?.apiBaseUrl ||
+    import.meta.env.VITE_VDOC_API_BASE_URL ||
+    localApiBaseUrl
+
+  return normalizeApiBaseUrl(configuredApiBaseUrl)
+}
+
+export const apiBaseUrl = resolveApiBaseUrl()
 
 export const vdocApi = axios.create({
   baseURL: apiBaseUrl,

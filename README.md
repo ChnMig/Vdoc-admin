@@ -13,7 +13,7 @@ The v0.1 surface is responsible for more than CRUD administration: it guides fir
 
 ## Vdoc Backend Expectations
 
-Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin, for example `http://127.0.0.1:8080`.
+Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin during local development, for example `http://127.0.0.1:8080`. The production Docker image is configured at container startup instead: set `VDOC_ADMIN_API_BASE_URL` to write `/runtime-config.js` before Caddy serves the Vite bundle as static files. `VITE_VDOC_API_BASE_URL` remains supported as a container startup fallback for compatibility.
 
 Authentication uses the Vdoc backend directly:
 

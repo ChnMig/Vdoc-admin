@@ -7,3 +7,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+type VdocAdminRuntimeConfig = {
+  apiBaseUrl?: string
+}
+
+interface Window {
+  __VDOC_ADMIN_CONFIG__?: VdocAdminRuntimeConfig
+}

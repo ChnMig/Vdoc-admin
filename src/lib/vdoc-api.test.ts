@@ -4,11 +4,12 @@ import type {
   InternalAxiosRequestConfig,
 } from 'axios'
 import { clearCookies } from '@/test-utils/cookies'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   getIdentity,
   listUsers,
+  resolveApiBaseUrl,
   unwrapEnvelope,
   unwrapListEnvelope,
   vdocApi,
@@ -17,6 +18,7 @@ import {
 } from './vdoc-api'
 
 const originalAdapter = vdocApi.defaults.adapter
+const originalRuntimeConfig = window.__VDOC_ADMIN_CONFIG__
 
 const sampleUser = {
   id: 'user-1',
@@ -31,6 +33,27 @@ describe('vdoc-api', () => {
     clearCookies()
     useAuthStore.getState().auth.reset()
     vdocApi.defaults.adapter = originalAdapter
+    window.__VDOC_ADMIN_CONFIG__ = undefined
+  })
+
+  afterEach(() => {
+    window.__VDOC_ADMIN_CONFIG__ = originalRuntimeConfig
+    vi.unstubAllEnvs()
+  })
+
+  it('prefers runtime config over Vite env and normalizes trailing slash', () => {
+    vi.stubEnv('VITE_VDOC_API_BASE_URL', 'https://vite-api.example.test')
+    window.__VDOC_ADMIN_CONFIG__ = {
+      apiBaseUrl: 'https://runtime-api.example.test///',
+    }
+
+    expect(resolveApiBaseUrl()).toBe('https://runtime-api.example.test')
+  })
+
+  it('uses Vite env when runtime config is absent and normalizes trailing slash', () => {
+    vi.stubEnv('VITE_VDOC_API_BASE_URL', 'https://vite-api.example.test/')
+
+    expect(resolveApiBaseUrl()).toBe('https://vite-api.example.test')
   })
 
   it('sends the raw Vdoc JWT in the Authorization header', async () => {
