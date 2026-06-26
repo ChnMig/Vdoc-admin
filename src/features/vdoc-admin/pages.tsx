@@ -297,38 +297,41 @@ function PageChrome({
         <ProfileDropdown />
       </Header>
       <Main>
-        <section className='mb-6 grid gap-4 rounded-xl border bg-card p-5 text-card-foreground md:grid-cols-[minmax(0,1fr)_20rem]'>
-          <div className='grid gap-3'>
+        <section className='mb-5 grid gap-4 rounded-lg border bg-card p-5 text-card-foreground shadow-[var(--shadow-card)] panel-control md:grid-cols-[minmax(0,1fr)_21rem]'>
+          <div className='grid gap-4'>
             <div className='flex flex-wrap items-center gap-2'>
-              <Badge variant='secondary'>
+              <Badge
+                className='border-primary/20 bg-primary/8 text-primary'
+                variant='outline'
+              >
                 {t(`admin.pages.${page}.stage`)}
               </Badge>
-              <span className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+              <span className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
                 {t('app.consoleLabel')}
               </span>
             </div>
             <div className='grid gap-2'>
-              <h1 className='text-2xl font-semibold tracking-tight'>
+              <h1 className='text-2xl font-semibold tracking-[-0.025em] text-balance'>
                 {t(`admin.pages.${page}.title`)}
               </h1>
-              <p className='max-w-3xl text-sm text-muted-foreground md:text-base'>
+              <p className='max-w-3xl text-sm leading-6 text-pretty text-muted-foreground'>
                 {t(`admin.pages.${page}.description`)}
               </p>
             </div>
-            <p className='max-w-3xl text-sm text-muted-foreground'>
+            <p className='max-w-3xl border-t pt-3 text-sm text-muted-foreground'>
               {t(`admin.pages.${page}.cue`)}
             </p>
           </div>
-          <aside className='grid content-start gap-2 rounded-lg border bg-muted/25 p-4 text-sm'>
-            <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+          <aside className='grid content-start gap-3 rounded-md border bg-[var(--surface-control)] p-4 text-sm shadow-[var(--shadow-panel)]'>
+            <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
               {t('admin.common.nextAction')}
             </p>
-            <p className='text-muted-foreground'>
+            <p className='leading-6 text-muted-foreground'>
               {t(`admin.pages.${page}.next`)}
             </p>
           </aside>
         </section>
-        <div className='grid gap-6'>{children}</div>
+        <div className='grid gap-5'>{children}</div>
       </Main>
     </>
   )
@@ -338,9 +341,16 @@ function LoadingErrorState({ state }: { state: QueryState }) {
   const { t } = useLanguage()
   if (state.isLoading) {
     return (
-      <Card className='shadow-none'>
-        <CardContent className='py-8 text-sm text-muted-foreground'>
-          {t('admin.common.loading')}
+      <Card>
+        <CardContent className='grid gap-3 py-6 text-sm text-muted-foreground'>
+          <div className='flex items-center justify-between gap-3'>
+            <span>{t('admin.common.loading')}</span>
+            <span className='h-2 w-24 rounded-full bg-muted' />
+          </div>
+          <div className='grid gap-2'>
+            <span className='h-2 rounded-full bg-muted/80' />
+            <span className='h-2 w-2/3 rounded-full bg-muted/70' />
+          </div>
         </CardContent>
       </Card>
     )
@@ -369,9 +379,9 @@ function EmptyState({ preset }: { preset?: EmptyStatePreset }) {
     : t('admin.emptyStates.generic.description')
   const action = preset ? t(`admin.emptyStates.${preset}.action`) : undefined
   return (
-    <div className='grid gap-4 rounded-xl border border-dashed bg-muted/15 p-6 text-sm'>
+    <div className='grid gap-4 rounded-lg border border-dashed bg-[var(--surface-control)] p-5 text-sm'>
       <div className='flex items-start gap-3'>
-        <span className='mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border bg-background text-muted-foreground'>
+        <span className='mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-primary'>
           <ArrowRight className='size-4' />
         </span>
         <div className='grid gap-2'>
@@ -380,8 +390,8 @@ function EmptyState({ preset }: { preset?: EmptyStatePreset }) {
         </div>
       </div>
       {action && (
-        <div className='rounded-lg border bg-background p-3'>
-          <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+        <div className='rounded-md border bg-background p-3'>
+          <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
             {t('admin.common.nextAction')}
           </p>
           <p className='mt-1 text-sm'>{action}</p>
@@ -418,7 +428,7 @@ function NativeSelect({
         name={name}
         value={value}
         onChange={(event) => onChange?.(event.currentTarget.value)}
-        className='h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-hidden dark:bg-input/30'
+        className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
       >
         <option value=''>{placeholder}</option>
         {options.map((option) => (
@@ -434,11 +444,11 @@ function NativeSelect({
 function SelectorGrid({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage()
   return (
-    <section className='grid gap-3 rounded-xl border bg-card p-4'>
-      <p className='text-xs font-medium tracking-wide text-muted-foreground uppercase'>
+    <section className='grid gap-3 rounded-lg border bg-card p-4 panel-control'>
+      <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
         {t('admin.common.selectedContext')}
       </p>
-      <div className='grid gap-4 md:grid-cols-3'>{children}</div>
+      <div className='grid gap-4 md:grid-cols-3 xl:grid-cols-4'>{children}</div>
     </section>
   )
 }
@@ -453,12 +463,12 @@ function StatCard({
   description: string
 }) {
   return (
-    <Card className='gap-3 py-5 shadow-none'>
+    <Card className='gap-3 py-5'>
       <CardHeader className='gap-2 pb-0'>
-        <CardDescription className='text-xs font-medium tracking-wide uppercase'>
+        <CardDescription className='font-mono text-[0.68rem] font-semibold tracking-wide uppercase'>
           {title}
         </CardDescription>
-        <CardTitle className='text-2xl font-semibold tabular-nums'>
+        <CardTitle className='text-2xl font-semibold tracking-[-0.02em] tabular-nums'>
           {value}
         </CardTitle>
       </CardHeader>
@@ -484,9 +494,14 @@ function FormCard({
 }) {
   const { t } = useLanguage()
   return (
-    <Card className='border-primary/30 shadow-none'>
+    <Card className='border-primary/25'>
       <CardHeader className='border-b pb-5'>
-        <Badge variant='secondary'>{t('admin.common.operationPanel')}</Badge>
+        <Badge
+          className='w-fit border-primary/20 bg-primary/8 text-primary'
+          variant='outline'
+        >
+          {t('admin.common.operationPanel')}
+        </Badge>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
           {t('admin.common.operationPanelDescription')}
@@ -528,7 +543,7 @@ function CollectionCard({
       <CardHeader className='border-b pb-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div className='grid gap-2'>
-            <Badge variant='secondary'>
+            <Badge className='w-fit' variant='secondary'>
               {t('admin.common.resourceCollection')}
             </Badge>
             <CardTitle>{title}</CardTitle>
@@ -541,7 +556,7 @@ function CollectionCard({
           )}
         </div>
       </CardHeader>
-      <CardContent className='grid gap-4 p-6'>{children}</CardContent>
+      <CardContent className='grid gap-4 p-5'>{children}</CardContent>
     </Card>
   )
 }
@@ -650,7 +665,18 @@ function StatusBadge({
   children: React.ReactNode
   muted?: boolean
 }) {
-  return <Badge variant={muted ? 'secondary' : 'outline'}>{children}</Badge>
+  return (
+    <Badge
+      className={
+        muted
+          ? 'border-input bg-secondary text-secondary-foreground'
+          : 'border-primary/25 bg-primary/8 text-primary'
+      }
+      variant='outline'
+    >
+      {children}
+    </Badge>
+  )
 }
 
 function ContentViewer({
@@ -664,7 +690,7 @@ function ContentViewer({
   return (
     <CollectionCard title={title}>
       {content ? (
-        <pre className='max-h-[36rem] overflow-auto rounded-lg border bg-muted/40 p-4 text-xs leading-relaxed'>
+        <pre className='max-h-[36rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
           {content}
         </pre>
       ) : (
@@ -875,10 +901,13 @@ export function DashboardPage() {
     <PageChrome page='dashboard'>
       <LoadingErrorState state={queryState} />
       <Card className='overflow-hidden'>
-        <CardContent className='grid gap-6 p-6 lg:grid-cols-[1.25fr_0.75fr]'>
+        <CardContent className='grid gap-5 p-5 lg:grid-cols-[1.25fr_0.75fr]'>
           <div className='grid gap-4'>
             <div className='flex flex-wrap items-center gap-2'>
-              <Badge className='w-fit' variant='secondary'>
+              <Badge
+                className='w-fit border-primary/20 bg-primary/8 text-primary'
+                variant='outline'
+              >
                 {t('admin.workbench.eyebrow')}
               </Badge>
               <StatusBadge muted={!healthQuery.data?.ready}>
@@ -888,15 +917,15 @@ export function DashboardPage() {
               </StatusBadge>
             </div>
             <div className='grid gap-3'>
-              <h2 className='max-w-3xl text-2xl font-semibold tracking-tight'>
+              <h2 className='max-w-3xl text-2xl font-semibold tracking-[-0.025em] text-balance'>
                 {t('admin.workbench.title')}
               </h2>
-              <p className='max-w-3xl text-sm text-muted-foreground md:text-base'>
+              <p className='max-w-3xl text-sm leading-6 text-pretty text-muted-foreground'>
                 {t('admin.workbench.description')}
               </p>
             </div>
           </div>
-          <div className='grid gap-3 rounded-xl border bg-muted/20 p-4'>
+          <div className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4 shadow-[var(--shadow-panel)]'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <p className='text-sm font-medium'>
                 {t('admin.workbench.roleTitle')}
@@ -948,11 +977,11 @@ export function DashboardPage() {
               return (
                 <div
                   key={step.key}
-                  className='rounded-xl border bg-muted/20 p-4'
+                  className='rounded-md border bg-[var(--surface-control)] p-4 shadow-[var(--shadow-panel)]'
                 >
                   <div className='mb-3 flex items-center justify-between gap-3'>
                     <div className='flex items-center gap-2'>
-                      <span className='flex size-8 items-center justify-center rounded-full border bg-background text-primary'>
+                      <span className='flex size-8 items-center justify-center rounded-md border bg-background text-primary'>
                         <Icon className='size-4' />
                       </span>
                       <Badge variant={step.done ? 'outline' : 'secondary'}>
@@ -2513,7 +2542,10 @@ function EndpointsCard({
     >
       {groupedEndpoints.length ? (
         groupedEndpoints.map(([group, groupEndpoints]) => (
-          <section key={group} className='grid gap-3 rounded-xl border p-4'>
+          <section
+            key={group}
+            className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'
+          >
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <div>
                 <p className='font-medium'>{group}</p>
@@ -2533,7 +2565,7 @@ function EndpointsCard({
                   key={`${group}-${endpoint.id}`}
                   type='button'
                   data-state={selected === endpoint.id ? 'selected' : undefined}
-                  className='grid gap-3 rounded-lg border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/5 md:grid-cols-[7rem_1fr]'
+                  className='grid gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 md:grid-cols-[7rem_1fr]'
                   onClick={() => onSelect(endpoint.id)}
                 >
                   <div className='flex items-start gap-2'>
@@ -2651,13 +2683,13 @@ function EndpointJsonSection({
   rows: Array<[string, unknown]>
 }) {
   return (
-    <section className='grid gap-3 rounded-xl border p-4'>
+    <section className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
       <p className='font-medium'>{title}</p>
       <div className='grid gap-3'>
         {rows.map(([label, value]) => (
           <div key={label} className='grid gap-2'>
             <p className='text-xs font-medium text-muted-foreground'>{label}</p>
-            <pre className='max-h-80 overflow-auto rounded-lg bg-muted/40 p-3 text-xs leading-relaxed'>
+            <pre className='max-h-80 overflow-auto rounded-md border bg-background p-3 text-xs leading-relaxed'>
               {jsonPreview(value)}
             </pre>
           </div>
@@ -2866,7 +2898,10 @@ function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
   return (
     <div className='grid gap-4'>
       {groups.map(([severity, severityItems]) => (
-        <section key={severity} className='grid gap-3 rounded-xl border p-4'>
+        <section
+          key={severity}
+          className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'
+        >
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <div>
               <p className='font-medium'>{severity}</p>
@@ -2880,7 +2915,7 @@ function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
             {severityItems.map((item) => (
               <article
                 key={item.id}
-                className='grid gap-3 rounded-lg border bg-background p-4'
+                className='grid gap-3 rounded-md border bg-background p-4'
               >
                 <div className='flex flex-wrap items-start justify-between gap-3'>
                   <div className='grid gap-1'>
@@ -2920,7 +2955,7 @@ function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
                     <p className='text-xs font-medium text-muted-foreground'>
                       {t('admin.diff.oldValue')}
                     </p>
-                    <pre className='max-h-72 overflow-auto rounded-lg bg-muted/40 p-3 text-xs leading-relaxed'>
+                    <pre className='max-h-72 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-xs leading-relaxed'>
                       {jsonPreview(item.old_value)}
                     </pre>
                   </div>
@@ -2928,7 +2963,7 @@ function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
                     <p className='text-xs font-medium text-muted-foreground'>
                       {t('admin.diff.newValue')}
                     </p>
-                    <pre className='max-h-72 overflow-auto rounded-lg bg-muted/40 p-3 text-xs leading-relaxed'>
+                    <pre className='max-h-72 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-xs leading-relaxed'>
                       {jsonPreview(item.new_value)}
                     </pre>
                   </div>

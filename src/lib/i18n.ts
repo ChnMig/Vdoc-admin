@@ -531,6 +531,17 @@ const en = {
   },
   auth: {
     brand: 'Vdoc Admin',
+    controlPlane: {
+      label: 'Control Plane',
+      title:
+        'Reviewed documentation operations, without losing the state trail.',
+      description:
+        'Sign in to review drafts, compare versions, inspect source facts, and manage MCP access from one calm operator surface.',
+      sourceTitle: 'Source of truth',
+      sourceDescription:
+        'Versions, diffs, tokens, and review state remain visible after authentication.',
+      ready: 'Ready',
+    },
     email: 'Email',
     password: 'Password',
     name: 'Name',
@@ -1118,6 +1129,15 @@ const zhCN = {
   },
   auth: {
     brand: 'Vdoc Admin',
+    controlPlane: {
+      label: '控制平面',
+      title: '审阅后的文档操作，始终保留状态轨迹。',
+      description:
+        '登录后可在一个冷静的操作界面中审阅草稿、比较版本、检查源事实并管理 MCP 访问。',
+      sourceTitle: '事实源',
+      sourceDescription: '版本、差异、令牌和审阅状态在认证后保持可见。',
+      ready: '就绪',
+    },
     email: '邮箱',
     password: '密码',
     name: '姓名',

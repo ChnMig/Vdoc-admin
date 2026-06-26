@@ -15,8 +15,12 @@ import { TeamSwitcher } from './team-switcher'
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   return (
-    <Sidebar collapsible={collapsible} variant={variant}>
-      <SidebarHeader>
+    <Sidebar
+      collapsible={collapsible}
+      variant={variant}
+      className='border-sidebar-border/90'
+    >
+      <SidebarHeader className='border-b border-sidebar-border/80'>
         <TeamSwitcher teams={sidebarData.teams} />
 
         {/* Replace <TeamSwitch /> with the following <AppTitle />
@@ -28,7 +32,7 @@ export function AppSidebar() {
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className='border-t border-sidebar-border/80'>
         <NavUser user={sidebarData.user} />
       </SidebarFooter>
       <SidebarRail />
