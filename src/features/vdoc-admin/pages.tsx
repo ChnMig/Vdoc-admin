@@ -64,6 +64,7 @@ import {
   updateDraft,
   updateProject,
   updateTeam,
+  type AISummaryTarget,
   type DraftReviewPayload,
   type BranchDTO,
   type DiffDTO,
@@ -107,6 +108,8 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { AIContextPanel } from './ai-panels'
+import { AISettingsPanel } from './ai-settings'
 import { MarkdownFactsCard } from './markdown-facts-card'
 
 const ACTIVE_STATUS = 1
@@ -1939,6 +1942,14 @@ export function DraftsPage() {
   const selectedDraft = draftsQuery.data?.items.find(
     (draft) => draft.id === draftId
   )
+  const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
+    ? {
+        projectId,
+        documentId,
+        ownerType: 'draft',
+        ownerId: selectedDraft.id,
+      }
+    : undefined
   const draftContentKindOptions = contentKindOptions(
     t,
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
@@ -2118,6 +2129,7 @@ export function DraftsPage() {
           )
         }
       />
+      <AIContextPanel target={selectedDraftAITarget} />
     </PageChrome>
   )
 }
@@ -2432,6 +2444,14 @@ export function VersionsPage() {
       versionId,
       activeVersionContentKind
     )
+  const selectedVersionAITarget: AISummaryTarget | undefined = versionId
+    ? {
+        projectId,
+        documentId,
+        ownerType: 'version',
+        ownerId: versionId,
+      }
+    : undefined
   return (
     <PageChrome page='versions'>
       <SelectorGrid>
@@ -2544,6 +2564,7 @@ export function VersionsPage() {
           untaggedLabel={untaggedLabel}
         />
       )}
+      <AIContextPanel target={selectedVersionAITarget} />
     </PageChrome>
   )
 }
@@ -2843,6 +2864,14 @@ export function DiffsPage() {
     diff.to_version_id === selectedToVersionId
       ? diff
       : null
+  const activeDiffAITarget: AISummaryTarget | undefined = activeDiff
+    ? {
+        projectId,
+        documentId,
+        ownerType: 'diff',
+        ownerId: activeDiff.id,
+      }
+    : undefined
   const diffMutation = useMutation({
     mutationFn: () =>
       compareDiff(projectId, documentId, {
@@ -2995,6 +3024,7 @@ export function DiffsPage() {
           <EmptyState preset='diffs' />
         )}
       </CollectionCard>
+      <AIContextPanel target={activeDiffAITarget} />
     </PageChrome>
   )
 }
@@ -3325,6 +3355,7 @@ export function SettingsPage() {
           ]}
         />
       </section>
+      <AISettingsPanel />
       <Alert>
         <CheckCircle2 />
         <AlertTitle>satnaing/shadcn-admin</AlertTitle>

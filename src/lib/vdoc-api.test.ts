@@ -8,15 +8,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   approveDraft,
+  createAIChatSession,
   getIdentity,
+  getSystemAIProvider,
+  getAISummary,
+  listSystemAIPrompts,
   listUsers,
   rejectDraft,
+  regenerateAISummary,
   resolveApiBaseUrl,
   requestDraftChanges,
+  sendAIChatMessage,
   submitDraft,
+  testProjectAIProvider,
+  updateProjectAIPrompt,
+  updateSystemAIProvider,
   unwrapEnvelope,
   unwrapListEnvelope,
   vdocApi,
+  type AIProviderDTO,
   type DraftDTO,
   type VdocApiError,
   type VdocEnvelope,
@@ -215,6 +225,219 @@ describe('vdoc-api', () => {
       })
     )
   })
+
+  it('reads masked system AI providers without exposing raw API keys', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    const provider: AIProviderDTO = {
+      id: 'provider-1',
+      scope: 'system',
+      name: 'OpenAI compatible',
+      base_url: 'https://ai.example.test',
+      model: 'gpt-test',
+      api_mode: 'chat_completions',
+      api_key_set: true,
+      api_key_last4: '1234',
+      enabled: true,
+    }
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      detail: provider,
+    })
+
+    const result = await getSystemAIProvider()
+
+    expect(requests[0]?.url).toBe('/api/v1/private/ai/provider')
+    expect(result.api_key_set).toBe(true)
+    expect('api_key' in result).toBe(false)
+  })
+
+  it('updates system AI providers with OpenAI-compatible mode settings', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      detail: {
+        api_key_set: true,
+        enabled: true,
+      },
+    })
+
+    await updateSystemAIProvider({
+      name: 'OpenAI compatible',
+      base_url: 'https://ai.example.test',
+      model: 'gpt-test',
+      api_mode: 'responses',
+      api_key: 'sk-secret-1234',
+      enabled: true,
+    })
+
+    expect(requests[0]?.url).toBe('/api/v1/private/ai/provider')
+    expect(requests[0]?.method).toBe('put')
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({
+        name: 'OpenAI compatible',
+        base_url: 'https://ai.example.test',
+        model: 'gpt-test',
+        api_mode: 'responses',
+        api_key: 'sk-secret-1234',
+        enabled: true,
+      })
+    )
+  })
+
+  it('tests project AI providers against the project scoped endpoint', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      detail: { ok: true, content: 'Provider reached.' },
+    })
+
+    await testProjectAIProvider('project-1', {
+      name: 'Project provider',
+      base_url: 'https://project-ai.example.test',
+      model: 'gpt-project',
+      api_mode: 'chat_completions',
+      api_key: 'sk-project-1234',
+      enabled: true,
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/ai/provider/test'
+    )
+    expect(requests[0]?.method).toBe('post')
+  })
+
+  it('lists and updates AI prompt templates', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    const prompt = {
+      prompt_key: 'diff_change_summary',
+      system_prompt: 'Explain diffs only.',
+      user_prompt_template: 'Context: {{context}}',
+      enabled: true,
+    }
+    vdocApi.defaults.adapter = async (config) => {
+      requests.push(config)
+      return {
+        data:
+          config.method === 'get'
+            ? {
+                code: 200,
+                status: 'OK',
+                timestamp: 1,
+                total: 1,
+                detail: [prompt],
+              }
+            : {
+                code: 200,
+                status: 'OK',
+                timestamp: 1,
+                detail: {
+                  ...prompt,
+                  id: 'prompt-1',
+                  scope: 'project',
+                  project_id: 'project-1',
+                  created_by: 'user-1',
+                  updated_by: 'user-1',
+                  created_at: '2026-01-01T00:00:00Z',
+                  updated_at: '2026-01-01T00:00:00Z',
+                },
+              },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      } satisfies AxiosResponse<VdocEnvelope<unknown>>
+    }
+
+    await expect(listSystemAIPrompts()).resolves.toEqual({
+      items: [prompt],
+      total: 1,
+    })
+    await updateProjectAIPrompt('project-1', 'diff_change_summary', prompt)
+
+    expect(requests[0]?.url).toBe('/api/v1/private/ai/prompts')
+    expect(requests[1]?.url).toBe(
+      '/api/v1/private/projects/project-1/ai/prompts/diff_change_summary'
+    )
+    expect(requests[1]?.data).toBe(JSON.stringify(prompt))
+  })
+
+  it('uses AI summary endpoints for page-scoped summaries', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      detail: aiSummaryEnvelopeDetail(),
+    })
+
+    await getAISummary({
+      projectId: 'project-1',
+      documentId: 'document-1',
+      ownerType: 'diff',
+      ownerId: 'diff-1',
+    })
+    await regenerateAISummary({
+      projectId: 'project-1',
+      documentId: 'document-1',
+      ownerType: 'version',
+      ownerId: 'version-1',
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/diffs/diff-1/ai-summary'
+    )
+    expect(requests[1]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/versions/version-1/ai-summary/regenerate'
+    )
+    expect(requests[1]?.method).toBe('post')
+    expect(requests[1]?.data).toBeUndefined()
+  })
+
+  it('creates AI chat sessions and sends scoped messages', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      detail: {
+        id: 'message-1',
+        session_id: 'session-1',
+        role: 'assistant',
+        content: 'Scoped answer.',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+    })
+
+    await createAIChatSession('project-1', {
+      document_id: 'document-1',
+      context_type: 'draft',
+      context_id: 'draft-1',
+      title: 'Draft chat',
+    })
+    await sendAIChatMessage('project-1', 'session-1', 'What changed?')
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/ai/chat-sessions'
+    )
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({
+        document_id: 'document-1',
+        context_type: 'draft',
+        context_id: 'draft-1',
+        title: 'Draft chat',
+      })
+    )
+    expect(requests[1]?.url).toBe(
+      '/api/v1/private/projects/project-1/ai/chat-sessions/session-1/messages'
+    )
+    expect(requests[1]?.data).toBe(JSON.stringify({ content: 'What changed?' }))
+  })
 })
 
 function draftEnvelope(): VdocEnvelope<DraftDTO> {
@@ -236,6 +459,22 @@ function draftEnvelope(): VdocEnvelope<DraftDTO> {
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     },
+  }
+}
+
+function aiSummaryEnvelopeDetail() {
+  return {
+    id: 'summary-1',
+    project_id: 'project-1',
+    document_id: 'document-1',
+    owner_type: 'diff',
+    owner_id: 'diff-1',
+    prompt_key: 'diff_change_summary',
+    status: 'succeeded',
+    content: 'AI summary.',
+    generated_by: 'user-1',
+    generated_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
   }
 }
 

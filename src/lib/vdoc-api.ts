@@ -310,6 +310,114 @@ type CreateMCPTokenPayload = {
   expires_at?: string | null
 }
 
+export type AIProviderDTO = {
+  readonly id?: string
+  readonly scope?: string
+  readonly project_id?: string
+  readonly name?: string
+  readonly base_url?: string
+  readonly model?: string
+  readonly api_mode?: string
+  readonly api_key_set: boolean
+  readonly api_key_last4?: string
+  readonly enabled: boolean
+}
+
+export type AIProviderPayload = {
+  readonly name: string
+  readonly base_url: string
+  readonly model: string
+  readonly api_mode: string
+  readonly api_key?: string
+  readonly enabled: boolean
+}
+
+export type AIProviderTestResultDTO = {
+  readonly ok: boolean
+  readonly content: string
+}
+
+export type AIPromptTemplateDTO = {
+  readonly prompt_key: string
+  readonly system_prompt: string
+  readonly user_prompt_template: string
+  readonly enabled: boolean
+}
+
+export type AIPromptOverrideDTO = AIPromptTemplateDTO & {
+  readonly id: string
+  readonly scope: string
+  readonly project_id?: string
+  readonly created_by: string
+  readonly updated_by: string
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export type AISummaryDTO = {
+  readonly id: string
+  readonly project_id: string
+  readonly document_id: string
+  readonly owner_type: AIContextType
+  readonly owner_id: string
+  readonly prompt_key: string
+  readonly provider_id?: string
+  readonly status: string
+  readonly content?: string
+  readonly error_message?: string
+  readonly generated_by: string
+  readonly generated_at: string
+  readonly updated_at: string
+}
+
+export type AIContextType = 'draft' | 'version' | 'diff'
+
+export type AISummaryTarget = {
+  readonly projectId: string
+  readonly documentId: string
+  readonly ownerType: AIContextType
+  readonly ownerId: string
+}
+
+export type AIChatSessionPayload = {
+  readonly document_id: string
+  readonly context_type: AIContextType
+  readonly context_id: string
+  readonly title?: string
+}
+
+export type AIChatSessionDTO = {
+  readonly id: string
+  readonly project_id: string
+  readonly document_id?: string
+  readonly context_type: AIContextType
+  readonly context_id: string
+  readonly title: string
+  readonly created_by: string
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export type AIChatMessageDTO = {
+  readonly id: string
+  readonly session_id: string
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly provider_id?: string
+  readonly created_at: string
+}
+
+export type AIChatSessionDetailDTO = {
+  readonly session: AIChatSessionDTO
+  readonly messages: AIChatMessageDTO[]
+}
+
+const aiSummaryOwnerPath = {
+  draft: 'drafts',
+  version: 'versions',
+  diff: 'diffs',
+} as const satisfies Record<AIContextType, string>
+
 export class VdocApiError extends Error {
   envelope: VdocEnvelope<unknown>
   code: number
@@ -776,6 +884,134 @@ export function getDiffSummary(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}/summary`
     )
   )
+}
+
+export function getSystemAIProvider() {
+  return unwrapEnvelope<AIProviderDTO>(
+    vdocApi.get('/api/v1/private/ai/provider')
+  )
+}
+
+export function updateSystemAIProvider(payload: AIProviderPayload) {
+  return unwrapEnvelope<AIProviderDTO>(
+    vdocApi.put('/api/v1/private/ai/provider', payload)
+  )
+}
+
+export function testSystemAIProvider(payload?: AIProviderPayload) {
+  return unwrapEnvelope<AIProviderTestResultDTO>(
+    vdocApi.post('/api/v1/private/ai/provider/test', payload)
+  )
+}
+
+export function getProjectAIProvider(projectId: string) {
+  return unwrapEnvelope<AIProviderDTO>(
+    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/provider`)
+  )
+}
+
+export function updateProjectAIProvider(
+  projectId: string,
+  payload: AIProviderPayload
+) {
+  return unwrapEnvelope<AIProviderDTO>(
+    vdocApi.put(`/api/v1/private/projects/${projectId}/ai/provider`, payload)
+  )
+}
+
+export function testProjectAIProvider(
+  projectId: string,
+  payload?: AIProviderPayload
+) {
+  return unwrapEnvelope<AIProviderTestResultDTO>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/provider/test`,
+      payload
+    )
+  )
+}
+
+export function listSystemAIPrompts() {
+  return unwrapListEnvelope<AIPromptTemplateDTO>(
+    vdocApi.get('/api/v1/private/ai/prompts')
+  )
+}
+
+export function updateSystemAIPrompt(
+  promptKey: string,
+  payload: AIPromptTemplateDTO
+) {
+  return unwrapEnvelope<AIPromptOverrideDTO>(
+    vdocApi.put(`/api/v1/private/ai/prompts/${promptKey}`, payload)
+  )
+}
+
+export function listProjectAIPrompts(projectId: string) {
+  return unwrapListEnvelope<AIPromptTemplateDTO>(
+    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/prompts`)
+  )
+}
+
+export function updateProjectAIPrompt(
+  projectId: string,
+  promptKey: string,
+  payload: AIPromptTemplateDTO
+) {
+  return unwrapEnvelope<AIPromptOverrideDTO>(
+    vdocApi.put(
+      `/api/v1/private/projects/${projectId}/ai/prompts/${promptKey}`,
+      payload
+    )
+  )
+}
+
+export function getAISummary(target: AISummaryTarget) {
+  return unwrapEnvelope<AISummaryDTO>(
+    vdocApi.get(`${aiSummaryPath(target)}/ai-summary`)
+  )
+}
+
+export function regenerateAISummary(target: AISummaryTarget) {
+  return unwrapEnvelope<AISummaryDTO>(
+    vdocApi.post(`${aiSummaryPath(target)}/ai-summary/regenerate`)
+  )
+}
+
+export function createAIChatSession(
+  projectId: string,
+  payload: AIChatSessionPayload
+) {
+  return unwrapEnvelope<AIChatSessionDTO>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions`,
+      payload
+    )
+  )
+}
+
+export function getAIChatSession(projectId: string, sessionId: string) {
+  return unwrapEnvelope<AIChatSessionDetailDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}`
+    )
+  )
+}
+
+export function sendAIChatMessage(
+  projectId: string,
+  sessionId: string,
+  content: string
+) {
+  return unwrapEnvelope<AIChatMessageDTO>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/messages`,
+      { content }
+    )
+  )
+}
+
+function aiSummaryPath(target: AISummaryTarget) {
+  return `/api/v1/private/projects/${target.projectId}/documents/${target.documentId}/${aiSummaryOwnerPath[target.ownerType]}/${target.ownerId}`
 }
 
 export function listMCPTokens() {
