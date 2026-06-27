@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -74,6 +75,7 @@ export function AINativeSelect({
   onChange,
   name,
   disabled = false,
+  required = false,
 }: {
   readonly id?: string
   readonly label: string
@@ -83,18 +85,26 @@ export function AINativeSelect({
   readonly onChange?: (value: string) => void
   readonly name?: string
   readonly disabled?: boolean
+  readonly required?: boolean
 }) {
   const controlId = id ?? name ?? label
+  const selectionProps = onChange
+    ? {
+        value,
+        onChange: (event: ChangeEvent<HTMLSelectElement>) =>
+          onChange(event.currentTarget.value),
+      }
+    : { defaultValue: value }
   return (
     <div className='grid gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
       <select
         id={controlId}
         name={name}
-        value={value}
         disabled={disabled}
-        onChange={(event) => onChange?.(event.currentTarget.value)}
+        required={required}
         className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/25'
+        {...selectionProps}
       >
         <option value=''>{placeholder}</option>
         {options.map((option) => (

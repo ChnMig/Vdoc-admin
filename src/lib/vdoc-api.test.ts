@@ -232,7 +232,7 @@ describe('vdoc-api', () => {
       id: 'provider-1',
       scope: 'system',
       name: 'OpenAI compatible',
-      base_url: 'https://ai.example.test',
+      base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'chat_completions',
       api_key_set: true,
@@ -267,7 +267,7 @@ describe('vdoc-api', () => {
 
     await updateSystemAIProvider({
       name: 'OpenAI compatible',
-      base_url: 'https://ai.example.test',
+      base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'responses',
       api_key: 'sk-secret-1234',
@@ -279,7 +279,7 @@ describe('vdoc-api', () => {
     expect(requests[0]?.data).toBe(
       JSON.stringify({
         name: 'OpenAI compatible',
-        base_url: 'https://ai.example.test',
+        base_url: 'https://api.openai.example',
         model: 'gpt-test',
         api_mode: 'responses',
         api_key: 'sk-secret-1234',
@@ -299,7 +299,7 @@ describe('vdoc-api', () => {
 
     await testProjectAIProvider('project-1', {
       name: 'Project provider',
-      base_url: 'https://project-ai.example.test',
+      base_url: 'https://api.openai.example',
       model: 'gpt-project',
       api_mode: 'chat_completions',
       api_key: 'sk-project-1234',

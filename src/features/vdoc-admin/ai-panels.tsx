@@ -28,17 +28,33 @@ type AIContextPanelProps = {
 }
 
 export function AIContextPanel({ target }: AIContextPanelProps) {
+  const targetKey = targetIdentityKey(target)
+
+  return (
+    <AIContextPanelContent
+      key={targetKey}
+      target={target}
+      targetKey={targetKey}
+    />
+  )
+}
+
+function AIContextPanelContent({
+  target,
+  targetKey,
+}: AIContextPanelProps & { readonly targetKey: string }) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<readonly AIChatMessageDTO[]>([])
+
   const summaryQuery = useQuery({
     queryKey: ['ai-summary', target],
     queryFn: () => getAISummary(target ?? emptyTarget),
     enabled: target !== undefined,
   })
   const chatQuery = useQuery({
-    queryKey: ['ai-chat-session', target?.projectId, sessionId],
+    queryKey: ['ai-chat-session', targetKey, target?.projectId, sessionId],
     queryFn: () => getAIChatSession(target?.projectId ?? '', sessionId),
     enabled: target !== undefined && sessionId.length > 0,
   })
@@ -60,7 +76,7 @@ export function AIContextPanel({ target }: AIContextPanelProps) {
     onSuccess: (message) => {
       if (message) setMessages((current) => [...current, message])
       return queryClient.invalidateQueries({
-        queryKey: ['ai-chat-session', target?.projectId, sessionId],
+        queryKey: ['ai-chat-session', targetKey, target?.projectId, sessionId],
       })
     },
   })
@@ -134,6 +150,7 @@ export function AIContextPanel({ target }: AIContextPanelProps) {
             )}
           </div>
           <form
+            key={targetKey}
             className='grid gap-2'
             onSubmit={(event) => {
               event.preventDefault()
@@ -166,6 +183,16 @@ const emptyTarget: AISummaryTarget = {
   documentId: '',
   ownerType: 'draft',
   ownerId: '',
+}
+
+function targetIdentityKey(target: AISummaryTarget | undefined) {
+  if (target === undefined) return ''
+  return JSON.stringify([
+    target.projectId,
+    target.documentId,
+    target.ownerType,
+    target.ownerId,
+  ])
 }
 
 function summaryContent(

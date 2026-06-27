@@ -1,3 +1,4 @@
+import { AI_PROVIDER_API_MODES } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -5,6 +6,7 @@ import { AITextField, AINativeSelect } from './ai-settings-fields'
 import type { ProviderPanelProps } from './ai-settings-types'
 import {
   enabledOptions,
+  providerApiModeOptions,
   providerFormKey,
   providerKeyStatus,
   providerPayload,
@@ -79,12 +81,14 @@ export function AIProviderPanel({
             disabled={disabled}
             required
           />
-          <AITextField
+          <AINativeSelect
             id={`${scope}-ai-provider-api-mode`}
             label={t('admin.ai.apiMode')}
             name='api_mode'
-            defaultValue={provider?.api_mode ?? ''}
+            value={provider?.api_mode ?? AI_PROVIDER_API_MODES[0]}
             disabled={disabled}
+            placeholder={t('admin.ai.apiModePlaceholder')}
+            options={providerApiModeOptions(t)}
             required
           />
           <AITextField

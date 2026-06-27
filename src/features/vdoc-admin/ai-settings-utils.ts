@@ -1,9 +1,12 @@
 import type { TFunction } from '@/lib/i18n'
-import type {
-  AIProviderDTO,
-  AIProviderPayload,
-  AIPromptTemplateDTO,
-  ProjectDTO,
+import {
+  AI_PROVIDER_API_MODES,
+  isAIProviderAPIMode,
+  type AIProviderAPIMode,
+  type AIProviderDTO,
+  type AIProviderPayload,
+  type AIPromptTemplateDTO,
+  type ProjectDTO,
 } from '@/lib/vdoc-api'
 import type { ProviderScope, SelectOption } from './ai-settings-types'
 
@@ -18,7 +21,7 @@ export function providerPayload(formData: FormData): AIProviderPayload {
     name: fieldValue(formData, 'name'),
     base_url: fieldValue(formData, 'base_url'),
     model: fieldValue(formData, 'model'),
-    api_mode: fieldValue(formData, 'api_mode'),
+    api_mode: providerApiMode(formData),
     enabled: fieldValue(formData, 'enabled') === 'true',
   }
   const apiKey = fieldValue(formData, 'api_key')
@@ -41,6 +44,16 @@ export function enabledOptions(t: TFunction): readonly SelectOption[] {
   return [
     { value: 'true', label: t('admin.statuses.enabled') },
     { value: 'false', label: t('admin.statuses.disabled') },
+  ]
+}
+
+export function providerApiModeOptions(t: TFunction): readonly SelectOption[] {
+  return [
+    {
+      value: AI_PROVIDER_API_MODES[0],
+      label: t('admin.ai.apiModeChatCompletions'),
+    },
+    { value: AI_PROVIDER_API_MODES[1], label: t('admin.ai.apiModeResponses') },
   ]
 }
 
@@ -73,4 +86,9 @@ export function providerFormKey(
 
 function fieldValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? '').trim()
+}
+
+function providerApiMode(formData: FormData): AIProviderAPIMode {
+  const value = fieldValue(formData, 'api_mode')
+  return isAIProviderAPIMode(value) ? value : AI_PROVIDER_API_MODES[0]
 }

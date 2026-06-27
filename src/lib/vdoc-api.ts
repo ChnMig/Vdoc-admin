@@ -310,6 +310,13 @@ type CreateMCPTokenPayload = {
   expires_at?: string | null
 }
 
+export const AI_PROVIDER_API_MODES = ['chat_completions', 'responses'] as const
+export type AIProviderAPIMode = (typeof AI_PROVIDER_API_MODES)[number]
+
+export function isAIProviderAPIMode(value: string): value is AIProviderAPIMode {
+  return AI_PROVIDER_API_MODES.some((mode) => mode === value)
+}
+
 export type AIProviderDTO = {
   readonly id?: string
   readonly scope?: string
@@ -317,7 +324,7 @@ export type AIProviderDTO = {
   readonly name?: string
   readonly base_url?: string
   readonly model?: string
-  readonly api_mode?: string
+  readonly api_mode?: AIProviderAPIMode
   readonly api_key_set: boolean
   readonly api_key_last4?: string
   readonly enabled: boolean
@@ -327,7 +334,7 @@ export type AIProviderPayload = {
   readonly name: string
   readonly base_url: string
   readonly model: string
-  readonly api_mode: string
+  readonly api_mode: AIProviderAPIMode
   readonly api_key?: string
   readonly enabled: boolean
 }

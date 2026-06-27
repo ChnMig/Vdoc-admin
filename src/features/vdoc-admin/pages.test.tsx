@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, waitFor } from '@testing-library/react'
+import { render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -327,6 +327,24 @@ describe('SettingsPage AI settings', () => {
     ).toBeInTheDocument()
     expect(screen.getByLabelText('System API key')).toHaveDisplayValue('')
     expect(screen.queryByDisplayValue('sk-live-secret')).not.toBeInTheDocument()
+    const systemProviderEnabled = screen.getAllByLabelText('Enabled')[0]
+    if (!systemProviderEnabled) {
+      throw new Error('missing system provider enabled select')
+    }
+    await user.selectOptions(systemProviderEnabled, 'false')
+    const systemProviderApiMode = screen.getAllByLabelText('API mode')[0]
+    if (!systemProviderApiMode) {
+      throw new Error('missing system provider API mode select')
+    }
+    expect(
+      within(systemProviderApiMode).getByRole('option', {
+        name: 'Chat Completions',
+      })
+    ).toHaveValue('chat_completions')
+    expect(
+      within(systemProviderApiMode).getByRole('option', { name: 'Responses' })
+    ).toHaveValue('responses')
+    await user.selectOptions(systemProviderApiMode, 'responses')
 
     await user.click(
       screen.getByRole('button', { name: 'Save system provider' })
@@ -335,10 +353,10 @@ describe('SettingsPage AI settings', () => {
     await waitFor(() =>
       expect(updateSystemAIProvider).toHaveBeenCalledWith({
         name: 'openai',
-        base_url: 'https://api.openai.example/v1',
+        base_url: 'https://api.openai.example',
         model: 'gpt-4.1',
-        api_mode: 'openai-compatible',
-        enabled: true,
+        api_mode: 'responses',
+        enabled: false,
       })
     )
     expect(updateProjectAIProvider).not.toHaveBeenCalled()
@@ -349,9 +367,18 @@ describe('SettingsPage AI settings', () => {
     const screen = renderSettingsPage()
 
     expect(await screen.findByText('summary.default')).toBeInTheDocument()
-    await user.click(
-      screen.getByRole('button', { name: 'Save system prompt summary.default' })
+    const systemPromptButton = screen.getByRole('button', {
+      name: 'Save system prompt summary.default',
+    })
+    const systemPromptForm = systemPromptButton.closest('form')
+    if (!systemPromptForm) {
+      throw new Error('missing system prompt form')
+    }
+    await user.selectOptions(
+      within(systemPromptForm).getByLabelText('Enabled'),
+      'false'
     )
+    await user.click(systemPromptButton)
     await user.click(
       screen.getByRole('button', {
         name: 'Save project prompt summary.default',
@@ -363,7 +390,7 @@ describe('SettingsPage AI settings', () => {
         prompt_key: 'summary.default',
         system_prompt: 'Summarize carefully.',
         user_prompt_template: 'Summarize {content}',
-        enabled: true,
+        enabled: false,
       })
     )
     expect(updateProjectAIPrompt).toHaveBeenCalledWith(
@@ -555,9 +582,9 @@ const systemProviderFixture = {
   id: 'provider-system',
   scope: 'system',
   name: 'openai',
-  base_url: 'https://api.openai.example/v1',
+  base_url: 'https://api.openai.example',
   model: 'gpt-4.1',
-  api_mode: 'openai-compatible',
+  api_mode: 'chat_completions',
   api_key_set: true,
   api_key_last4: '1234',
   enabled: true,
