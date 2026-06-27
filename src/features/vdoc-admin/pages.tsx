@@ -64,6 +64,7 @@ import {
   updateDraft,
   updateProject,
   updateTeam,
+  type DraftReviewPayload,
   type BranchDTO,
   type DiffDTO,
   type DiffItemDTO,
@@ -106,6 +107,7 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { MarkdownFactsCard } from './markdown-facts-card'
 
 const ACTIVE_STATUS = 1
 const ARCHIVED_OR_DISABLED_STATUS = 2
@@ -155,6 +157,13 @@ type EmptyStatePreset =
 
 type EndpointGroupMode = 'tag' | 'method'
 type DraftAction = 'submit' | 'approve' | 'request' | 'reject'
+type DraftActionRequest = {
+  readonly projectId: string
+  readonly documentId: string
+  readonly draftId: string
+  readonly action: DraftAction
+  readonly comment?: string
+}
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 type WorkbenchStepKey =
   | 'team'
@@ -1923,7 +1932,11 @@ export function DraftsPage() {
   })
   const [draftId, setDraftId] = useState('')
   const [contentKind, setContentKind] = useState('raw')
+  const [reviewNote, setReviewNote] = useState('')
   const draftExistsInDocument = (draftsQuery.data?.items ?? []).some(
+    (draft) => draft.id === draftId
+  )
+  const selectedDraft = draftsQuery.data?.items.find(
     (draft) => draft.id === draftId
   )
   const draftContentKindOptions = contentKindOptions(
@@ -1967,18 +1980,33 @@ export function DraftsPage() {
   })
   const actionMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: DraftAction }) =>
-      runDraftAction(projectId, documentId, id, action),
-    onSuccess: invalidate,
+      runDraftAction({
+        projectId,
+        documentId,
+        draftId: id,
+        action,
+        comment: reviewComment(reviewNote)?.comment,
+      }),
+    onSuccess: (_data, variables) => {
+      if (variables.action !== 'submit') setReviewNote('')
+      invalidate()
+    },
   })
   const handleProjectChange = (value: string) => {
     setDraftId('')
     setContentKind('raw')
+    setReviewNote('')
     setProjectId(value)
   }
   const handleDocumentChange = (value: string) => {
     setDraftId('')
     setContentKind('raw')
+    setReviewNote('')
     setDocumentId(value)
+  }
+  const handleDraftSelect = (value: string) => {
+    setDraftId(value)
+    setReviewNote('')
   }
   return (
     <PageChrome page='drafts'>
@@ -2000,7 +2028,7 @@ export function DraftsPage() {
         <NativeSelect
           label={t('admin.fields.draft')}
           value={draftId}
-          onChange={setDraftId}
+          onChange={handleDraftSelect}
           placeholder={t('admin.fields.draft')}
           options={
             draftsQuery.data?.items.map((draft) => ({
@@ -2061,8 +2089,14 @@ export function DraftsPage() {
       <DraftsTable
         drafts={draftsQuery.data?.items ?? []}
         selected={draftId}
-        onSelect={setDraftId}
+        onSelect={handleDraftSelect}
         onAction={(id, action) => actionMutation.mutate({ id, action })}
+      />
+      <ReviewNotePanel
+        selectedDraftName={selectedDraft?.version_name}
+        value={reviewNote}
+        onChange={setReviewNote}
+        pending={actionMutation.isPending}
       />
       <SelectorGrid>
         <NativeSelect
@@ -2088,17 +2122,85 @@ export function DraftsPage() {
   )
 }
 
-function runDraftAction(
-  projectId: string,
-  documentId: string,
-  draftId: string,
-  action: DraftAction
-) {
-  if (action === 'submit') return submitDraft(projectId, documentId, draftId)
-  if (action === 'approve') return approveDraft(projectId, documentId, draftId)
-  if (action === 'request')
-    return requestDraftChanges(projectId, documentId, draftId)
-  return rejectDraft(projectId, documentId, draftId)
+function reviewComment(value: string): DraftReviewPayload | undefined {
+  const comment = value.trim()
+  return comment.length > 0 ? { comment } : undefined
+}
+
+function runDraftAction(request: DraftActionRequest) {
+  if (request.action === 'submit') {
+    return submitDraft(request.projectId, request.documentId, request.draftId)
+  }
+  const payload = reviewComment(request.comment ?? '')
+  if (request.action === 'approve') {
+    return approveDraft(
+      request.projectId,
+      request.documentId,
+      request.draftId,
+      payload
+    )
+  }
+  if (request.action === 'request') {
+    return requestDraftChanges(
+      request.projectId,
+      request.documentId,
+      request.draftId,
+      payload
+    )
+  }
+  return rejectDraft(
+    request.projectId,
+    request.documentId,
+    request.draftId,
+    payload
+  )
+}
+
+function ReviewNotePanel({
+  selectedDraftName,
+  value,
+  onChange,
+  pending,
+}: {
+  readonly selectedDraftName?: string
+  readonly value: string
+  readonly onChange: (value: string) => void
+  readonly pending: boolean
+}) {
+  const { t } = useLanguage()
+  const noteId = useId()
+  return (
+    <Card className='border-primary/20'>
+      <CardHeader className='border-b pb-5'>
+        <Badge
+          className='w-fit border-primary/20 bg-primary/8 text-primary'
+          variant='outline'
+        >
+          {t('admin.review.noteTitle')}
+        </Badge>
+        <CardTitle>{t('admin.fields.reviewNote')}</CardTitle>
+        <CardDescription>{t('admin.review.noteDescription')}</CardDescription>
+      </CardHeader>
+      <CardContent className='grid gap-3'>
+        <p className='text-sm text-muted-foreground'>
+          {selectedDraftName
+            ? t('admin.review.selectedDraft', { draft: selectedDraftName })
+            : t('admin.review.noDraftSelected')}
+        </p>
+        <div className='grid gap-2'>
+          <Label htmlFor={noteId}>{t('admin.fields.reviewNote')}</Label>
+          <Textarea
+            id={noteId}
+            value={value}
+            onChange={(event) => onChange(event.currentTarget.value)}
+            placeholder={t('admin.placeholders.reviewNote')}
+            disabled={pending}
+            className='min-h-24'
+          />
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 function contentKindOptions(
@@ -2238,10 +2340,9 @@ export function VersionsPage() {
   const { versionsQuery, versionId, setVersionId, versionOptions } =
     useVersionsAndSelection(projectId, documentId)
   const [contentKind, setContentKind] = useState('raw')
-  const versionContentKindOptions = contentKindOptions(
-    t,
+  const isMarkdownDocument =
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-  )
+  const versionContentKindOptions = contentKindOptions(t, isMarkdownDocument)
   const activeVersionContentKind = activeContentKind(
     contentKind,
     versionContentKindOptions
@@ -2272,7 +2373,10 @@ export function VersionsPage() {
     queryKey: ['endpoints', projectId, documentId, versionId],
     queryFn: () => listEndpoints(projectId, documentId, versionId),
     enabled:
-      projectId.length > 0 && documentId.length > 0 && versionId.length > 0,
+      projectId.length > 0 &&
+      documentId.length > 0 &&
+      versionId.length > 0 &&
+      !isMarkdownDocument,
   })
   const endpointSearch = endpointSearchQuery.trim().toLowerCase()
   const untaggedLabel = t('admin.developerPortal.untagged')
@@ -2291,7 +2395,8 @@ export function VersionsPage() {
       projectId.length > 0 &&
       documentId.length > 0 &&
       versionId.length > 0 &&
-      endpointExistsInVersion,
+      endpointExistsInVersion &&
+      !isMarkdownDocument,
   })
   const methodCount = new Set(
     visibleEndpoints.map((endpoint) => endpoint.method)
@@ -2320,6 +2425,13 @@ export function VersionsPage() {
     clearEndpointSelection()
     setVersionId(value)
   }
+  const selectedVersionContent =
+    contentQuery.data?.content ??
+    selectedVersionInlineContent(
+      versionsQuery.data?.items,
+      versionId,
+      activeVersionContentKind
+    )
   return (
     <PageChrome page='versions'>
       <SelectorGrid>
@@ -2350,23 +2462,27 @@ export function VersionsPage() {
         selected={versionId}
         onSelect={handleVersionChange}
       />
-      <section className='grid gap-4 sm:grid-cols-3'>
-        <StatCard
-          title={t('admin.developerPortal.endpointCount')}
-          value={String(endpointsQuery.data?.total ?? visibleEndpoints.length)}
-          description={t('admin.developerPortal.endpointCountDescription')}
-        />
-        <StatCard
-          title={t('admin.developerPortal.methodCount')}
-          value={String(methodCount)}
-          description={t('admin.developerPortal.methodCountDescription')}
-        />
-        <StatCard
-          title={t('admin.developerPortal.tagCount')}
-          value={String(tagCount)}
-          description={t('admin.developerPortal.tagCountDescription')}
-        />
-      </section>
+      {!isMarkdownDocument && (
+        <section className='grid gap-4 sm:grid-cols-3'>
+          <StatCard
+            title={t('admin.developerPortal.endpointCount')}
+            value={String(
+              endpointsQuery.data?.total ?? visibleEndpoints.length
+            )}
+            description={t('admin.developerPortal.endpointCountDescription')}
+          />
+          <StatCard
+            title={t('admin.developerPortal.methodCount')}
+            value={String(methodCount)}
+            description={t('admin.developerPortal.methodCountDescription')}
+          />
+          <StatCard
+            title={t('admin.developerPortal.tagCount')}
+            value={String(tagCount)}
+            description={t('admin.developerPortal.tagCountDescription')}
+          />
+        </section>
+      )}
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.contentKind')}
@@ -2375,58 +2491,59 @@ export function VersionsPage() {
           placeholder={t('admin.types.raw')}
           options={versionContentKindOptions}
         />
-        <div className='grid gap-2'>
-          <Label htmlFor='endpoint-search'>
-            {t('admin.developerPortal.searchLabel')}
-          </Label>
-          <div className='relative'>
-            <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-            <Input
-              id='endpoint-search'
-              value={endpointSearchQuery}
-              onChange={(event) =>
-                setEndpointSearchQuery(event.currentTarget.value)
+        {!isMarkdownDocument && (
+          <>
+            <div className='grid gap-2'>
+              <Label htmlFor='endpoint-search'>
+                {t('admin.developerPortal.searchLabel')}
+              </Label>
+              <div className='relative'>
+                <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+                <Input
+                  id='endpoint-search'
+                  value={endpointSearchQuery}
+                  onChange={(event) =>
+                    setEndpointSearchQuery(event.currentTarget.value)
+                  }
+                  placeholder={t('admin.developerPortal.searchPlaceholder')}
+                  className='ps-9'
+                />
+              </div>
+            </div>
+            <NativeSelect
+              label={t('admin.developerPortal.groupBy')}
+              value={endpointGroupMode}
+              onChange={(value) =>
+                setEndpointGroupMode(parseEndpointGroupMode(value))
               }
-              placeholder={t('admin.developerPortal.searchPlaceholder')}
-              className='ps-9'
+              placeholder={t('admin.developerPortal.groupByTag')}
+              options={[
+                { value: 'tag', label: t('admin.developerPortal.groupByTag') },
+                {
+                  value: 'method',
+                  label: t('admin.developerPortal.groupByMethod'),
+                },
+              ]}
             />
-          </div>
-        </div>
-        <NativeSelect
-          label={t('admin.developerPortal.groupBy')}
-          value={endpointGroupMode}
-          onChange={(value) =>
-            setEndpointGroupMode(parseEndpointGroupMode(value))
-          }
-          placeholder={t('admin.developerPortal.groupByTag')}
-          options={[
-            { value: 'tag', label: t('admin.developerPortal.groupByTag') },
-            {
-              value: 'method',
-              label: t('admin.developerPortal.groupByMethod'),
-            },
-          ]}
-        />
+          </>
+        )}
       </SelectorGrid>
       <ContentViewer
         title={t('admin.sections.contentViewer')}
-        content={
-          contentQuery.data?.content ??
-          selectedVersionInlineContent(
-            versionsQuery.data?.items,
-            versionId,
-            activeVersionContentKind
-          )
-        }
+        content={selectedVersionContent}
       />
-      <EndpointsCard
-        endpoints={visibleEndpoints}
-        selected={endpointId}
-        onSelect={setEndpointId}
-        detail={selectedEndpointVisible ? endpointQuery.data : undefined}
-        groupMode={endpointGroupMode}
-        untaggedLabel={untaggedLabel}
-      />
+      {isMarkdownDocument ? (
+        <MarkdownFactsCard content={selectedVersionContent} />
+      ) : (
+        <EndpointsCard
+          endpoints={visibleEndpoints}
+          selected={endpointId}
+          onSelect={setEndpointId}
+          detail={selectedEndpointVisible ? endpointQuery.data : undefined}
+          groupMode={endpointGroupMode}
+          untaggedLabel={untaggedLabel}
+        />
+      )}
     </PageChrome>
   )
 }

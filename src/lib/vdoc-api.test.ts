@@ -7,12 +7,17 @@ import { clearCookies } from '@/test-utils/cookies'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import {
+  approveDraft,
   getIdentity,
   listUsers,
+  rejectDraft,
   resolveApiBaseUrl,
+  requestDraftChanges,
+  submitDraft,
   unwrapEnvelope,
   unwrapListEnvelope,
   vdocApi,
+  type DraftDTO,
   type VdocApiError,
   type VdocEnvelope,
 } from './vdoc-api'
@@ -144,7 +149,95 @@ describe('vdoc-api', () => {
     expect(requests[0]?.url).toBe('/api/v1/private/system/users')
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBe('admin.jwt')
   })
+
+  it('submits drafts without a request body', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
+
+    await expect(
+      submitDraft('project-1', 'document-1', 'draft-1')
+    ).resolves.toMatchObject({
+      id: 'draft-1',
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/submit'
+    )
+    expect(requests[0]?.data).toBeUndefined()
+  })
+
+  it('sends review comments when approving drafts', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
+
+    await approveDraft('project-1', 'document-1', 'draft-1', {
+      comment: 'Looks good after content review.',
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/approve'
+    )
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({ comment: 'Looks good after content review.' })
+    )
+  })
+
+  it('sends review comments when requesting changes', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
+
+    await requestDraftChanges('project-1', 'document-1', 'draft-1', {
+      comment: 'Please add the missing agent setup section.',
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/request-changes'
+    )
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({ comment: 'Please add the missing agent setup section.' })
+    )
+  })
+
+  it('sends review comments when rejecting drafts', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
+
+    await rejectDraft('project-1', 'document-1', 'draft-1', {
+      comment: 'Rejecting until the source branch is corrected.',
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/reject'
+    )
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({
+        comment: 'Rejecting until the source branch is corrected.',
+      })
+    )
+  })
 })
+
+function draftEnvelope(): VdocEnvelope<DraftDTO> {
+  return {
+    code: 200,
+    status: 'OK',
+    timestamp: 1,
+    detail: {
+      id: 'draft-1',
+      project_id: 'project-1',
+      document_id: 'document-1',
+      branch_id: 'branch-1',
+      version_name: 'v1',
+      changelog: 'Initial draft',
+      document_format: 1,
+      source_type: 1,
+      status: 2,
+      created_by: 'user-1',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    },
+  }
+}
 
 function jsonEnvelopeAdapter<T>(
   requests: InternalAxiosRequestConfig[],

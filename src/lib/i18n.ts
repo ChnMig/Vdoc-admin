@@ -320,6 +320,32 @@ const en = {
       schemaRefs: 'Schema refs',
       normalizedOperation: 'Normalized operation',
     },
+    review: {
+      noteTitle: 'Review note',
+      noteDescription:
+        'Optional context sent only with approve, request-changes, or reject actions. Submit remains a bodyless lifecycle transition.',
+      selectedDraft: 'Applies to selected draft: {draft}',
+      noDraftSelected: 'Select a draft before adding review context.',
+    },
+    markdownFacts: {
+      title: 'Markdown facts',
+      description:
+        'Structured facts derived from the selected raw or stable Markdown content.',
+      headings: 'headings',
+      lists: 'lists',
+      tasks: 'tasks',
+      codeBlocks: 'code blocks',
+      links: 'links',
+      lineCount: '{count} lines',
+      countSummary: '{count} {label}',
+      noFacts: 'No Markdown facts found.',
+      checked: 'Checked',
+      open: 'Open',
+      ordered: 'Ordered',
+      unordered: 'Unordered',
+      noLanguage: 'plain text',
+      unsafeLink: 'Unsafe link',
+    },
     diff: {
       compareHint: 'Only existing compare and summary APIs are used.',
       noDiffSelected: 'Run a comparison to review changes.',
@@ -378,6 +404,7 @@ const en = {
       gitCommit: 'Git commit',
       content: 'Content',
       contentKind: 'Content kind',
+      reviewNote: 'Review note',
       scopes: 'Scopes',
       expiresAt: 'Expires at',
       superAdmin: 'Super admin',
@@ -402,6 +429,7 @@ const en = {
       selectUser: 'Select a user',
       optionalIsoDate: 'Optional ISO date',
       endpointPath: 'Filter endpoint path',
+      reviewNote: 'Optional note for approve, request changes, or reject',
     },
     pages: {
       dashboard: {
@@ -924,6 +952,31 @@ const zhCN = {
       schemaRefs: 'Schema 引用',
       normalizedOperation: '规范化操作',
     },
+    review: {
+      noteTitle: '审阅备注',
+      noteDescription:
+        '可选上下文只会随批准、请求修改或拒绝操作发送。提交仍是不带请求体的生命周期变更。',
+      selectedDraft: '作用于所选草稿：{draft}',
+      noDraftSelected: '请先选择草稿，再添加审阅上下文。',
+    },
+    markdownFacts: {
+      title: 'Markdown 事实',
+      description: '从所选原始或稳定 Markdown 内容中提取结构化事实。',
+      headings: '标题',
+      lists: '列表',
+      tasks: '任务',
+      codeBlocks: '代码块',
+      links: '链接',
+      lineCount: '{count} 行',
+      countSummary: '{count} 个{label}',
+      noFacts: '未找到 Markdown 事实。',
+      checked: '已选中',
+      open: '未完成',
+      ordered: '有序',
+      unordered: '无序',
+      noLanguage: '纯文本',
+      unsafeLink: '不安全链接',
+    },
     diff: {
       compareHint: '仅使用现有比较和摘要 API。',
       noDiffSelected: '运行比较后审阅变更。',
@@ -982,6 +1035,7 @@ const zhCN = {
       gitCommit: 'Git 提交',
       content: '内容',
       contentKind: '内容类型',
+      reviewNote: '审阅备注',
       scopes: '范围',
       expiresAt: '过期时间',
       superAdmin: '超级管理员',
@@ -1006,6 +1060,7 @@ const zhCN = {
       selectUser: '选择用户',
       optionalIsoDate: '可选 ISO 日期',
       endpointPath: '筛选端点路径',
+      reviewNote: '批准、请求修改或拒绝时可附加的备注',
     },
     pages: {
       dashboard: {

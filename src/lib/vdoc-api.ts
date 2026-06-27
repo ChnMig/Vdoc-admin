@@ -287,6 +287,11 @@ type DraftPayload = {
   content?: string
 }
 
+export type DraftReviewPayload = {
+  comment?: string
+  reason?: string
+}
+
 type CompareDiffPayload = {
   from_version_id: string
   to_version_id: string
@@ -643,12 +648,12 @@ function draftAction(
   projectId: string,
   documentId: string,
   draftId: string,
-  action: string
+  action: string,
+  payload?: DraftReviewPayload
 ) {
+  const url = `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/${action}`
   return unwrapEnvelope<DraftActionResultDTO>(
-    vdocApi.post(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/${action}`
-    )
+    payload === undefined ? vdocApi.post(url) : vdocApi.post(url, payload)
   )
 }
 
@@ -663,25 +668,28 @@ export function submitDraft(
 export function approveDraft(
   projectId: string,
   documentId: string,
-  draftId: string
+  draftId: string,
+  payload?: DraftReviewPayload
 ) {
-  return draftAction(projectId, documentId, draftId, 'approve')
+  return draftAction(projectId, documentId, draftId, 'approve', payload)
 }
 
 export function requestDraftChanges(
   projectId: string,
   documentId: string,
-  draftId: string
+  draftId: string,
+  payload?: DraftReviewPayload
 ) {
-  return draftAction(projectId, documentId, draftId, 'request-changes')
+  return draftAction(projectId, documentId, draftId, 'request-changes', payload)
 }
 
 export function rejectDraft(
   projectId: string,
   documentId: string,
-  draftId: string
+  draftId: string,
+  payload?: DraftReviewPayload
 ) {
-  return draftAction(projectId, documentId, draftId, 'reject')
+  return draftAction(projectId, documentId, draftId, 'reject', payload)
 }
 
 export function promoteDraft(
