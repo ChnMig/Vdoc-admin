@@ -66,6 +66,42 @@ export function AITextAreaField({
   )
 }
 
+export function AINumberField({
+  id,
+  label,
+  name,
+  defaultValue,
+  disabled = false,
+  min,
+  max,
+  step,
+}: {
+  readonly id?: string
+  readonly label: string
+  readonly name: string
+  readonly defaultValue: number
+  readonly disabled?: boolean
+  readonly min: number
+  readonly max: number
+  readonly step: number
+}) {
+  return (
+    <div className='grid gap-2'>
+      <Label htmlFor={id ?? name}>{label}</Label>
+      <Input
+        id={id ?? name}
+        name={name}
+        type='number'
+        defaultValue={defaultValue}
+        disabled={disabled}
+        min={min}
+        max={max}
+        step={step}
+      />
+    </div>
+  )
+}
+
 export function AINativeSelect({
   id,
   label,

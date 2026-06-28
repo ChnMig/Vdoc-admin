@@ -317,7 +317,13 @@ export function isAIProviderAPIMode(value: string): value is AIProviderAPIMode {
   return AI_PROVIDER_API_MODES.some((mode) => mode === value)
 }
 
-export type AIProviderDTO = {
+export type AIProviderTuning = {
+  readonly temperature?: number
+  readonly timeout_ms?: number
+  readonly max_output_tokens?: number
+}
+
+export type AIProviderDTO = AIProviderTuning & {
   readonly id?: string
   readonly scope?: string
   readonly project_id?: string
@@ -330,7 +336,7 @@ export type AIProviderDTO = {
   readonly enabled: boolean
 }
 
-export type AIProviderPayload = {
+export type AIProviderPayload = AIProviderTuning & {
   readonly name: string
   readonly base_url: string
   readonly model: string

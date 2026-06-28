@@ -25,16 +25,19 @@ import {
 } from '@/components/ui/card'
 import { AIPromptPanel } from './ai-prompt-panel'
 import { AIProviderPanel } from './ai-provider-panel'
+import {
+  useProviderTestState,
+  type ProjectProviderTestRequest,
+  type ProviderTestRequest,
+} from './ai-provider-test-state'
 import { AINativeSelect } from './ai-settings-fields'
 import type { PromptSaveRequest } from './ai-settings-types'
-import { toProjectOptions } from './ai-settings-utils'
+import { providerFormKey, toProjectOptions } from './ai-settings-utils'
 
 export function AISettingsPanel() {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
   const [projectId, setProjectId] = useState('')
-  const [systemTestResult, setSystemTestResult] = useState('')
-  const [projectTestResult, setProjectTestResult] = useState('')
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
@@ -64,6 +67,18 @@ export function AISettingsPanel() {
     queryFn: () => listProjectAIPrompts(selectedProjectId),
     enabled: selectedProjectId.length > 0,
   })
+  const systemProviderFormIdentity = providerFormKey(
+    'system',
+    systemProviderQuery.data,
+    undefined
+  )
+  const projectProviderFormIdentity = providerFormKey(
+    'project',
+    projectProviderQuery.data,
+    selectedProjectId
+  )
+  const systemProviderTest = useProviderTestState(systemProviderFormIdentity)
+  const projectProviderTest = useProviderTestState(projectProviderFormIdentity)
 
   const updateSystemProviderMutation = useMutation({
     mutationFn: (payload: AIProviderPayload) => updateSystemAIProvider(payload),
@@ -79,13 +94,26 @@ export function AISettingsPanel() {
       }),
   })
   const testSystemProviderMutation = useMutation({
-    mutationFn: (payload: AIProviderPayload) => testSystemAIProvider(payload),
-    onSuccess: (result) => setSystemTestResult(result.content),
+    mutationFn: (request: ProviderTestRequest) =>
+      testSystemAIProvider(request.payload),
+    onSuccess: (result, request) =>
+      systemProviderTest.acceptResult(request, result),
+    onError: (error: Error, request) =>
+      systemProviderTest.acceptError(
+        request,
+        providerTestErrorMessage(error, t)
+      ),
   })
   const testProjectProviderMutation = useMutation({
-    mutationFn: (payload: AIProviderPayload) =>
-      testProjectAIProvider(selectedProjectId, payload),
-    onSuccess: (result) => setProjectTestResult(result.content),
+    mutationFn: (request: ProjectProviderTestRequest) =>
+      testProjectAIProvider(request.projectId, request.payload),
+    onSuccess: (result, request) =>
+      projectProviderTest.acceptResult(request, result),
+    onError: (error: Error, request) =>
+      projectProviderTest.acceptError(
+        request,
+        providerTestErrorMessage(error, t)
+      ),
   })
   const updateSystemPromptMutation = useMutation({
     mutationFn: (request: PromptSaveRequest) =>
@@ -123,9 +151,14 @@ export function AISettingsPanel() {
           provider={systemProviderQuery.data}
           pending={updateSystemProviderMutation.isPending}
           testing={testSystemProviderMutation.isPending}
-          testResult={systemTestResult}
+          testResult={systemProviderTest.state}
           onSave={(payload) => updateSystemProviderMutation.mutate(payload)}
-          onTest={(payload) => testSystemProviderMutation.mutate(payload)}
+          onTest={(payload) => {
+            testSystemProviderMutation.mutate(
+              systemProviderTest.begin('system', '', payload)
+            )
+          }}
+          onTestPayloadChange={systemProviderTest.reset}
         />
         <section className='grid gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
           <AINativeSelect
@@ -134,7 +167,10 @@ export function AISettingsPanel() {
             value={selectedProjectId}
             options={projectOptions}
             placeholder={t('admin.placeholders.selectProject')}
-            onChange={setProjectId}
+            onChange={(nextProjectId) => {
+              projectProviderTest.reset()
+              setProjectId(nextProjectId)
+            }}
           />
           <AIProviderPanel
             scope='project'
@@ -142,9 +178,20 @@ export function AISettingsPanel() {
             projectId={selectedProjectId}
             pending={updateProjectProviderMutation.isPending}
             testing={testProjectProviderMutation.isPending}
-            testResult={projectTestResult}
+            testResult={projectProviderTest.state}
             onSave={(payload) => updateProjectProviderMutation.mutate(payload)}
-            onTest={(payload) => testProjectProviderMutation.mutate(payload)}
+            onTest={(payload) => {
+              const request = projectProviderTest.begin(
+                'project',
+                selectedProjectId,
+                payload
+              )
+              testProjectProviderMutation.mutate({
+                ...request,
+                projectId: selectedProjectId,
+              })
+            }}
+            onTestPayloadChange={projectProviderTest.reset}
           />
         </section>
         <div className='grid gap-4 lg:grid-cols-2'>
@@ -169,4 +216,13 @@ export function AISettingsPanel() {
       </CardContent>
     </Card>
   )
+}
+
+function providerTestErrorMessage(
+  error: Error,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  return error.message.length > 0
+    ? error.message
+    : t('admin.ai.providerTestUnknownError')
 }

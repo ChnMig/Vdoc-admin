@@ -27,6 +27,7 @@ import {
   unwrapListEnvelope,
   vdocApi,
   type AIProviderDTO,
+  type AIProviderPayload,
   type DraftDTO,
   type VdocApiError,
   type VdocEnvelope,
@@ -235,6 +236,9 @@ describe('vdoc-api', () => {
       base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'chat_completions',
+      temperature: 0.2,
+      timeout_ms: 30000,
+      max_output_tokens: 1000,
       api_key_set: true,
       api_key_last4: '1234',
       enabled: true,
@@ -250,6 +254,11 @@ describe('vdoc-api', () => {
 
     expect(requests[0]?.url).toBe('/api/v1/private/ai/provider')
     expect(result.api_key_set).toBe(true)
+    expect(result).toMatchObject({
+      temperature: 0.2,
+      timeout_ms: 30000,
+      max_output_tokens: 1000,
+    })
     expect('api_key' in result).toBe(false)
   })
 
@@ -265,14 +274,19 @@ describe('vdoc-api', () => {
       },
     })
 
-    await updateSystemAIProvider({
+    const payload = {
       name: 'OpenAI compatible',
       base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'responses',
       api_key: 'sk-secret-1234',
+      temperature: 0,
+      timeout_ms: 45000,
+      max_output_tokens: 2048,
       enabled: true,
-    })
+    } satisfies AIProviderPayload
+
+    await updateSystemAIProvider(payload)
 
     expect(requests[0]?.url).toBe('/api/v1/private/ai/provider')
     expect(requests[0]?.method).toBe('put')
@@ -283,6 +297,9 @@ describe('vdoc-api', () => {
         model: 'gpt-test',
         api_mode: 'responses',
         api_key: 'sk-secret-1234',
+        temperature: 0,
+        timeout_ms: 45000,
+        max_output_tokens: 2048,
         enabled: true,
       })
     )

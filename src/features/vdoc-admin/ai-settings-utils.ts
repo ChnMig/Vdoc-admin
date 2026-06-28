@@ -25,7 +25,19 @@ export function providerPayload(formData: FormData): AIProviderPayload {
     enabled: fieldValue(formData, 'enabled') === 'true',
   }
   const apiKey = fieldValue(formData, 'api_key')
-  return apiKey.length > 0 ? { ...base, api_key: apiKey } : base
+  const temperature = optionalNumberField(formData, 'temperature')
+  const timeoutMs = optionalNumberField(formData, 'timeout_ms')
+  const maxOutputTokens = optionalNumberField(formData, 'max_output_tokens')
+
+  return {
+    ...base,
+    ...(apiKey.length > 0 ? { api_key: apiKey } : {}),
+    ...(temperature === undefined ? {} : { temperature }),
+    ...(timeoutMs === undefined ? {} : { timeout_ms: timeoutMs }),
+    ...(maxOutputTokens === undefined
+      ? {}
+      : { max_output_tokens: maxOutputTokens }),
+  }
 }
 
 export function promptPayload(
@@ -68,6 +80,17 @@ export function providerKeyStatus(
   })
 }
 
+export function providerConfigurationStatus(
+  provider: AIProviderDTO | undefined,
+  t: TFunction
+) {
+  return t('admin.ai.providerConfigurationStatus', {
+    status: providerIsConfigured(provider)
+      ? t('admin.ai.providerConfigured')
+      : t('admin.ai.providerUnconfigured'),
+  })
+}
+
 export function providerFormKey(
   scope: ProviderScope,
   provider: AIProviderDTO | undefined,
@@ -80,12 +103,33 @@ export function providerFormKey(
     provider?.base_url ?? '',
     provider?.model ?? '',
     provider?.api_mode ?? '',
+    provider?.temperature ?? '',
+    provider?.timeout_ms ?? '',
+    provider?.max_output_tokens ?? '',
     provider?.enabled ? 'enabled' : 'disabled',
   ].join(':')
 }
 
 function fieldValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? '').trim()
+}
+
+function providerIsConfigured(provider: AIProviderDTO | undefined) {
+  return (
+    provider?.api_key_set === true &&
+    textExists(provider.name) &&
+    textExists(provider.base_url) &&
+    textExists(provider.model)
+  )
+}
+
+function textExists(value: string | undefined) {
+  return value !== undefined && value.trim().length > 0
+}
+
+function optionalNumberField(formData: FormData, key: string) {
+  const value = fieldValue(formData, key)
+  return value.length > 0 ? Number(value) : undefined
 }
 
 function providerApiMode(formData: FormData): AIProviderAPIMode {

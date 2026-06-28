@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, waitFor, within } from '@testing-library/react'
+import { act, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -322,6 +322,14 @@ describe('SettingsPage AI settings', () => {
     const screen = renderSettingsPage()
 
     expect(await screen.findByText('System AI provider')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Provider configuration: Configured')
+      ).toHaveLength(2)
+    )
+    expect(
+      screen.getAllByText('Provider test status: Not tested')
+    ).toHaveLength(2)
     expect(
       await screen.findByText('Key set: yes · last4: 1234')
     ).toBeInTheDocument()
@@ -346,9 +354,30 @@ describe('SettingsPage AI settings', () => {
     ).toHaveValue('responses')
     await user.selectOptions(systemProviderApiMode, 'responses')
 
-    await user.click(
-      screen.getByRole('button', { name: 'Save system provider' })
-    )
+    const saveSystemProvider = screen.getByRole('button', {
+      name: 'Save system provider',
+    })
+    const systemProviderForm = saveSystemProvider.closest('form')
+    if (!systemProviderForm) {
+      throw new Error('missing system provider form')
+    }
+    const systemTemperature =
+      within(systemProviderForm).getByLabelText('Temperature')
+    const systemTimeout =
+      within(systemProviderForm).getByLabelText('Timeout (ms)')
+    const systemMaxTokens =
+      within(systemProviderForm).getByLabelText('Max output tokens')
+    expect(systemTemperature).toHaveDisplayValue('0.4')
+    expect(systemTimeout).toHaveDisplayValue('45000')
+    expect(systemMaxTokens).toHaveDisplayValue('2048')
+    await user.clear(systemTemperature)
+    await user.type(systemTemperature, '0.6')
+    await user.clear(systemTimeout)
+    await user.type(systemTimeout, '60000')
+    await user.clear(systemMaxTokens)
+    await user.type(systemMaxTokens, '4096')
+
+    await user.click(saveSystemProvider)
 
     await waitFor(() =>
       expect(updateSystemAIProvider).toHaveBeenCalledWith({
@@ -356,10 +385,234 @@ describe('SettingsPage AI settings', () => {
         base_url: 'https://api.openai.example',
         model: 'gpt-4.1',
         api_mode: 'responses',
+        temperature: 0.6,
+        timeout_ms: 60000,
+        max_output_tokens: 4096,
         enabled: false,
       })
     )
     expect(updateProjectAIProvider).not.toHaveBeenCalled()
+  })
+
+  it('renders provider test success and inline mutation errors', async () => {
+    const user = userEvent.setup()
+    apiMocks.testSystemAIProvider.mockResolvedValueOnce({
+      ok: true,
+      content: 'Provider reached.',
+    })
+    const screen = renderSettingsPage()
+
+    await screen.findByText('System AI provider')
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Provider configuration: Configured')
+      ).toHaveLength(2)
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Test system provider' })
+    )
+
+    expect(
+      await screen.findByText('Provider test status: Success')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Provider reached.')).toBeInTheDocument()
+
+    apiMocks.testProjectAIProvider.mockRejectedValueOnce(
+      new Error('Project provider rejected the test request.')
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Test project provider' })
+    )
+
+    expect(
+      await screen.findByText('Provider test status: Error')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Project provider rejected the test request.')
+    ).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('sk-live-secret')).not.toBeInTheDocument()
+  })
+
+  it('ignores late project provider test results after the project scope changes', async () => {
+    const projectTest = createDeferred<{
+      readonly ok: boolean
+      readonly content: string
+    }>()
+    const user = userEvent.setup()
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture, secondProjectFixture],
+      total: 2,
+    })
+    apiMocks.getProjectAIProvider.mockImplementation((projectId: string) =>
+      Promise.resolve(
+        projectId === 'project-2'
+          ? secondProjectProviderFixture
+          : projectProviderFixture
+      )
+    )
+    apiMocks.testProjectAIProvider.mockReturnValueOnce(projectTest.promise)
+    const screen = renderSettingsPage()
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Test project provider' })
+      ).toBeEnabled()
+    )
+    const testProjectProvider = screen.getByRole('button', {
+      name: 'Test project provider',
+    })
+    const projectProviderSection = testProjectProvider.closest('section')
+    if (!projectProviderSection) {
+      throw new Error('missing project provider section')
+    }
+    await user.click(testProjectProvider)
+    await waitFor(() =>
+      expect(apiMocks.testProjectAIProvider).toHaveBeenCalledWith(
+        'project-1',
+        expect.objectContaining({ name: 'openai' })
+      )
+    )
+    await user.selectOptions(
+      screen.getByLabelText('Project provider scope'),
+      'project-2'
+    )
+    await screen.findByDisplayValue('anthropic')
+
+    await act(async () => {
+      projectTest.resolve({ ok: true, content: 'Project one reached.' })
+      await projectTest.promise
+    })
+
+    expect(screen.queryByText('Project one reached.')).not.toBeInTheDocument()
+    expect(
+      within(projectProviderSection).getByText(
+        'Provider test status: Not tested'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('resets project provider test results when form values change', async () => {
+    const user = userEvent.setup()
+    apiMocks.testProjectAIProvider.mockResolvedValueOnce({
+      ok: true,
+      content: 'Project provider reached.',
+    })
+    const screen = renderSettingsPage()
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Test project provider' })
+      ).toBeEnabled()
+    )
+    const testProjectProvider = screen.getByRole('button', {
+      name: 'Test project provider',
+    })
+    const projectProviderSection = testProjectProvider.closest('section')
+    if (!projectProviderSection) {
+      throw new Error('missing project provider section')
+    }
+    const projectProviderPanel = within(projectProviderSection)
+    await user.click(testProjectProvider)
+    expect(
+      await projectProviderPanel.findByText('Provider test status: Success')
+    ).toBeInTheDocument()
+    expect(
+      projectProviderPanel.getByText('Project provider reached.')
+    ).toBeInTheDocument()
+
+    await user.clear(projectProviderPanel.getByLabelText('Model'))
+    await user.type(projectProviderPanel.getByLabelText('Model'), 'gpt-4.2')
+
+    expect(
+      projectProviderPanel.getByText('Provider test status: Not tested')
+    ).toBeInTheDocument()
+    expect(
+      projectProviderPanel.queryByText('Project provider reached.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('ignores late project provider test results after form values change', async () => {
+    const projectTest = createDeferred<{
+      readonly ok: boolean
+      readonly content: string
+    }>()
+    const user = userEvent.setup()
+    apiMocks.testProjectAIProvider.mockReturnValueOnce(projectTest.promise)
+    const screen = renderSettingsPage()
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Test project provider' })
+      ).toBeEnabled()
+    )
+    const testProjectProvider = screen.getByRole('button', {
+      name: 'Test project provider',
+    })
+    const projectProviderSection = testProjectProvider.closest('section')
+    if (!projectProviderSection) {
+      throw new Error('missing project provider section')
+    }
+    const projectProviderPanel = within(projectProviderSection)
+    await user.click(testProjectProvider)
+    await user.clear(projectProviderPanel.getByLabelText('Base URL'))
+    await user.type(
+      projectProviderPanel.getByLabelText('Base URL'),
+      'https://changed.example'
+    )
+
+    await act(async () => {
+      projectTest.resolve({ ok: true, content: 'Old form values reached.' })
+      await projectTest.promise
+    })
+
+    expect(
+      projectProviderPanel.getByText('Provider test status: Not tested')
+    ).toBeInTheDocument()
+    expect(
+      projectProviderPanel.queryByText('Old form values reached.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders unconfigured provider status when provider keys are missing', async () => {
+    apiMocks.getSystemAIProvider.mockResolvedValueOnce({
+      ...systemProviderFixture,
+      api_key_set: false,
+      api_key_last4: undefined,
+    })
+    apiMocks.getProjectAIProvider.mockResolvedValueOnce({
+      ...projectProviderFixture,
+      api_key_set: false,
+      api_key_last4: undefined,
+    })
+
+    const screen = renderSettingsPage()
+
+    expect(
+      await screen.findAllByText('Provider configuration: Unconfigured')
+    ).toHaveLength(2)
+    expect(screen.getAllByText('Key set: no')).toHaveLength(2)
+  })
+
+  it('renders project provider tuning defaults when override fields are unset', async () => {
+    const screen = renderSettingsPage()
+
+    const saveProjectProvider = await screen.findByRole('button', {
+      name: 'Save project provider',
+    })
+    const projectProviderForm = saveProjectProvider.closest('form')
+    if (!projectProviderForm) {
+      throw new Error('missing project provider form')
+    }
+
+    expect(
+      within(projectProviderForm).getByLabelText('Temperature')
+    ).toHaveDisplayValue('0.2')
+    expect(
+      within(projectProviderForm).getByLabelText('Timeout (ms)')
+    ).toHaveDisplayValue('30000')
+    expect(
+      within(projectProviderForm).getByLabelText('Max output tokens')
+    ).toHaveDisplayValue('1000')
   })
 
   it('updates system and project AI prompt helpers', async () => {
@@ -585,6 +838,9 @@ const systemProviderFixture = {
   base_url: 'https://api.openai.example',
   model: 'gpt-4.1',
   api_mode: 'chat_completions',
+  temperature: 0.4,
+  timeout_ms: 45000,
+  max_output_tokens: 2048,
   api_key_set: true,
   api_key_last4: '1234',
   enabled: true,
@@ -596,6 +852,25 @@ const projectProviderFixture = {
   scope: 'project',
   project_id: 'project-1',
   api_key_last4: '5678',
+  temperature: undefined,
+  timeout_ms: undefined,
+  max_output_tokens: undefined,
+}
+
+const secondProjectFixture = {
+  ...projectFixture,
+  id: 'project-2',
+  name: 'Second docs project',
+}
+
+const secondProjectProviderFixture = {
+  ...projectProviderFixture,
+  id: 'provider-project-2',
+  project_id: 'project-2',
+  name: 'anthropic',
+  base_url: 'https://api.anthropic.example',
+  model: 'claude-sonnet-4.5',
+  api_key_last4: '2222',
 }
 
 const promptFixture = {
@@ -613,4 +888,12 @@ const promptOverrideFixture = {
   updated_by: 'user-1',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+}
+
+function createDeferred<T>() {
+  let resolvePromise: (value: T | PromiseLike<T>) => void = () => undefined
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve
+  })
+  return { promise, resolve: resolvePromise }
 }

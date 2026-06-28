@@ -212,4 +212,44 @@ describe('AIContextPanel', () => {
       'Target B'
     )
   })
+
+  it('renders skipped summary status and backend error when content is unavailable', async () => {
+    apiMocks.getAISummary.mockResolvedValueOnce({
+      ...summaryForTarget(targetA),
+      status: 'skipped',
+      content: undefined,
+      error_message: 'Provider is not configured for this project.',
+    } satisfies AISummaryDTO)
+
+    const screen = renderPanel(targetA)
+
+    expect(
+      await screen.findByText('AI summary status: Skipped')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Provider is not configured for this project.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('No AI summary has been generated yet.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders failed summary status and backend error when content is blank', async () => {
+    apiMocks.getAISummary.mockResolvedValueOnce({
+      ...summaryForTarget(targetA),
+      status: 'failed',
+      content: '   ',
+      error_message: 'OpenAI returned an authentication error.',
+    } satisfies AISummaryDTO)
+
+    const screen = renderPanel(targetA)
+
+    expect(
+      await screen.findByText('AI summary status: Failed')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('OpenAI returned an authentication error.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('   ')).not.toBeInTheDocument()
+  })
 })

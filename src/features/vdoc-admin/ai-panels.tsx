@@ -8,6 +8,7 @@ import {
   regenerateAISummary,
   sendAIChatMessage,
   type AIChatMessageDTO,
+  type AISummaryDTO,
   type AISummaryTarget,
 } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
@@ -123,11 +124,7 @@ function AIContextPanelContent({
             </Button>
           </div>
           <div className='min-h-32 rounded-md border bg-[var(--surface-control)] p-4 text-sm leading-6 text-muted-foreground'>
-            {summaryContent(
-              summaryQuery.data?.content,
-              summaryQuery.isLoading,
-              t
-            )}
+            {summaryContent(summaryQuery.data, summaryQuery.isLoading, t)}
           </div>
         </section>
         <section className='grid content-start gap-3'>
@@ -196,12 +193,42 @@ function targetIdentityKey(target: AISummaryTarget | undefined) {
 }
 
 function summaryContent(
-  content: string | undefined,
+  summary: AISummaryDTO | undefined,
   loading: boolean,
   t: ReturnType<typeof useLanguage>['t']
 ) {
   if (loading) return t('admin.common.loading')
-  return content ?? t('admin.ai.noSummary')
+
+  if (summary === undefined) return t('admin.ai.noSummary')
+
+  const content = usableSummaryContent(summary)
+
+  return (
+    <div className='grid gap-2'>
+      <p className='font-medium text-foreground'>
+        {t('admin.ai.summaryStatus', {
+          status: summaryStatusLabel(summary.status, t),
+        })}
+      </p>
+      <p>{content ?? summary.error_message ?? t('admin.ai.noSummary')}</p>
+    </div>
+  )
+}
+
+function usableSummaryContent(summary: AISummaryDTO) {
+  const content = summary.content?.trim()
+  return content && content.length > 0 ? content : undefined
+}
+
+function summaryStatusLabel(
+  status: string,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (status === 'ready') return t('admin.ai.summaryStatusReady')
+  if (status === 'succeeded') return t('admin.ai.summaryStatusSucceeded')
+  if (status === 'failed') return t('admin.ai.summaryStatusFailed')
+  if (status === 'skipped') return t('admin.ai.summaryStatusSkipped')
+  return `${t('admin.common.unknown')} ${status}`
 }
 
 async function ensureSession(
