@@ -33,6 +33,33 @@ pnpm dev
 
 Copy `.env.example` to `.env` before local development if your backend is not running at the example URL. Workspace-level pilot and deploy guidance lives in `../PILOT_RUNBOOK.md` and `../RELEASE_DEPLOY.md`.
 
+For the full local closure path, run from the workspace root:
+
+```sh
+scripts/vdoc-local-bootstrap.sh
+docker compose --env-file .env up -d --build
+cd Vdoc && go run ./tools/vdoc-demo-seed
+```
+
+The demo seed is optional. For live E2E against the root Compose stack:
+
+```sh
+cd Vdoc
+./scripts/vdoc-e2e.sh live-compose --env-file ../.env --check-only
+./scripts/vdoc-e2e.sh live-compose --env-file ../.env
+```
+
+Live E2E resets the selected disposable `VDOC_TEST_POSTGRES_DB`, `vdoc_e2e` by default. It does not reset the application database from `VDOC_POSTGRES_DB`.
+
+Use the release dry-run as the local gate:
+
+```sh
+scripts/vdoc-release-dry-run.sh --list
+scripts/vdoc-release-dry-run.sh
+```
+
+Do not put raw JWTs, MCP tokens, DB passwords, storage secrets, or `Authorization` header values in docs, logs, screenshots, issues, or shell history. The dry-run does not publish or deploy Admin.
+
 Tests run in Vitest's jsdom environment and do not require a Playwright or Chromium installation:
 
 ```sh
