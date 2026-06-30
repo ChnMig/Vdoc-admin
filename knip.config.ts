@@ -15,7 +15,12 @@ const config: KnipConfig = {
     'src/components/select-dropdown.tsx',
     'src/components/layout/top-nav.tsx',
     'src/test-utils/tanstack-table.ts',
+    'public/runtime-config.js',
   ],
+  ignoreIssues: {
+    'src/lib/handle-server-error.ts': ['exports'],
+    'src/lib/vdoc-api.ts': ['exports', 'types'],
+  },
   ignoreDependencies: [
     '@radix-ui/react-checkbox',
     '@radix-ui/react-icons',

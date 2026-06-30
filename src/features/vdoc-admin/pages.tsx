@@ -169,12 +169,7 @@ type DraftActionRequest = {
 }
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 type WorkbenchStepKey =
-  | 'team'
-  | 'project'
-  | 'document'
-  | 'branch'
-  | 'draft'
-  | 'token'
+  'team' | 'project' | 'document' | 'branch' | 'draft' | 'token'
 
 function useInvalidateAll() {
   const queryClient = useQueryClient()
