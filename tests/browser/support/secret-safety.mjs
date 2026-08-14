@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import {
   appendFile,
   chmod,
@@ -9,7 +10,6 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
 
 const capabilityPattern = /^vdoc_share_[0-9a-f]{48}$/
 
@@ -30,7 +30,10 @@ export async function registerCapabilitySecret(registryPath, secret) {
   if (((await stat(registryPath)).mode & 0o777) !== 0o600) {
     throw new TypeError('Secret registry permissions are invalid')
   }
-  await appendFile(registryPath, `${secret}\n`, { encoding: 'utf8', mode: 0o600 })
+  await appendFile(registryPath, `${secret}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
 }
 
 export async function outputContainsRegisteredSecret(workspace) {
@@ -54,7 +57,10 @@ export function clearClipboard() {
       ? [['pbcopy']]
       : process.platform === 'win32'
         ? [['clip']]
-        : [['wl-copy', '--clear'], ['xclip', '-selection', 'clipboard']]
+        : [
+            ['wl-copy', '--clear'],
+            ['xclip', '-selection', 'clipboard'],
+          ]
 
   for (const [command, ...args] of commands) {
     const result = spawnSync(command, args, {

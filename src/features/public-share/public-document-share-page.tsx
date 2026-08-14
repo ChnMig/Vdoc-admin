@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { Download, FileText, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { documentSharePasswordError } from '@/lib/document-share-password'
 import {
@@ -40,7 +47,7 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { MarkdownDocumentViewer } from './markdown-document-viewer'
 import { OpenApiCodeViewer } from './openapi-code-viewer'
 
-type LoadState = 'loading' | 'locked' | 'ready' | 'unavailable'
+type LoadState = 'loading' | 'locked' | 'ready' | 'recoverable' | 'unavailable'
 
 export function PublicDocumentSharePage({
   shareId: rawShareId,
@@ -76,6 +83,8 @@ function PublicDocumentShareSession({
   const { t } = useLanguage()
   const sessionRef = useRef<PublicShareSession | null>(null)
   const versionRequestIdRef = useRef(0)
+  const unlockLockedRef = useRef(false)
+  const downloadLockedRef = useRef(false)
   const [loadState, setLoadState] = useState<LoadState>(() =>
     shareId && secret ? 'loading' : 'unavailable'
   )
@@ -88,23 +97,16 @@ function PublicDocumentShareSession({
   const [unlocking, setUnlocking] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [message, setMessage] = useState<TranslationKey>()
+  const [failedVersionId, setFailedVersionId] = useState('')
   const passwordValidationError = documentSharePasswordError(password)
 
-  useEffect(() => {
-    if (!shareId || !secret) return
-    const session = createPublicShareSession({ shareId, secret })
-    sessionRef.current = session
-    versionRequestIdRef.current += 1
-    void loadShare()
-    return () => {
-      disposePublicShareSession(session)
-      if (sessionRef.current === session) sessionRef.current = null
-    }
-
-    async function loadShare(proof?: string) {
-      if (!session) return
-      setLoadState('loading')
-      setMessage(undefined)
+  const loadShare = useCallback(
+    async (session: PublicShareSession, proof?: string) => {
+      const requestId = versionRequestIdRef.current + 1
+      versionRequestIdRef.current = requestId
+      const requestIsCurrent = () =>
+        sessionRef.current === session &&
+        requestId === versionRequestIdRef.current
       const request = {
         shareId: session.shareId,
         secret: session.secret,
@@ -113,38 +115,72 @@ function PublicDocumentShareSession({
       }
       try {
         const nextMetadata = await getPublicShareMetadata(request)
+        if (!requestIsCurrent()) return
         const nextVersions =
           nextMetadata.version_scope === 2
             ? await listPublicShareVersions(request)
             : [nextMetadata.current_version]
+        if (!requestIsCurrent()) return
         const selected = nextMetadata.current_version.id
+        if (!nextVersions.some((version) => version.id === selected))
+          throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
         const nextContent = await getPublicShareContent({
           ...request,
           versionId: parsePublicVersionId(selected),
         })
         if (nextContent.version_id !== selected)
           throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
+        if (!requestIsCurrent()) return
         setMetadata(nextMetadata)
         setVersions(nextVersions)
         setVersionId(selected)
         setContent(nextContent)
         setLoadState('ready')
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setLoadState('locked')
+        if (
+          !requestIsCurrent() ||
+          (error instanceof DOMException && error.name === 'AbortError')
+        )
+          return
+        setLoadState(proof ? 'recoverable' : 'locked')
         setMessage('publicShare.unavailable')
       }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!shareId || !secret) return
+    const session = createPublicShareSession({ shareId, secret })
+    sessionRef.current = session
+    const loadTimer = window.setTimeout(() => {
+      void loadShare(session)
+    }, 0)
+    return () => {
+      window.clearTimeout(loadTimer)
+      disposePublicShareSession(session)
+      if (sessionRef.current === session) sessionRef.current = null
     }
-  }, [secret, shareId])
+  }, [loadShare, secret, shareId])
+
+  function handleRetry() {
+    const session = sessionRef.current
+    if (!session || loadState === 'loading') return
+    setLoadState('loading')
+    setMessage(undefined)
+    setFailedVersionId('')
+    void loadShare(session, unlockProof)
+  }
 
   async function handleUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const session = sessionRef.current
-    if (!session || unlocking) return
+    if (!session || unlockLockedRef.current) return
     if (documentSharePasswordError(password) !== undefined) {
       setMessage('publicShare.passwordInvalid')
       return
     }
+    unlockLockedRef.current = true
     setUnlocking(true)
     setMessage(undefined)
     try {
@@ -156,35 +192,16 @@ function PublicDocumentShareSession({
       })
       setUnlockProof(unlocked.unlock_proof)
       setPassword('')
-      const request = {
-        shareId: session.shareId,
-        secret: session.secret,
-        signal: session.controller.signal,
-        unlockProof: unlocked.unlock_proof,
-      }
-      const nextMetadata = await getPublicShareMetadata(request)
-      const nextVersions =
-        nextMetadata.version_scope === 2
-          ? await listPublicShareVersions(request)
-          : [nextMetadata.current_version]
-      const selected = nextMetadata.current_version.id
-      const nextContent = await getPublicShareContent({
-        ...request,
-        versionId: parsePublicVersionId(selected),
-      })
-      if (nextContent.version_id !== selected)
-        throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
-      setMetadata(nextMetadata)
-      setVersions(nextVersions)
-      setVersionId(selected)
-      setContent(nextContent)
-      setLoadState('ready')
+      setLoadState('loading')
+      setFailedVersionId('')
+      await loadShare(session, unlocked.unlock_proof)
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setMessage('publicShare.unavailable')
         setLoadState('locked')
       }
     } finally {
+      unlockLockedRef.current = false
       setUnlocking(false)
     }
   }
@@ -194,8 +211,8 @@ function PublicDocumentShareSession({
     if (!session) return
     const requestId = versionRequestIdRef.current + 1
     versionRequestIdRef.current = requestId
-    setVersionId(nextVersionId)
-    setContent(undefined)
+    setMessage(undefined)
+    setFailedVersionId('')
     try {
       const nextContent = await getPublicShareContent({
         shareId: session.shareId,
@@ -209,10 +226,9 @@ function PublicDocumentShareSession({
         sessionRef.current !== session
       )
         return
-      if (nextContent.version_id !== nextVersionId) {
-        setLoadState('unavailable')
-        return
-      }
+      if (nextContent.version_id !== nextVersionId)
+        throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
+      setVersionId(nextVersionId)
       setContent(nextContent)
     } catch (error) {
       if (
@@ -221,14 +237,30 @@ function PublicDocumentShareSession({
       )
         return
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        setLoadState('unavailable')
+        setFailedVersionId(nextVersionId)
+        setMessage('publicShare.versionLoadFailed')
       }
     }
   }
 
+  function handleVersionRetry() {
+    if (!failedVersionId) return
+    void handleVersionChange(failedVersionId)
+  }
+
+  function handleReauthenticate() {
+    versionRequestIdRef.current += 1
+    setUnlockProof(undefined)
+    setPassword('')
+    setMessage(undefined)
+    setFailedVersionId('')
+    setLoadState('locked')
+  }
+
   async function handleDownload() {
     const session = sessionRef.current
-    if (!session || !versionId || downloading) return
+    if (!session || !versionId || downloadLockedRef.current) return
+    downloadLockedRef.current = true
     setDownloading(true)
     setMessage(undefined)
     try {
@@ -249,9 +281,14 @@ function PublicDocumentShareSession({
         setMessage('publicShare.downloadFailed')
       }
     } finally {
+      downloadLockedRef.current = false
       setDownloading(false)
     }
   }
+
+  const selectedVersion =
+    versions.find((version) => version.id === versionId) ??
+    metadata?.current_version
 
   return (
     <main className='min-h-svh bg-background text-foreground'>
@@ -286,7 +323,7 @@ function PublicDocumentShareSession({
           </Card>
         )}
 
-        {(loadState === 'locked' || loadState === 'unavailable') && (
+        {loadState === 'locked' && (
           <Card className='mx-auto w-full max-w-lg'>
             <CardHeader>
               <div className='mb-2 flex size-10 items-center justify-center rounded-md bg-muted'>
@@ -342,8 +379,39 @@ function PublicDocumentShareSession({
                 >
                   {t('publicShare.unlock')}
                 </Button>
+                <Button type='button' variant='outline' onClick={handleRetry}>
+                  {t('publicShare.retry')}
+                </Button>
               </form>
             </CardContent>
+          </Card>
+        )}
+
+        {(loadState === 'recoverable' || loadState === 'unavailable') && (
+          <Card className='mx-auto w-full max-w-lg'>
+            <CardHeader>
+              <div className='mb-2 flex size-10 items-center justify-center rounded-md bg-muted'>
+                <LockKeyhole className='size-5' />
+              </div>
+              <CardTitle>{t('publicShare.unavailableTitle')}</CardTitle>
+              <CardDescription>{t('publicShare.unavailable')}</CardDescription>
+            </CardHeader>
+            {loadState === 'recoverable' && (
+              <CardContent className='flex flex-wrap gap-2'>
+                <Button type='button' onClick={handleRetry}>
+                  {t('publicShare.retry')}
+                </Button>
+                {unlockProof && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    onClick={handleReauthenticate}
+                  >
+                    {t('publicShare.unlockAgain')}
+                  </Button>
+                )}
+              </CardContent>
+            )}
           </Card>
         )}
 
@@ -357,7 +425,7 @@ function PublicDocumentShareSession({
                       {metadata.document_type === 2 ? 'Markdown' : 'OpenAPI'}
                     </Badge>
                     <Badge variant='outline'>
-                      {metadata.current_version.version_name}
+                      {selectedVersion?.version_name}
                     </Badge>
                   </div>
                   <CardTitle className='text-2xl'>
@@ -410,8 +478,34 @@ function PublicDocumentShareSession({
               )}
             </Card>
             {message && (
-              <Alert variant='destructive'>
+              <Alert variant='destructive' aria-live='polite'>
                 <AlertTitle>{t(message)}</AlertTitle>
+                {(failedVersionId || unlockProof) && (
+                  <AlertDescription className='mt-3'>
+                    <div className='flex flex-wrap gap-2'>
+                      {failedVersionId && (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          onClick={handleVersionRetry}
+                        >
+                          {t('publicShare.retry')}
+                        </Button>
+                      )}
+                      {unlockProof && (
+                        <Button
+                          type='button'
+                          variant='outline'
+                          size='sm'
+                          onClick={handleReauthenticate}
+                        >
+                          {t('publicShare.unlockAgain')}
+                        </Button>
+                      )}
+                    </div>
+                  </AlertDescription>
+                )}
               </Alert>
             )}
             {content ? (

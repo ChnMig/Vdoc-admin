@@ -249,6 +249,17 @@ describe('AIContextPanel', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('renders the empty state when the backend has no summary yet', async () => {
+    apiMocks.getAISummary.mockResolvedValueOnce(null)
+
+    const screen = renderPanel(targetA)
+
+    expect(
+      await screen.findByText('No AI summary has been generated yet.')
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+  })
+
   it('renders an in-flight summary as pending', async () => {
     apiMocks.getAISummary.mockResolvedValueOnce({
       ...summaryForTarget(targetA),

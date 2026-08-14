@@ -55,5 +55,16 @@ export default defineConfig({
         acceptDownloads: false,
       },
     },
+    {
+      name: 'business-workflows',
+      testMatch: '**/business/**/*.pw.ts',
+      use: {
+        viewport: { width: 1280, height: 900 },
+        screenshot: 'off',
+        trace: 'off',
+        video: 'off',
+        acceptDownloads: false,
+      },
+    },
   ],
 })

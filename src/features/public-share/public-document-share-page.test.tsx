@@ -1,5 +1,5 @@
 import { clearCookies } from '@/test-utils/cookies'
-import { act, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseDocumentShareSecret } from '@/lib/document-share-url'
@@ -98,6 +98,248 @@ describe('PublicDocumentSharePage', () => {
     expect(screen.getByText('Protected policy content')).toBeInTheDocument()
     expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(2)
     expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces rapid password unlock submissions', async () => {
+    const unlock = deferred<{ unlock_proof: string; expires_at: string }>()
+    publicShareApiMocks.unlockPublicShare.mockReset()
+    publicShareApiMocks.unlockPublicShare.mockReturnValueOnce(unlock.promise)
+    const user = userEvent.setup()
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    await screen.findByText('Enter the share password to continue.')
+    const passwordInput = screen.getByLabelText('Share password')
+    await user.type(passwordInput, '密码密码')
+    const form = passwordInput.closest('form')
+    if (!form) throw new Error('missing public-share unlock form')
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() =>
+      expect(publicShareApiMocks.unlockPublicShare).toHaveBeenCalledOnce()
+    )
+
+    await act(async () => {
+      unlock.resolve({
+        unlock_proof: 'proof-1',
+        expires_at: '2026-01-01T01:00:00Z',
+      })
+      await unlock.promise
+    })
+    expect(
+      await screen.findByText('Protected policy content')
+    ).toBeInTheDocument()
+  })
+
+  it('recovers an initial transient failure without asking for a password', async () => {
+    const user = userEvent.setup()
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    await screen.findByText('Enter the share password to continue.')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(
+      await screen.findByText('Protected policy content')
+    ).toBeInTheDocument()
+    expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(2)
+    expect(publicShareApiMocks.unlockPublicShare).not.toHaveBeenCalled()
+  })
+
+  it('ignores an older full-page retry that finishes after a newer retry', async () => {
+    const olderVersionId = 'd'.repeat(32)
+    const newerVersionId = 'e'.repeat(32)
+    const older = deferred<{
+      document_name: string
+      document_type: number
+      version_scope: number
+      current_version: {
+        id: string
+        version_name: string
+        published_at: string
+      }
+    }>()
+    const newer = deferred<{
+      document_name: string
+      document_type: number
+      version_scope: number
+      current_version: {
+        id: string
+        version_name: string
+        published_at: string
+      }
+    }>()
+    publicShareApiMocks.getPublicShareMetadata.mockReset()
+    publicShareApiMocks.getPublicShareMetadata
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockImplementationOnce(() => older.promise)
+      .mockImplementationOnce(() => newer.promise)
+    publicShareApiMocks.getPublicShareContent.mockReset()
+    publicShareApiMocks.getPublicShareContent.mockImplementation(
+      async ({ versionId: requestedVersionId }: { versionId: string }) => ({
+        version_id: requestedVersionId,
+        content:
+          requestedVersionId === newerVersionId
+            ? 'Newer retry content'
+            : 'Older retry content',
+      })
+    )
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    await screen.findByText('Enter the share password to continue.')
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    act(() => {
+      retry.click()
+      retry.click()
+    })
+    await waitFor(() =>
+      expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(
+        3
+      )
+    )
+
+    act(() => {
+      newer.resolve({
+        document_name: 'Newer release policy',
+        document_type: 2,
+        version_scope: 1,
+        current_version: {
+          id: newerVersionId,
+          version_name: 'v3',
+          published_at: '2026-01-03T00:00:00Z',
+        },
+      })
+    })
+    expect(await screen.findByText('Newer retry content')).toBeInTheDocument()
+
+    act(() => {
+      older.resolve({
+        document_name: 'Older release policy',
+        document_type: 2,
+        version_scope: 1,
+        current_version: {
+          id: olderVersionId,
+          version_name: 'v2',
+          published_at: '2026-01-02T00:00:00Z',
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Newer retry content')).toBeInTheDocument()
+      expect(screen.queryByText('Older retry content')).not.toBeInTheDocument()
+    })
+    expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the current version visible when another version fails to load', async () => {
+    const secondVersionId = 'd'.repeat(32)
+    publicShareApiMocks.getPublicShareMetadata.mockReset()
+    publicShareApiMocks.getPublicShareMetadata.mockResolvedValue({
+      document_name: 'Release policy',
+      document_type: 2,
+      version_scope: 2,
+      current_version: {
+        id: versionId,
+        version_name: 'v1',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    })
+    publicShareApiMocks.listPublicShareVersions.mockResolvedValue([
+      {
+        id: versionId,
+        version_name: 'v1',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+      {
+        id: secondVersionId,
+        version_name: 'v2',
+        published_at: '2026-01-02T00:00:00Z',
+      },
+    ])
+    publicShareApiMocks.getPublicShareContent
+      .mockReset()
+      .mockResolvedValueOnce({ version_id: versionId, content: 'Version one' })
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce({
+        version_id: secondVersionId,
+        content: 'Version two',
+      })
+    const user = userEvent.setup()
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    expect(await screen.findByText('Version one')).toBeInTheDocument()
+    const versionSelect = screen.getByLabelText('Version')
+    await user.selectOptions(versionSelect, secondVersionId)
+
+    expect(
+      await screen.findByText(
+        'That version could not be loaded. The previously opened version remains available.'
+      )
+    ).toBeInTheDocument()
+    expect(versionSelect).toHaveValue(versionId)
+    expect(screen.getByText('Version one')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Enter the share password to continue.')
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Version two')).toBeInTheDocument()
+    expect(versionSelect).toHaveValue(secondVersionId)
+    expect(
+      screen.getByText('v2', { selector: '[data-slot="badge"]' })
+    ).toBeInTheDocument()
+  })
+
+  it('allows password re-entry when an in-memory unlock proof stops working', async () => {
+    publicShareApiMocks.downloadPublicShareVersion.mockRejectedValueOnce(
+      new Error('unlock proof expired')
+    )
+    const user = userEvent.setup()
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    await screen.findByText('Enter the share password to continue.')
+    await user.type(screen.getByLabelText('Share password'), '密码密码')
+    await user.click(screen.getByRole('button', { name: 'Unlock document' }))
+    expect(
+      await screen.findByText('Protected policy content')
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    expect(
+      await screen.findByText('The original file could not be downloaded.')
+    ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Enter password again' })
+    )
+
+    expect(
+      await screen.findByText('Enter the share password to continue.')
+    ).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Share password'), '密码密码')
+    await user.click(screen.getByRole('button', { name: 'Unlock document' }))
+    expect(
+      await screen.findByText('Protected policy content')
+    ).toBeInTheDocument()
+    expect(publicShareApiMocks.unlockPublicShare).toHaveBeenCalledTimes(2)
   })
 
   it('ignores stale version content responses that arrive out of order', async () => {

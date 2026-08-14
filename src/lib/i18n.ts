@@ -90,6 +90,7 @@ const en = {
     loading: 'Loading the shared document…',
     unavailable:
       'This link is invalid, expired, revoked, or requires a password.',
+    unavailableTitle: 'Shared document unavailable',
     passwordPrompt: 'Enter the share password to continue.',
     password: 'Share password',
     passwordHint:
@@ -103,7 +104,10 @@ const en = {
     expires: 'Expires {date}',
     download: 'Download original',
     downloadFailed: 'The original file could not be downloaded.',
+    versionLoadFailed:
+      'That version could not be loaded. The previously opened version remains available.',
     retry: 'Try again',
+    unlockAgain: 'Enter password again',
     managementTitle: 'Public sharing',
     managementDescription:
       'Create independent, revocable capability links for published branch content.',
@@ -126,7 +130,7 @@ const en = {
       'The share link could not be copied. Select and copy it manually.',
     reveal: 'Show link',
     revoke: 'Revoke',
-    revokeConfirmTitle: 'Revoke this public link?',
+    revokeConfirmTitle: 'Revoke public link {id}?',
     revokeConfirmDescription:
       'This action is irreversible. Anyone using this link will immediately lose access to the shared document and downloads.',
     protected: 'Password protected',
@@ -219,6 +223,42 @@ const en = {
       tokenWarning: 'Copy this token now. The backend may not return it again.',
       attribution:
         'Vdoc Admin keeps the upstream template attribution while replacing starter template data with Vdoc backend API calls.',
+    },
+    actions: {
+      disableUser: 'Disable user',
+      enableUser: 'Enable user',
+      grantSuperAdmin: 'Grant SuperAdmin',
+      revokeSuperAdmin: 'Revoke SuperAdmin',
+      removeMember: 'Remove member',
+    },
+    confirm: {
+      archiveTeamTitle: 'Archive team “{name}”?',
+      archiveTeamDescription:
+        'The team becomes read-only and cannot receive new projects. Existing project history is retained.',
+      archiveProjectTitle: 'Archive project “{name}”?',
+      archiveProjectDescription:
+        'Project management, drafting, publishing, and agent access stop. Existing documents and audit history are retained.',
+      archiveDocumentTitle: 'Archive document “{name}”?',
+      archiveDocumentDescription:
+        'Drafting, publishing, and public-share access stop for this document. Published history is retained.',
+      archiveBranchTitle: 'Archive branch “{name}”?',
+      archiveBranchDescription:
+        'The branch can no longer receive drafts or serve public shares. Existing published history is retained.',
+      revokeTokenTitle: 'Revoke token “{name}”?',
+      revokeTokenDescription:
+        'Agents using this token immediately lose access. A revoked token cannot be restored.',
+      disableUserTitle: 'Disable {email}?',
+      disableUserDescription:
+        'The user immediately loses authenticated access until a SuperAdmin enables the account again.',
+      grantSuperAdminTitle: 'Grant SuperAdmin to {email}?',
+      grantSuperAdminDescription:
+        'This grants system-wide user, team, project, configuration, and audit administration privileges.',
+      revokeSuperAdminTitle: 'Revoke SuperAdmin from {email}?',
+      revokeSuperAdminDescription:
+        'The user loses system-wide administration. Project-specific membership is not changed.',
+      removeMemberTitle: 'Remove {user} from this project?',
+      removeMemberDescription:
+        'The user loses project access immediately. Their prior drafts and audit history are retained.',
     },
     workbench: {
       eyebrow: 'Product workbench',
@@ -420,9 +460,18 @@ const en = {
     review: {
       noteTitle: 'Review note',
       noteDescription:
-        'Optional context sent only with approve, request-changes, or reject actions. Submit remains a bodyless lifecycle transition.',
+        'Select one submitted draft, add optional context, then confirm the exact review action.',
       selectedDraft: 'Applies to selected draft: {draft}',
       noDraftSelected: 'Select a draft before adding review context.',
+      confirmApproveTitle: 'Publish {draft}?',
+      confirmApproveDescription:
+        'Approval creates an immutable published version. Confirm that you reviewed this exact draft and its diff.',
+      confirmRequestTitle: 'Request changes for {draft}?',
+      confirmRequestDescription:
+        'The selected draft will return to its author with the review note shown above.',
+      confirmRejectTitle: 'Reject {draft}?',
+      confirmRejectDescription:
+        'The selected draft will be closed as rejected and cannot be edited again.',
     },
     draftEditor: {
       createTitle: 'Create draft',
@@ -882,6 +931,8 @@ const en = {
       email: 'Please enter your email.',
       password: 'Please enter your password.',
       passwordLength: 'Password must be at least 7 characters long.',
+      passwordPolicy:
+        'Use 12–72 UTF-8 bytes with no leading or trailing whitespace.',
       confirmPassword: 'Please confirm your password.',
       passwordMismatch: "Passwords don't match.",
     },
@@ -1034,6 +1085,7 @@ const zhCN = {
     security: '此能力链接仅可读取已发布内容，分享密钥不会存入浏览器存储。',
     loading: '正在加载共享文档…',
     unavailable: '链接无效、已过期、已撤销，或需要输入密码。',
+    unavailableTitle: '共享文档暂不可用',
     passwordPrompt: '请输入分享密码后继续。',
     password: '分享密码',
     passwordHint: '请输入 12–72 个 UTF-8 字节，且首尾不能包含空白字符。',
@@ -1045,7 +1097,9 @@ const zhCN = {
     expires: '有效期至 {date}',
     download: '下载原文件',
     downloadFailed: '原文件下载失败。',
+    versionLoadFailed: '该版本加载失败，之前打开的版本仍可继续查看。',
     retry: '重试',
+    unlockAgain: '重新输入密码',
     managementTitle: '公开分享',
     managementDescription: '为已发布分支创建相互独立、可随时撤销的能力链接。',
     readOnlyTitle: '归档上下文为只读',
@@ -1065,7 +1119,7 @@ const zhCN = {
     copyFailed: '分享链接复制失败，请手动选择并复制。',
     reveal: '显示链接',
     revoke: '撤销',
-    revokeConfirmTitle: '确认撤销此公开链接？',
+    revokeConfirmTitle: '确认撤销公开链接 {id}？',
     revokeConfirmDescription:
       '此操作不可恢复。任何正在使用该链接的人都将立即失去共享文档的查看和下载权限。',
     protected: '密码保护',
@@ -1158,6 +1212,42 @@ const zhCN = {
       tokenWarning: '请立即复制此令牌。后端可能不会再次返回。',
       attribution:
         'Vdoc Admin 保留上游模板署名，同时用 Vdoc 后端 API 调用替换模板起始数据。',
+    },
+    actions: {
+      disableUser: '停用用户',
+      enableUser: '启用用户',
+      grantSuperAdmin: '授予超级管理员',
+      revokeSuperAdmin: '撤销超级管理员',
+      removeMember: '移除成员',
+    },
+    confirm: {
+      archiveTeamTitle: '归档团队“{name}”？',
+      archiveTeamDescription:
+        '团队将变为只读，不能再接收新项目；现有项目历史会保留。',
+      archiveProjectTitle: '归档项目“{name}”？',
+      archiveProjectDescription:
+        '项目管理、草稿、发布及 Agent 访问都会停止；现有文档和审计历史会保留。',
+      archiveDocumentTitle: '归档文档“{name}”？',
+      archiveDocumentDescription:
+        '该文档的草稿、发布和公开分享访问都会停止；已发布历史会保留。',
+      archiveBranchTitle: '归档分支“{name}”？',
+      archiveBranchDescription:
+        '该分支不能再接收草稿或提供公开分享；现有已发布历史会保留。',
+      revokeTokenTitle: '撤销令牌“{name}”？',
+      revokeTokenDescription:
+        '正在使用此令牌的 Agent 会立即失去访问权限，撤销后不能恢复。',
+      disableUserTitle: '停用 {email}？',
+      disableUserDescription:
+        '该用户会立即失去认证访问权限，直到超级管理员重新启用账号。',
+      grantSuperAdminTitle: '授予 {email} 超级管理员权限？',
+      grantSuperAdminDescription:
+        '这将授予全局用户、团队、项目、配置和审计管理权限。',
+      revokeSuperAdminTitle: '撤销 {email} 的超级管理员权限？',
+      revokeSuperAdminDescription:
+        '该用户会失去全局管理权限，已有的项目成员关系不会改变。',
+      removeMemberTitle: '从项目中移除 {user}？',
+      removeMemberDescription:
+        '该用户会立即失去项目访问权限，其既有草稿和审计历史会保留。',
     },
     workbench: {
       eyebrow: '产品工作台',
@@ -1341,9 +1431,18 @@ const zhCN = {
     review: {
       noteTitle: '审阅备注',
       noteDescription:
-        '可选上下文只会随批准、请求修改或拒绝操作发送。提交仍是不带请求体的生命周期变更。',
+        '先选择一份已提交草稿，填写可选备注，再确认对该草稿执行的审阅动作。',
       selectedDraft: '作用于所选草稿：{draft}',
       noDraftSelected: '请先选择草稿，再添加审阅上下文。',
+      confirmApproveTitle: '发布 {draft}？',
+      confirmApproveDescription:
+        '批准后会创建不可变的正式版本。请确认你审阅的正是这份草稿及其差异。',
+      confirmRequestTitle: '要求修改 {draft}？',
+      confirmRequestDescription:
+        '所选草稿会退回给作者，并附带上方填写的审阅备注。',
+      confirmRejectTitle: '拒绝 {draft}？',
+      confirmRejectDescription:
+        '所选草稿会以已拒绝状态关闭，之后不能继续编辑。',
     },
     draftEditor: {
       createTitle: '创建草稿',
@@ -1780,6 +1879,7 @@ const zhCN = {
       email: '请输入邮箱。',
       password: '请输入密码。',
       passwordLength: '密码至少需要 7 个字符。',
+      passwordPolicy: '请输入 12–72 个 UTF-8 字节，且首尾不能包含空白字符。',
       confirmPassword: '请确认密码。',
       passwordMismatch: '两次输入的密码不一致。',
     },

@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { handleServerError } from '@/lib/handle-server-error'
 import { type TFunction } from '@/lib/i18n'
+import { userPasswordError } from '@/lib/user-password'
 import { cn } from '@/lib/utils'
 import { register } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -41,7 +43,14 @@ const createFormSchema = (t: TFunction) =>
       password: z
         .string()
         .min(1, t('auth.validation.password'))
-        .min(7, t('auth.validation.passwordLength')),
+        .superRefine((value, context) => {
+          if (value !== '' && userPasswordError(value) !== undefined) {
+            context.addIssue({
+              code: 'custom',
+              message: t('auth.validation.passwordPolicy'),
+            })
+          }
+        }),
       confirmPassword: z.string().min(1, t('auth.validation.confirmPassword')),
     })
     .refine((data) => data.password === data.confirmPassword, {
@@ -143,6 +152,9 @@ export function SignUpForm({
                   {...field}
                 />
               </FormControl>
+              <FormDescription>
+                {t('auth.validation.passwordPolicy')}
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

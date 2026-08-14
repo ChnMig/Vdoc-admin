@@ -89,8 +89,15 @@ function DocumentSharePanelContent({
   const queryClient = useQueryClient()
   const [activeLink, setActiveLink] = useState('')
   const [sharePassword, setSharePassword] = useState('')
-  const [pendingRevokeShareId, setPendingRevokeShareId] = useState<string>()
+  const [pendingRevokeShare, setPendingRevokeShare] = useState<{
+    readonly targetProjectId: string
+    readonly targetDocumentId: string
+    readonly shareId: string
+  }>()
   const [copyStatus, setCopyStatus] = useState<'success' | 'failure'>()
+  const createLockedRef = useRef(false)
+  const revealLockedRef = useRef(false)
+  const revokeLockedRef = useRef(false)
   const latestRevealRequestId = useRef(0)
   const latestCopyRequestId = useRef(0)
   const publishedBranchIds = new Set(
@@ -147,6 +154,9 @@ function DocumentSharePanelContent({
       setSharePassword('')
       void invalidate(variables.targetProjectId, variables.targetDocumentId)
     },
+    onSettled: () => {
+      createLockedRef.current = false
+    },
   })
   const revealMutation = useMutation({
     mutationFn: ({
@@ -178,6 +188,9 @@ function DocumentSharePanelContent({
         })
       )
     },
+    onSettled: () => {
+      revealLockedRef.current = false
+    },
   })
   const revokeMutation = useMutation({
     mutationFn: ({
@@ -199,17 +212,12 @@ function DocumentSharePanelContent({
       latestRevealRequestId.current += 1
       latestCopyRequestId.current += 1
       setCopyStatus(undefined)
-      setPendingRevokeShareId(undefined)
+      setPendingRevokeShare(undefined)
       setActiveLink('')
       void invalidate(variables.targetProjectId, variables.targetDocumentId)
     },
-    onError: (_error, variables) => {
-      if (
-        variables.targetProjectId === projectId &&
-        variables.targetDocumentId === documentId
-      ) {
-        setPendingRevokeShareId(undefined)
-      }
+    onSettled: () => {
+      revokeLockedRef.current = false
     },
   })
 
@@ -252,8 +260,13 @@ function DocumentSharePanelContent({
             className='grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end'
             onSubmit={(event) => {
               event.preventDefault()
-              if (passwordValidationError !== undefined) return
+              if (
+                createLockedRef.current ||
+                passwordValidationError !== undefined
+              )
+                return
               const form = new FormData(event.currentTarget)
+              createLockedRef.current = true
               createMutation.mutate({
                 targetProjectId: projectId,
                 targetDocumentId: documentId,
@@ -465,6 +478,8 @@ function DocumentSharePanelContent({
                           revealMutation.isPending
                         }
                         onClick={() => {
+                          if (revealLockedRef.current) return
+                          revealLockedRef.current = true
                           const requestId = latestRevealRequestId.current + 1
                           latestRevealRequestId.current = requestId
                           revealMutation.mutate({
@@ -481,8 +496,17 @@ function DocumentSharePanelContent({
                       <Button
                         size='sm'
                         variant='outline'
-                        disabled={share.status !== 1}
-                        onClick={() => setPendingRevokeShareId(share.id)}
+                        disabled={
+                          share.status !== 1 || revokeMutation.isPending
+                        }
+                        onClick={() => {
+                          revokeMutation.reset()
+                          setPendingRevokeShare({
+                            targetProjectId: projectId,
+                            targetDocumentId: documentId,
+                            shareId: share.id,
+                          })
+                        }}
                       >
                         <Trash2 className='size-4' />
                         {t('publicShare.revoke')}
@@ -500,27 +524,33 @@ function DocumentSharePanelContent({
         )}
 
         <ConfirmDialog
-          open={pendingRevokeShareId !== undefined}
+          open={pendingRevokeShare !== undefined}
           onOpenChange={(open) => {
             if (!open && !revokeMutation.isPending) {
-              setPendingRevokeShareId(undefined)
+              setPendingRevokeShare(undefined)
+              revokeMutation.reset()
             }
           }}
-          title={t('publicShare.revokeConfirmTitle')}
+          title={t('publicShare.revokeConfirmTitle', {
+            id: pendingRevokeShare?.shareId ?? '',
+          })}
           desc={t('publicShare.revokeConfirmDescription')}
           confirmText={t('publicShare.revoke')}
           destructive
           isLoading={revokeMutation.isPending}
           handleConfirm={() => {
-            if (!pendingRevokeShareId) return
+            if (!pendingRevokeShare || revokeLockedRef.current) return
+            revokeLockedRef.current = true
             latestRevealRequestId.current += 1
-            revokeMutation.mutate({
-              targetProjectId: projectId,
-              targetDocumentId: documentId,
-              shareId: pendingRevokeShareId,
-            })
+            revokeMutation.mutate(pendingRevokeShare)
           }}
-        />
+        >
+          {revokeMutation.isError && (
+            <Alert variant='destructive' aria-live='polite'>
+              <AlertTitle>{t('publicShare.managementError')}</AlertTitle>
+            </Alert>
+          )}
+        </ConfirmDialog>
       </CardContent>
     </Card>
   )

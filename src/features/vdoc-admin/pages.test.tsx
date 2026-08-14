@@ -29,16 +29,21 @@ import {
   DashboardPage,
   DiffsPage,
   DraftsPage,
+  ConfirmActionButton,
   MCPTokensPage,
   ProjectsPage,
   SettingsPage,
+  UsersPage,
   VersionsPage,
 } from './pages'
 
 const apiMocks = vi.hoisted(() => ({
+  approveDraft: vi.fn(),
+  archiveProject: vi.fn(),
   compareDiff: vi.fn(),
   createMCPToken: vi.fn(),
   createProject: vi.fn(),
+  createUser: vi.fn(),
   createDraft: vi.fn(),
   createAIChatSession: vi.fn(),
   getAISummary: vi.fn(),
@@ -66,8 +71,11 @@ const apiMocks = vi.hoisted(() => ({
   listSystemAIPrompts: vi.fn(),
   listUsers: vi.fn(),
   listVersions: vi.fn(),
+  patchUser: vi.fn(),
   promoteDraft: vi.fn(),
+  rejectDraft: vi.fn(),
   regenerateAISummary: vi.fn(),
+  requestDraftChanges: vi.fn(),
   revokeMCPToken: vi.fn(),
   sendAIChatMessage: vi.fn(),
   testProjectAIProvider: vi.fn(),
@@ -77,15 +85,19 @@ const apiMocks = vi.hoisted(() => ({
   updateSystemAIProvider: vi.fn(),
   updateSystemAIPrompt: vi.fn(),
   updateDraft: vi.fn(),
+  submitDraft: vi.fn(),
 }))
 
 vi.mock('@/lib/vdoc-api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/vdoc-api')>()
   return {
     ...actual,
+    approveDraft: apiMocks.approveDraft,
+    archiveProject: apiMocks.archiveProject,
     compareDiff: apiMocks.compareDiff,
     createMCPToken: apiMocks.createMCPToken,
     createProject: apiMocks.createProject,
+    createUser: apiMocks.createUser,
     createDraft: apiMocks.createDraft,
     createAIChatSession: apiMocks.createAIChatSession,
     getAISummary: apiMocks.getAISummary,
@@ -113,8 +125,11 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     listSystemAIPrompts: apiMocks.listSystemAIPrompts,
     listUsers: apiMocks.listUsers,
     listVersions: apiMocks.listVersions,
+    patchUser: apiMocks.patchUser,
     promoteDraft: apiMocks.promoteDraft,
+    rejectDraft: apiMocks.rejectDraft,
     regenerateAISummary: apiMocks.regenerateAISummary,
+    requestDraftChanges: apiMocks.requestDraftChanges,
     revokeMCPToken: apiMocks.revokeMCPToken,
     sendAIChatMessage: apiMocks.sendAIChatMessage,
     testProjectAIProvider: apiMocks.testProjectAIProvider,
@@ -124,6 +139,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     updateSystemAIProvider: apiMocks.updateSystemAIProvider,
     updateSystemAIPrompt: apiMocks.updateSystemAIPrompt,
     updateDraft: apiMocks.updateDraft,
+    submitDraft: apiMocks.submitDraft,
   }
 })
 
@@ -174,6 +190,7 @@ const renderSettingsPage = () => renderPage(<SettingsPage />)
 const renderMCPTokensPage = () => renderPage(<MCPTokensPage />)
 const renderDashboardPage = () => renderPage(<DashboardPage />)
 const renderProjectsPage = () => renderPage(<ProjectsPage />)
+const renderUsersPage = () => renderPage(<UsersPage />)
 
 function setAuthUser(user: typeof identityFixture | null) {
   useAuthStore.getState().auth.setUser(user)
@@ -235,6 +252,132 @@ describe('DashboardPage role boundaries', () => {
   })
 })
 
+describe('UsersPage password boundaries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setAuthUser(identityFixture)
+    apiMocks.listUsers.mockResolvedValue({
+      items: [identityFixture],
+      total: 1,
+    })
+    apiMocks.createUser.mockResolvedValue({
+      ...identityFixture,
+      id: 'user-created',
+      email: 'created@example.com',
+      name: 'Created user',
+      is_super_admin: false,
+    })
+    apiMocks.patchUser.mockResolvedValue({
+      ...identityFixture,
+      status: 2,
+    })
+  })
+
+  it('shares the UTF-8 byte password policy with registration', async () => {
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+
+    await screen.findByText('admin@example.com')
+    await user.type(screen.getByLabelText('Email'), 'created@example.com')
+    await user.type(screen.getByLabelText('Name'), 'Created user')
+    const password = screen.getByLabelText('Password')
+    await user.type(password, '1234567')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(
+      await screen.findByText(
+        'Use 12–72 UTF-8 bytes with no leading or trailing whitespace.',
+        { selector: '[data-slot="alert-description"]' }
+      )
+    ).toBeInTheDocument()
+    expect(apiMocks.createUser).not.toHaveBeenCalled()
+
+    await user.clear(password)
+    await user.type(password, '密码密码')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(apiMocks.createUser).toHaveBeenCalledWith(
+        {
+          email: 'created@example.com',
+          name: 'Created user',
+          password: '密码密码',
+          is_super_admin: false,
+        },
+        expect.any(Object)
+      )
+    )
+  })
+
+  it('confirms the exact user before disabling access', async () => {
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+
+    await screen.findByText('admin@example.com')
+    await user.click(screen.getByRole('button', { name: 'Disable user' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Disable admin@example.com?',
+      })
+    ).toBeInTheDocument()
+    expect(apiMocks.patchUser).not.toHaveBeenCalled()
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Disable user' })
+    )
+
+    await waitFor(() =>
+      expect(apiMocks.patchUser).toHaveBeenCalledWith('user-1', { status: 2 })
+    )
+  })
+
+  it('keeps the opened confirmation bound to its original action', async () => {
+    const originalAction = vi.fn().mockResolvedValue(undefined)
+    const replacementAction = vi.fn().mockResolvedValue(undefined)
+    const screen = render(
+      <LanguageProvider>
+        <ConfirmActionButton
+          label='Grant access'
+          title='Grant access to first@example.com?'
+          description='The first account will gain access.'
+          destructive={false}
+          onConfirm={originalAction}
+        />
+      </LanguageProvider>
+    )
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Grant access' }))
+    screen.rerender(
+      <LanguageProvider>
+        <ConfirmActionButton
+          label='Revoke access'
+          title='Revoke access from second@example.com?'
+          description='The second account will lose access.'
+          onConfirm={replacementAction}
+        />
+      </LanguageProvider>
+    )
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Grant access to first@example.com?',
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).queryByText('Revoke access from second@example.com?')
+    ).not.toBeInTheDocument()
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Grant access' })
+    )
+
+    await waitFor(() => expect(originalAction).toHaveBeenCalledOnce())
+    expect(replacementAction).not.toHaveBeenCalled()
+  })
+})
+
 describe('ProjectsPage lifecycle boundaries', () => {
   const archivedProject = () => ({
     ...projectFixture,
@@ -292,6 +435,10 @@ describe('ProjectsPage lifecycle boundaries', () => {
     apiMocks.listProjectMemberCandidates.mockResolvedValue({
       items: [availableAdmin()],
       total: 1,
+    })
+    apiMocks.archiveProject.mockResolvedValue({
+      ...projectFixture,
+      status: 2,
     })
   })
 
@@ -383,6 +530,29 @@ describe('ProjectsPage lifecycle boundaries', () => {
     ).not.toBeInTheDocument()
     expect(apiMocks.listProjectMemberCandidates).not.toHaveBeenCalled()
   })
+
+  it('confirms the named project before archiving it', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture],
+      total: 1,
+    })
+    const user = userEvent.setup()
+    const screen = renderProjectsPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Archive' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Archive project “Docs project”?',
+      })
+    ).toBeInTheDocument()
+    expect(apiMocks.archiveProject).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() =>
+      expect(apiMocks.archiveProject.mock.calls[0]?.[0]).toBe('project-1')
+    )
+  })
 })
 
 describe('MCPTokensPage secret lifecycle', () => {
@@ -420,6 +590,16 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect((await screen.findAllByText(/vdoc_a{48}/)).length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Revoke' }))
+    const revokeDialog = screen.getByRole('alertdialog')
+    expect(
+      within(revokeDialog).getByRole('heading', {
+        name: 'Revoke token “Local agent”?',
+      })
+    ).toBeInTheDocument()
+    expect(revokeMCPToken).not.toHaveBeenCalled()
+    await user.click(
+      within(revokeDialog).getByRole('button', { name: 'Revoke' })
+    )
 
     await waitFor(() => expect(revokeMCPToken).toHaveBeenCalledWith('token-1'))
     await waitFor(() =>
@@ -572,9 +752,22 @@ describe('MCPTokensPage secret lifecycle', () => {
       await screen.findByText('Token could not be revealed')
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Revoke' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Revoke',
+      })
+    )
     expect(
       await screen.findByText('Token could not be revoked')
     ).toBeInTheDocument()
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Cancel',
+      })
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
 
     apiMocks.getMCPToken.mockResolvedValueOnce({
       ...token,
@@ -1275,6 +1468,135 @@ describe('DraftsPage lifecycle boundaries', () => {
       )
     })
   }
+
+  it('binds review context and confirmation to the selected draft', async () => {
+    const secondDraft = {
+      ...draftFixture,
+      id: 'draft-2',
+      version_name: 'draft v2',
+    }
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [draftFixture, secondDraft],
+      total: 2,
+    })
+    apiMocks.approveDraft.mockResolvedValue(markdownVersionFixture)
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    const reviewNote = screen.getByLabelText('Review note')
+    await user.type(reviewNote, 'Reviewed the selected draft')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', { name: 'Publish draft v1?' })
+    ).toBeInTheDocument()
+    expect(apiMocks.approveDraft).not.toHaveBeenCalled()
+    fireEvent.change(reviewNote, {
+      target: { value: 'Changed after confirmation opened' },
+    })
+
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
+    await waitFor(() =>
+      expect(apiMocks.approveDraft).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        'draft-1',
+        { comment: 'Reviewed the selected draft' }
+      )
+    )
+  })
+
+  it('keeps a failed review confirmation open and retries its captured request', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [draftFixture],
+      total: 1,
+    })
+    apiMocks.approveDraft
+      .mockRejectedValueOnce(new Error('Review temporarily unavailable'))
+      .mockResolvedValueOnce(markdownVersionFixture)
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await user.type(screen.getByLabelText('Review note'), 'Captured note')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    const dialog = screen.getByRole('alertdialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Approve' })
+
+    await user.click(confirm)
+    expect(
+      await within(dialog).findByText('Review temporarily unavailable')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    await user.click(confirm)
+    await waitFor(() => expect(apiMocks.approveDraft).toHaveBeenCalledTimes(2))
+    expect(apiMocks.approveDraft).toHaveBeenNthCalledWith(
+      1,
+      'project-1',
+      'document-1',
+      'draft-1',
+      { comment: 'Captured note' }
+    )
+    expect(apiMocks.approveDraft).toHaveBeenNthCalledWith(
+      2,
+      'project-1',
+      'document-1',
+      'draft-1',
+      { comment: 'Captured note' }
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+  })
+
+  it('clears review context when the selected draft changes', async () => {
+    const secondDraft = {
+      ...draftFixture,
+      id: 'draft-2',
+      version_name: 'draft v2',
+    }
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [draftFixture, secondDraft],
+      total: 2,
+    })
+    apiMocks.approveDraft.mockResolvedValue({
+      ...markdownVersionFixture,
+      id: 'version-2',
+      draft_id: 'draft-2',
+      version_name: 'v2',
+    })
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+
+    await screen.findByRole('option', { name: 'draft v1' })
+    const draftSelect = screen.getByLabelText('Draft')
+    await user.selectOptions(draftSelect, 'draft-1')
+    const reviewNote = screen.getByLabelText('Review note')
+    await user.type(reviewNote, 'Only for draft one')
+    await user.selectOptions(draftSelect, 'draft-2')
+
+    expect(reviewNote).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', { name: 'Publish draft v2?' })
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
+
+    await waitFor(() =>
+      expect(apiMocks.approveDraft).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        'draft-2',
+        undefined
+      )
+    )
+  })
 
   for (const [status, label] of [
     [2, 'Submitted'],

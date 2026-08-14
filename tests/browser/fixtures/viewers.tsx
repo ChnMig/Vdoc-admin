@@ -1,8 +1,8 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
+import '@/styles/index.css'
 import { MarkdownDocumentViewer } from '@/features/public-share/markdown-document-viewer'
 import { OpenApiCodeViewer } from '@/features/public-share/openapi-code-viewer'
-import '@/styles/index.css'
 
 const markdown = `# Markdown document
 
@@ -42,7 +42,7 @@ export function ViewerFixtures() {
         <h1 className='text-2xl font-semibold tracking-[-0.02em] text-balance'>
           Public viewer fixtures
         </h1>
-        <p className='max-w-prose text-sm text-muted-foreground text-pretty'>
+        <p className='max-w-prose text-sm text-pretty text-muted-foreground'>
           Token-free fixture content for responsive and accessibility checks.
         </p>
       </header>

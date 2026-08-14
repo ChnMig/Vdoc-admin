@@ -311,13 +311,13 @@ function targetIdentityKey(target: AISummaryTarget | undefined) {
 }
 
 function summaryContent(
-  summary: AISummaryDTO | undefined,
+  summary: AISummaryDTO | null | undefined,
   loading: boolean,
   t: ReturnType<typeof useLanguage>['t']
 ) {
   if (loading) return t('admin.common.loading')
 
-  if (summary === undefined) return t('admin.ai.noSummary')
+  if (summary == null) return t('admin.ai.noSummary')
 
   const content = usableSummaryContent(summary)
 

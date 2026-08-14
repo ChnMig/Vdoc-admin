@@ -5,6 +5,8 @@
 !/src
 !index.html
 !package.json
+!playwright.config.ts
+!/tests
 !tailwind.config.js
 !tsconfig.json
 !tsconfig.node.json

@@ -18,6 +18,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { userPasswordError } from '@/lib/user-password'
 import {
   addProjectMember,
   apiBaseUrl,
@@ -109,6 +110,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -177,6 +179,7 @@ type EmptyStatePreset =
 
 type EndpointGroupMode = 'tag' | 'method'
 type DraftAction = 'submit' | 'approve' | 'request' | 'reject'
+type DraftReviewAction = Exclude<DraftAction, 'submit'>
 type DraftActionRequest = {
   readonly projectId: string
   readonly documentId: string
@@ -606,6 +609,115 @@ function FormCard({
   )
 }
 
+type ConfirmedAction = {
+  readonly label: React.ReactNode
+  readonly title: React.ReactNode
+  readonly description: string
+  readonly onConfirm: () => Promise<unknown>
+  readonly destructive: boolean
+}
+
+export function ConfirmActionButton({
+  label,
+  title,
+  description,
+  onConfirm,
+  disabled = false,
+  pending = false,
+  destructive = true,
+  variant = 'outline',
+  size = 'sm',
+}: {
+  label: React.ReactNode
+  title: React.ReactNode
+  description: string
+  onConfirm: () => Promise<unknown>
+  disabled?: boolean
+  pending?: boolean
+  destructive?: boolean
+  variant?: React.ComponentProps<typeof Button>['variant']
+  size?: React.ComponentProps<typeof Button>['size']
+}) {
+  const { t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<Error>()
+  const [confirmedAction, setConfirmedAction] = useState<ConfirmedAction>()
+  const submitLockedRef = useRef(false)
+
+  return (
+    <>
+      <Button
+        type='button'
+        variant={variant}
+        size={size}
+        disabled={disabled || pending || submitting}
+        onClick={() => {
+          setError(undefined)
+          setConfirmedAction({
+            label,
+            title,
+            description,
+            onConfirm,
+            destructive,
+          })
+          setOpen(true)
+        }}
+      >
+        {label}
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!submitting) {
+            setOpen(nextOpen)
+            if (!nextOpen) {
+              setError(undefined)
+              setConfirmedAction(undefined)
+            }
+          }
+        }}
+        title={confirmedAction?.title ?? ''}
+        desc={confirmedAction?.description ?? ''}
+        confirmText={confirmedAction?.label}
+        destructive={confirmedAction?.destructive}
+        isLoading={submitting}
+        handleConfirm={() => {
+          if (submitLockedRef.current || !confirmedAction) return
+          submitLockedRef.current = true
+          setSubmitting(true)
+          setError(undefined)
+          void Promise.resolve()
+            .then(confirmedAction.onConfirm)
+            .then(() => {
+              setOpen(false)
+              setConfirmedAction(undefined)
+            })
+            .catch((cause: unknown) =>
+              setError(
+                cause instanceof Error
+                  ? cause
+                  : new Error(t('toasts.somethingWrong'))
+              )
+            )
+            .finally(() => {
+              submitLockedRef.current = false
+              setSubmitting(false)
+            })
+        }}
+      >
+        {error && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertDescription>{error.message}</AlertDescription>
+          </Alert>
+        )}
+      </ConfirmDialog>
+    </>
+  )
+}
+
 function CollectionCard({
   title,
   description,
@@ -653,6 +765,7 @@ function TextField({
   defaultValue,
   disabled = false,
   readOnly = false,
+  description,
 }: {
   id?: string
   label: string
@@ -665,6 +778,7 @@ function TextField({
   defaultValue?: string
   disabled?: boolean
   readOnly?: boolean
+  description?: string
 }) {
   const generatedId = useId()
   const controlId = id ?? generatedId
@@ -681,10 +795,19 @@ function TextField({
         defaultValue={value === undefined ? defaultValue : undefined}
         disabled={disabled}
         readOnly={readOnly}
+        aria-describedby={description ? `${controlId}-description` : undefined}
         onChange={
           onChange ? (event) => onChange(event.currentTarget.value) : undefined
         }
       />
+      {description && (
+        <p
+          id={`${controlId}-description`}
+          className='text-xs text-muted-foreground'
+        >
+          {description}
+        </p>
+      )}
     </div>
   )
 }
@@ -1239,14 +1362,18 @@ export function UsersPage() {
         title={t('admin.sections.createUser')}
         submitLabel={t('admin.common.create')}
         pending={createMutation.isPending}
-        onSubmit={(formData) =>
-          createMutation.mutateAsync({
+        onSubmit={(formData) => {
+          const password = fieldValue(formData, 'password')
+          if (userPasswordError(password) !== undefined) {
+            throw new Error(t('auth.validation.passwordPolicy'))
+          }
+          return createMutation.mutateAsync({
             email: fieldValue(formData, 'email'),
             name: fieldValue(formData, 'name'),
-            password: fieldValue(formData, 'password'),
+            password,
             is_super_admin: fieldValue(formData, 'is_super_admin') === 'true',
           })
-        }
+        }}
       >
         <div className='grid gap-4 md:grid-cols-2'>
           <TextField
@@ -1263,6 +1390,7 @@ export function UsersPage() {
             name='password'
             type='password'
             required
+            description={t('auth.validation.passwordPolicy')}
           />
           <NativeSelect
             name='is_super_admin'
@@ -1314,35 +1442,64 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>
                     <div className='flex flex-wrap gap-2'>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() =>
-                          patchMutation.mutate({
-                            id: user.id,
-                            status:
-                              user.status === ACTIVE_STATUS
-                                ? ARCHIVED_OR_DISABLED_STATUS
-                                : ACTIVE_STATUS,
-                          })
-                        }
-                      >
-                        {user.status === ACTIVE_STATUS
-                          ? t('admin.statuses.disabled')
-                          : t('admin.statuses.active')}
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() =>
-                          patchMutation.mutate({
+                      {user.status === ACTIVE_STATUS ? (
+                        <ConfirmActionButton
+                          label={t('admin.actions.disableUser')}
+                          title={t('admin.confirm.disableUserTitle', {
+                            email: user.email,
+                          })}
+                          description={t(
+                            'admin.confirm.disableUserDescription'
+                          )}
+                          pending={patchMutation.isPending}
+                          onConfirm={() =>
+                            patchMutation.mutateAsync({
+                              id: user.id,
+                              status: ARCHIVED_OR_DISABLED_STATUS,
+                            })
+                          }
+                        />
+                      ) : (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={patchMutation.isPending}
+                          onClick={() =>
+                            patchMutation.mutate({
+                              id: user.id,
+                              status: ACTIVE_STATUS,
+                            })
+                          }
+                        >
+                          {t('admin.actions.enableUser')}
+                        </Button>
+                      )}
+                      <ConfirmActionButton
+                        label={t(
+                          user.is_super_admin
+                            ? 'admin.actions.revokeSuperAdmin'
+                            : 'admin.actions.grantSuperAdmin'
+                        )}
+                        title={t(
+                          user.is_super_admin
+                            ? 'admin.confirm.revokeSuperAdminTitle'
+                            : 'admin.confirm.grantSuperAdminTitle',
+                          { email: user.email }
+                        )}
+                        description={t(
+                          user.is_super_admin
+                            ? 'admin.confirm.revokeSuperAdminDescription'
+                            : 'admin.confirm.grantSuperAdminDescription'
+                        )}
+                        destructive={user.is_super_admin}
+                        pending={patchMutation.isPending}
+                        onConfirm={() =>
+                          patchMutation.mutateAsync({
                             id: user.id,
                             isSuperAdmin: !user.is_super_admin,
                           })
                         }
-                      >
-                        {t('admin.fields.superAdmin')}
-                      </Button>
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1359,9 +1516,9 @@ export function UsersPage() {
         tokens={userTokenQuery.data?.items ?? []}
         emptyPreset='userTokens'
         onRevoke={(tokenId) =>
-          selectedUserId &&
-          revokeMutation.mutate({ userId: selectedUserId, tokenId })
+          revokeMutation.mutateAsync({ userId: selectedUserId, tokenId })
         }
+        pending={revokeMutation.isPending}
       />
     </PageChrome>
   )
@@ -1425,7 +1582,7 @@ export function TeamsPage() {
         onUpdate={(id, name, description) =>
           updateMutation.mutate({ id, name, description })
         }
-        onArchive={(id) => archiveMutation.mutate(id)}
+        onArchive={(id) => archiveMutation.mutateAsync(id)}
         pending={updateMutation.isPending || archiveMutation.isPending}
       />
     </EntityPage>
@@ -1478,7 +1635,7 @@ function NameDescriptionTable({
 }: {
   items: Array<TeamDTO | ProjectDTO>
   onUpdate: (id: string, name: string, description: string) => void
-  onArchive: (id: string) => void
+  onArchive: (id: string) => Promise<unknown>
   pending: boolean
   emptyPreset: EmptyStatePreset
   readOnly?: boolean
@@ -1534,14 +1691,22 @@ function NameDescriptionTable({
                   <TableCell>
                     {(!('status' in item) || item.status === ACTIVE_STATUS) &&
                       (!canEdit || canEdit(item.id)) && (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          disabled={pending}
-                          onClick={() => onArchive(item.id)}
-                        >
-                          {t('admin.common.archive')}
-                        </Button>
+                        <ConfirmActionButton
+                          label={t('admin.common.archive')}
+                          title={t(
+                            emptyPreset === 'teams'
+                              ? 'admin.confirm.archiveTeamTitle'
+                              : 'admin.confirm.archiveProjectTitle',
+                            { name: item.name }
+                          )}
+                          description={t(
+                            emptyPreset === 'teams'
+                              ? 'admin.confirm.archiveTeamDescription'
+                              : 'admin.confirm.archiveProjectDescription'
+                          )}
+                          pending={pending}
+                          onConfirm={() => onArchive(item.id)}
+                        />
                       )}
                   </TableCell>
                 )}
@@ -1742,7 +1907,7 @@ export function ProjectsPage() {
         onUpdate={(id, name, description) =>
           updateMutation.mutate({ id, name, description })
         }
-        onArchive={(id) => archiveMutation.mutate(id)}
+        onArchive={(id) => archiveMutation.mutateAsync(id)}
         pending={updateMutation.isPending || archiveMutation.isPending}
       />
       <CollectionCard
@@ -1822,7 +1987,8 @@ export function ProjectsPage() {
             ...(memberCandidatesQuery.data?.items ?? []),
           ]}
           onRole={(userId, role) => roleMutation.mutate({ userId, role })}
-          onRemove={(userId) => removeMutation.mutate(userId)}
+          onRemove={(userId) => removeMutation.mutateAsync(userId)}
+          pending={roleMutation.isPending || removeMutation.isPending}
           readOnly={!canManageSelectedProject}
         />
       </CollectionCard>
@@ -1843,12 +2009,14 @@ function MembersTable({
   users,
   onRole,
   onRemove,
+  pending = false,
   readOnly = false,
 }: {
   members: Awaited<ReturnType<typeof listProjectMembers>>['items']
   users: UserDTO[]
   onRole: (userId: string, role: number) => void
-  onRemove: (userId: string) => void
+  onRemove: (userId: string) => Promise<unknown>
+  pending?: boolean
   readOnly?: boolean
 }) {
   const { t } = useLanguage()
@@ -1890,6 +2058,7 @@ function MembersTable({
                 <select
                   className='h-9 rounded-md border border-input bg-background px-3 text-sm'
                   value={String(member.role)}
+                  disabled={pending}
                   onChange={(event) =>
                     onRole(member.user_id, Number(event.currentTarget.value))
                   }
@@ -1907,13 +2076,18 @@ function MembersTable({
             </TableCell>
             {!readOnly && (
               <TableCell>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => onRemove(member.user_id)}
-                >
-                  {t('admin.common.archive')}
-                </Button>
+                <ConfirmActionButton
+                  label={t('admin.actions.removeMember')}
+                  title={t('admin.confirm.removeMemberTitle', {
+                    user:
+                      member.user_email ??
+                      userEmail(member.user_id) ??
+                      member.user_id,
+                  })}
+                  description={t('admin.confirm.removeMemberDescription')}
+                  pending={pending}
+                  onConfirm={() => onRemove(member.user_id)}
+                />
               </TableCell>
             )}
           </TableRow>
@@ -2135,7 +2309,7 @@ export function DocumentsPage() {
             },
           })
         }
-        onArchive={(id) => archiveDocumentMutation.mutate(id)}
+        onArchive={(id) => archiveDocumentMutation.mutateAsync(id)}
         readOnly={!canMutateProject}
       />
       {documentId && (
@@ -2213,7 +2387,7 @@ export function DocumentsPage() {
             },
           })
         }
-        onArchive={(id) => archiveBranchMutation.mutate(id)}
+        onArchive={(id) => archiveBranchMutation.mutateAsync(id)}
         readOnly={!canMutateDocument}
       />
       <DocumentSharePanel
@@ -2245,7 +2419,7 @@ function DocumentsTable({
 }: {
   documents: DocumentDTO[]
   onUpdate: (document: DocumentDTO) => void
-  onArchive: (id: string) => void
+  onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
 }) {
@@ -2290,14 +2464,17 @@ function DocumentsTable({
                 {!readOnly && (
                   <TableCell>
                     {document.status === ACTIVE_STATUS && (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        disabled={pending}
-                        onClick={() => onArchive(document.id)}
-                      >
-                        {t('admin.common.archive')}
-                      </Button>
+                      <ConfirmActionButton
+                        label={t('admin.common.archive')}
+                        title={t('admin.confirm.archiveDocumentTitle', {
+                          name: document.name,
+                        })}
+                        description={t(
+                          'admin.confirm.archiveDocumentDescription'
+                        )}
+                        pending={pending}
+                        onConfirm={() => onArchive(document.id)}
+                      />
                     )}
                   </TableCell>
                 )}
@@ -2369,7 +2546,7 @@ function BranchesTable({
 }: {
   branches: BranchDTO[]
   onUpdate: (branch: BranchDTO) => void
-  onArchive: (id: string) => void
+  onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
 }) {
@@ -2413,14 +2590,18 @@ function BranchesTable({
                 {!readOnly && (
                   <TableCell>
                     {branch.status === ACTIVE_STATUS && (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        disabled={pending || branch.is_default}
-                        onClick={() => onArchive(branch.id)}
-                      >
-                        {t('admin.common.archive')}
-                      </Button>
+                      <ConfirmActionButton
+                        label={t('admin.common.archive')}
+                        title={t('admin.confirm.archiveBranchTitle', {
+                          name: branch.name,
+                        })}
+                        description={t(
+                          'admin.confirm.archiveBranchDescription'
+                        )}
+                        pending={pending}
+                        disabled={branch.is_default}
+                        onConfirm={() => onArchive(branch.id)}
+                      />
                     )}
                   </TableCell>
                 )}
@@ -2539,6 +2720,15 @@ export function DraftsPage() {
   const [draftId, setDraftId] = useState('')
   const [contentKind, setContentKind] = useState('raw')
   const [reviewNote, setReviewNote] = useState('')
+  const [pendingReviewAction, setPendingReviewAction] = useState<{
+    projectId: string
+    documentId: string
+    draftId: string
+    draftName: string
+    action: DraftReviewAction
+    comment?: string
+  }>()
+  const reviewActionLockedRef = useRef(false)
   const [promoteSourceBranchId, setPromoteSourceBranchId] = useState('')
   const [promoteTargetBranchId, setPromoteTargetBranchId] = useState('')
   const draftExistsInDocument = (draftsQuery.data?.items ?? []).some(
@@ -2566,6 +2756,12 @@ export function DraftsPage() {
   )
   const canDraft = canDraftForRole && activeDocumentContext
   const canPublish = canPublishForRole && activeDocumentContext
+  const canReviewSelectedDraft = Boolean(
+    canPublish &&
+    selectedDraft &&
+    activeBranchIds.has(selectedDraft.branch_id) &&
+    selectedDraft.status === DRAFT_STATUS_SUBMITTED
+  )
   const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
     ? {
         projectId,
@@ -2644,17 +2840,16 @@ export function DraftsPage() {
     onSuccess: invalidate,
   })
   const actionMutation = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: DraftAction }) =>
-      runDraftAction({
-        projectId,
-        documentId,
-        draftId: id,
-        action,
-        comment: reviewComment(reviewNote)?.comment,
-      }),
+    mutationFn: (request: DraftActionRequest) => runDraftAction(request),
     onSuccess: (_data, variables) => {
-      if (variables.action !== 'submit') setReviewNote('')
+      if (variables.action !== 'submit') {
+        setReviewNote('')
+        setPendingReviewAction(undefined)
+      }
       invalidate()
+    },
+    onSettled: () => {
+      reviewActionLockedRef.current = false
     },
   })
   const handleProjectChange = (value: string) => {
@@ -2662,6 +2857,7 @@ export function DraftsPage() {
     setBranchFilter('')
     setContentKind('raw')
     setReviewNote('')
+    setPendingReviewAction(undefined)
     setPromoteSourceBranchId('')
     setPromoteTargetBranchId('')
     setProjectId(value)
@@ -2671,6 +2867,7 @@ export function DraftsPage() {
     setBranchFilter('')
     setContentKind('raw')
     setReviewNote('')
+    setPendingReviewAction(undefined)
     setPromoteSourceBranchId('')
     setPromoteTargetBranchId('')
     setDocumentId(value)
@@ -2678,7 +2875,11 @@ export function DraftsPage() {
   const handleDraftSelect = (value: string) => {
     setDraftId(value)
     setReviewNote('')
+    setPendingReviewAction(undefined)
   }
+  const reviewConfirmation = pendingReviewAction
+    ? draftReviewConfirmation(pendingReviewAction, t)
+    : undefined
   const selectedDraftContent =
     contentQuery.data?.content ??
     selectedDraftInlineContent(
@@ -2708,6 +2909,8 @@ export function DraftsPage() {
           value={branchFilter}
           onChange={(value) => {
             setDraftId('')
+            setReviewNote('')
+            setPendingReviewAction(undefined)
             setBranchFilter(value)
           }}
           placeholder={t('admin.common.all')}
@@ -2820,9 +3023,16 @@ export function DraftsPage() {
         drafts={draftsQuery.data?.items ?? []}
         selected={draftId}
         onSelect={handleDraftSelect}
-        onAction={(id, action) => actionMutation.mutate({ id, action })}
+        onAction={(id, action) =>
+          actionMutation.mutate({
+            projectId,
+            documentId,
+            draftId: id,
+            action,
+          })
+        }
         canDraft={canDraft}
-        canPublish={canPublish}
+        pending={actionMutation.isPending}
         activeBranchIds={activeBranchIds}
       />
       {canPublish && (
@@ -2831,8 +3041,58 @@ export function DraftsPage() {
           value={reviewNote}
           onChange={setReviewNote}
           pending={actionMutation.isPending}
+          reviewable={canReviewSelectedDraft}
+          onReview={(action) => {
+            if (!selectedDraft || !canReviewSelectedDraft) return
+            actionMutation.reset()
+            setPendingReviewAction({
+              projectId,
+              documentId,
+              draftId: selectedDraft.id,
+              draftName: selectedDraft.version_name,
+              action,
+              comment: reviewComment(reviewNote)?.comment,
+            })
+          }}
         />
       )}
+      <ConfirmDialog
+        open={pendingReviewAction !== undefined}
+        onOpenChange={(open) => {
+          if (!open && !actionMutation.isPending) {
+            setPendingReviewAction(undefined)
+            actionMutation.reset()
+          }
+        }}
+        title={reviewConfirmation?.title ?? ''}
+        desc={reviewConfirmation?.description ?? ''}
+        confirmText={reviewConfirmation?.confirmText}
+        destructive={reviewConfirmation?.destructive}
+        isLoading={actionMutation.isPending}
+        handleConfirm={() => {
+          if (!pendingReviewAction || reviewActionLockedRef.current) return
+          reviewActionLockedRef.current = true
+          actionMutation.mutate({
+            projectId: pendingReviewAction.projectId,
+            documentId: pendingReviewAction.documentId,
+            draftId: pendingReviewAction.draftId,
+            action: pendingReviewAction.action,
+            comment: pendingReviewAction.comment,
+          })
+        }}
+      >
+        {actionMutation.isError && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertDescription>
+              {actionMutation.error instanceof Error
+                ? actionMutation.error.message
+                : t('toasts.somethingWrong')}
+            </AlertDescription>
+          </Alert>
+        )}
+      </ConfirmDialog>
       {selectedDraft?.review_comment && (
         <Alert>
           <BookOpenText />
@@ -3096,16 +3356,55 @@ function runDraftAction(request: DraftActionRequest) {
   )
 }
 
+function draftReviewConfirmation(
+  review: {
+    readonly draftName: string
+    readonly action: DraftReviewAction
+  },
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (review.action === 'approve') {
+    return {
+      title: t('admin.review.confirmApproveTitle', {
+        draft: review.draftName,
+      }),
+      description: t('admin.review.confirmApproveDescription'),
+      confirmText: t('admin.common.approve'),
+      destructive: false,
+    }
+  }
+  if (review.action === 'request') {
+    return {
+      title: t('admin.review.confirmRequestTitle', {
+        draft: review.draftName,
+      }),
+      description: t('admin.review.confirmRequestDescription'),
+      confirmText: t('admin.common.requestChanges'),
+      destructive: false,
+    }
+  }
+  return {
+    title: t('admin.review.confirmRejectTitle', { draft: review.draftName }),
+    description: t('admin.review.confirmRejectDescription'),
+    confirmText: t('admin.common.reject'),
+    destructive: true,
+  }
+}
+
 function ReviewNotePanel({
   selectedDraftName,
   value,
   onChange,
   pending,
+  reviewable,
+  onReview,
 }: {
   readonly selectedDraftName?: string
   readonly value: string
   readonly onChange: (value: string) => void
   readonly pending: boolean
+  readonly reviewable: boolean
+  readonly onReview: (action: DraftReviewAction) => void
 }) {
   const { t } = useLanguage()
   const noteId = useId()
@@ -3134,9 +3433,34 @@ function ReviewNotePanel({
             value={value}
             onChange={(event) => onChange(event.currentTarget.value)}
             placeholder={t('admin.placeholders.reviewNote')}
-            disabled={pending}
+            disabled={pending || !reviewable}
             className='min-h-24'
           />
+        </div>
+        <div className='flex flex-wrap gap-2'>
+          <Button
+            type='button'
+            disabled={pending || !reviewable}
+            onClick={() => onReview('approve')}
+          >
+            {t('admin.common.approve')}
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            disabled={pending || !reviewable}
+            onClick={() => onReview('request')}
+          >
+            {t('admin.common.requestChanges')}
+          </Button>
+          <Button
+            type='button'
+            variant='destructive'
+            disabled={pending || !reviewable}
+            onClick={() => onReview('reject')}
+          >
+            {t('admin.common.reject')}
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -3183,7 +3507,7 @@ function DraftsTable({
   onSelect,
   onAction,
   canDraft,
-  canPublish,
+  pending,
   activeBranchIds,
 }: {
   drafts: DraftDTO[]
@@ -3191,7 +3515,7 @@ function DraftsTable({
   onSelect: (id: string) => void
   onAction: (id: string, action: DraftAction) => void
   canDraft: boolean
-  canPublish: boolean
+  pending: boolean
   activeBranchIds: ReadonlySet<string>
 }) {
   const { t } = useLanguage()
@@ -3213,10 +3537,6 @@ function DraftsTable({
                 activeBranchIds.has(draft.branch_id) &&
                 (draft.status === DRAFT_STATUS_DRAFT ||
                   draft.status === DRAFT_STATUS_CHANGES_REQUESTED)
-              const canReview =
-                canPublish &&
-                activeBranchIds.has(draft.branch_id) &&
-                draft.status === DRAFT_STATUS_SUBMITTED
               return (
                 <TableRow
                   key={draft.id}
@@ -3252,39 +3572,11 @@ function DraftsTable({
                         <Button
                           variant='outline'
                           size='sm'
-                          disabled={!canSubmit}
+                          disabled={pending || !canSubmit}
                           onClick={() => onAction(draft.id, 'submit')}
                         >
                           {t('admin.common.submit')}
                         </Button>
-                      )}
-                      {canPublish && (
-                        <>
-                          <Button
-                            variant='outline'
-                            size='sm'
-                            disabled={!canReview}
-                            onClick={() => onAction(draft.id, 'approve')}
-                          >
-                            {t('admin.common.approve')}
-                          </Button>
-                          <Button
-                            variant='outline'
-                            size='sm'
-                            disabled={!canReview}
-                            onClick={() => onAction(draft.id, 'request')}
-                          >
-                            {t('admin.common.requestChanges')}
-                          </Button>
-                          <Button
-                            variant='outline'
-                            size='sm'
-                            disabled={!canReview}
-                            onClick={() => onAction(draft.id, 'reject')}
-                          >
-                            {t('admin.common.reject')}
-                          </Button>
-                        </>
                       )}
                     </div>
                   </TableCell>
@@ -4703,6 +4995,7 @@ export function MCPTokensPage() {
         )}
       <TokenTable
         tokens={tokensQuery.data?.items ?? []}
+        pending={revokeMutation.isPending}
         onView={(tokenId) => {
           latestTokenCopyRequestId.current += 1
           setVisibleToken('')
@@ -4713,7 +5006,7 @@ export function MCPTokensPage() {
           const requestId = beginTokenOperation()
           getMutation.mutate({ tokenId, requestId })
         }}
-        onRevoke={(tokenId) => {
+        onRevoke={async (tokenId) => {
           const requestId = beginTokenOperation()
           latestTokenCopyRequestId.current += 1
           setVisibleToken('')
@@ -4721,7 +5014,7 @@ export function MCPTokensPage() {
           setCopyStatus(undefined)
           getMutation.reset()
           revokeMutation.reset()
-          revokeMutation.mutate({ tokenId, requestId })
+          await revokeMutation.mutateAsync({ tokenId, requestId })
         }}
       />
       {selectedToken && (
@@ -4836,13 +5129,15 @@ function TokenTable({
   title,
   description,
   emptyPreset = 'tokens',
+  pending = false,
 }: {
   tokens: MCPTokenDTO[]
   onView?: (tokenId: string) => void
-  onRevoke: (tokenId: string) => void
+  onRevoke: (tokenId: string) => Promise<unknown>
   title?: string
   description?: string
   emptyPreset?: EmptyStatePreset
+  pending?: boolean
 }) {
   const { t } = useLanguage()
   return (
@@ -4884,20 +5179,22 @@ function TokenTable({
                       <Button
                         variant='outline'
                         size='sm'
-                        disabled={token.status !== ACTIVE_STATUS}
+                        disabled={pending || token.status !== ACTIVE_STATUS}
                         onClick={() => onView(token.id)}
                       >
                         {t('admin.common.view')}
                       </Button>
                     )}
-                    <Button
-                      variant='outline'
-                      size='sm'
+                    <ConfirmActionButton
+                      label={t('admin.common.revoke')}
+                      title={t('admin.confirm.revokeTokenTitle', {
+                        name: token.name,
+                      })}
+                      description={t('admin.confirm.revokeTokenDescription')}
                       disabled={token.status !== ACTIVE_STATUS}
-                      onClick={() => onRevoke(token.id)}
-                    >
-                      {t('admin.common.revoke')}
-                    </Button>
+                      pending={pending}
+                      onConfirm={() => onRevoke(token.id)}
+                    />
                   </div>
                 </TableCell>
               </TableRow>

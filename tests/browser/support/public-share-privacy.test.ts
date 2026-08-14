@@ -21,9 +21,7 @@ describe('public share production privacy policy', () => {
     expect(caddyfile).toContain('@public_share path /share/*')
     expect(caddyfile).toContain('Cache-Control "no-store, max-age=0"')
     expect(caddyfile).toContain('Referrer-Policy "no-referrer"')
-    expect(caddyfile).toContain(
-      'X-Robots-Tag "noindex, nofollow, noarchive"'
-    )
+    expect(caddyfile).toContain('X-Robots-Tag "noindex, nofollow, noarchive"')
     expect(caddyfile).toContain('Content-Security-Policy "default-src')
     expect(caddyfile).toContain(
       "connect-src 'self' {$VDOC_PUBLIC_SHARE_CONNECT_SRC}"

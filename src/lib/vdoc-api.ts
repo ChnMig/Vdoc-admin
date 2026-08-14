@@ -1061,7 +1061,7 @@ export function updateProjectAIPrompt(
 }
 
 export function getAISummary(target: AISummaryTarget) {
-  return unwrapEnvelope<AISummaryDTO>(
+  return unwrapEnvelope<AISummaryDTO | null>(
     vdocApi.get(`${aiSummaryPath(target)}/ai-summary`)
   )
 }

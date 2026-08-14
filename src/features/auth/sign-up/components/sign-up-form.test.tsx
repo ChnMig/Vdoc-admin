@@ -8,6 +8,8 @@ const FORM_MESSAGES = {
   passwordEmpty: 'Please enter your password.',
   confirmPasswordEmpty: 'Please confirm your password.',
   passwordMismatch: "Passwords don't match.",
+  passwordPolicy:
+    'Use 12–72 UTF-8 bytes with no leading or trailing whitespace.',
 } as const
 
 const mocks = vi.hoisted(() => ({
@@ -95,8 +97,8 @@ describe('SignUpForm', () => {
 
   it('shows a mismatch error when passwords do not match', async () => {
     await userEvent.type(emailInput, 'a@b.com')
-    await userEvent.type(passwordInput, '1234567')
-    await userEvent.type(confirmPasswordInput, '7654321')
+    await userEvent.type(passwordInput, 'correct horse battery')
+    await userEvent.type(confirmPasswordInput, 'different horse battery')
 
     await userEvent.click(submitButton)
     expect(
@@ -104,10 +106,23 @@ describe('SignUpForm', () => {
     ).toBeInTheDocument()
   })
 
-  it('registers through Vdoc and navigates to dashboard on success', async () => {
+  it('rejects a password outside the shared user policy', async () => {
     await userEvent.type(emailInput, 'a@b.com')
     await userEvent.type(passwordInput, '1234567')
     await userEvent.type(confirmPasswordInput, '1234567')
+
+    await userEvent.click(submitButton)
+
+    expect(
+      await screen.findAllByText(FORM_MESSAGES.passwordPolicy)
+    ).not.toHaveLength(0)
+    expect(mocks.register).not.toHaveBeenCalled()
+  })
+
+  it('registers through Vdoc and navigates to dashboard on success', async () => {
+    await userEvent.type(emailInput, 'a@b.com')
+    await userEvent.type(passwordInput, 'correct horse battery')
+    await userEvent.type(confirmPasswordInput, 'correct horse battery')
 
     await userEvent.click(submitButton)
 
@@ -115,7 +130,7 @@ describe('SignUpForm', () => {
     expect(mocks.register).toHaveBeenCalledWith({
       name: '',
       email: 'a@b.com',
-      password: '1234567',
+      password: 'correct horse battery',
     })
     expect(mocks.setUser).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'a@b.com' })

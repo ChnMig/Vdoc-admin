@@ -7,6 +7,7 @@ import {
 import {
   PublicShareRequestError,
   PUBLIC_SHARE_DOWNLOAD_MAX_BYTES,
+  PUBLIC_SHARE_REQUEST_TIMEOUT_MS,
   downloadPublicShareVersion,
   getPublicShareContent,
   getPublicShareMetadata,
@@ -24,6 +25,7 @@ const originalRuntimeConfig = window.__VDOC_ADMIN_CONFIG__
 afterEach(() => {
   window.__VDOC_ADMIN_CONFIG__ = originalRuntimeConfig
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 describe('public share API', () => {
@@ -88,7 +90,7 @@ describe('public share API', () => {
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
-        signal,
+        signal: expect.any(AbortSignal),
       })
     )
     const requestInit = fetchMock.mock.calls[0]?.[1]
@@ -98,7 +100,7 @@ describe('public share API', () => {
     expect(requestInit?.headers).not.toHaveProperty('Cookie')
   })
 
-  it('uses one request for versions and content with the exact signal', async () => {
+  it('uses one request for versions and content with isolated timeout signals', async () => {
     const controller = new AbortController()
     const fetchMock = vi
       .fn()
@@ -134,8 +136,10 @@ describe('public share API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal)
-    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBe(controller.signal)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal)
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).not.toBe(controller.signal)
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).not.toBe(controller.signal)
   })
 
   it('unlocks with capability-only credentials and forwards proof in memory', async () => {
@@ -306,6 +310,39 @@ describe('public share API', () => {
         signal: controller.signal,
       })
     ).rejects.toBe(abortError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts and sanitizes requests that exceed the public timeout', async () => {
+    vi.useFakeTimers()
+    let requestSignal: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          requestSignal = init?.signal ?? undefined
+          requestSignal?.addEventListener(
+            'abort',
+            () => reject(requestSignal?.reason),
+            { once: true }
+          )
+        })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = getPublicShareMetadata({
+      baseUrl,
+      shareId,
+      secret,
+      signal: new AbortController().signal,
+    })
+    const rejection = expect(request).rejects.toMatchObject({
+      code: 408,
+      status: 'REQUEST_TIMEOUT',
+    })
+    await vi.advanceTimersByTimeAsync(PUBLIC_SHARE_REQUEST_TIMEOUT_MS)
+
+    await rejection
+    expect(requestSignal?.aborted).toBe(true)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 

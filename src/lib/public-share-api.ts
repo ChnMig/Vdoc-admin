@@ -75,6 +75,7 @@ export type PublicShareDownload = {
 }
 
 export const PUBLIC_SHARE_DOWNLOAD_MAX_BYTES = 10 * 1024 * 1024
+export const PUBLIC_SHARE_REQUEST_TIMEOUT_MS = 15_000
 
 const publicShareUnlockSchema = z
   .object({
@@ -199,8 +200,22 @@ async function publicShareFetch(
     request.baseUrl === undefined
       ? resolvePublicShareApiBaseUrl()
       : parsePublicShareOrigin(request.baseUrl)
+  const controller = new AbortController()
+  const forwardAbort = () => controller.abort(request.signal.reason)
+  if (request.signal.aborted) forwardAbort()
+  else request.signal.addEventListener('abort', forwardAbort, { once: true })
+  let timedOut = false
+  let timeoutId = 0
+  const timeoutError = new PublicShareRequestError(408, 'REQUEST_TIMEOUT')
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      timedOut = true
+      controller.abort(new DOMException('Request timed out', 'TimeoutError'))
+      reject(timeoutError)
+    }, PUBLIC_SHARE_REQUEST_TIMEOUT_MS)
+  })
   try {
-    return await fetch(
+    const response = fetch(
       `${origin}/api/v1/open/document-shares/${request.shareId}${suffix}`,
       {
         method: init?.method ?? 'GET',
@@ -213,13 +228,19 @@ async function publicShareFetch(
             ? { 'X-Vdoc-Share-Unlock': request.unlockProof }
             : {}),
         },
-        signal: request.signal,
+        signal: controller.signal,
       }
     )
+    return await Promise.race([response, timeout])
   } catch (error) {
+    if (error instanceof PublicShareRequestError) throw error
+    if (timedOut) throw timeoutError
     if (error instanceof DOMException && error.name === 'AbortError')
       throw error
     throw new PublicShareRequestError(undefined, undefined)
+  } finally {
+    window.clearTimeout(timeoutId)
+    request.signal.removeEventListener('abort', forwardAbort)
   }
 }
 

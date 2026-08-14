@@ -1,10 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
-test('secret-bearing project disables retained browser artifacts', (
-  { browserName },
-  testInfo
-) => {
+test('secret-bearing project disables retained browser artifacts', ({
+  browserName,
+}, testInfo) => {
   expect(browserName).toBe('chromium')
   expect(testInfo.project.name).toBe('live-capability-text')
   expect(testInfo.project.use.screenshot).toBe('off')

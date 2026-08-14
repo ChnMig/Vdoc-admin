@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BranchDTO, VersionDTO } from '@/lib/vdoc-api'
@@ -61,6 +61,14 @@ const version: VersionDTO = {
   published_at: '2026-01-01T00:00:00Z',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
 }
 
 function createHarness() {
@@ -139,6 +147,41 @@ describe('DocumentSharePanel', () => {
         }
       )
     )
+  })
+
+  it('coalesces rapid share creation submissions', async () => {
+    const creation = deferred<{
+      share: typeof activeShare
+      secret: string
+    }>()
+    shareApiMocks.createDocumentShare.mockReturnValueOnce(creation.promise)
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+
+    await user.selectOptions(
+      screen.getByLabelText('Published branch'),
+      branch.id
+    )
+    const createButton = screen.getByRole('button', {
+      name: 'Create share link',
+    })
+    const form = createButton.closest('form')
+    if (!form) throw new Error('missing share creation form')
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() =>
+      expect(shareApiMocks.createDocumentShare).toHaveBeenCalledOnce()
+    )
+
+    await act(async () => {
+      creation.resolve({
+        share: activeShare,
+        secret: `vdoc_share_${'b'.repeat(48)}`,
+      })
+      await creation.promise
+    })
   })
 
   it('offers only active branches that have a published version', async () => {
@@ -280,6 +323,11 @@ describe('DocumentSharePanel', () => {
     await user.click(revokeButton)
     let dialog = screen.getByRole('alertdialog')
     expect(
+      within(dialog).getByRole('heading', {
+        name: `Revoke public link ${activeShare.id}?`,
+      })
+    ).toBeInTheDocument()
+    expect(
       within(dialog).getByText('This action is irreversible.', {
         exact: false,
       })
@@ -297,6 +345,51 @@ describe('DocumentSharePanel', () => {
         'document-1',
         activeShare.id
       )
+    )
+  })
+
+  it('keeps a named revoke confirmation open after failure and retries the same link', async () => {
+    shareApiMocks.listDocumentShares.mockResolvedValue({
+      items: [activeShare],
+      total: 1,
+    })
+    shareApiMocks.revokeDocumentShare
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce({ ...activeShare, status: 2 })
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+
+    await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+    const dialog = screen.getByRole('alertdialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Revoke' })
+    await user.click(confirm)
+
+    expect(
+      await within(dialog).findByText(
+        'The sharing action could not be completed. Check the branch, password, and current permissions, then try again.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    await user.click(confirm)
+    await waitFor(() =>
+      expect(shareApiMocks.revokeDocumentShare).toHaveBeenCalledTimes(2)
+    )
+    expect(shareApiMocks.revokeDocumentShare).toHaveBeenNthCalledWith(
+      1,
+      'project-1',
+      'document-1',
+      activeShare.id
+    )
+    expect(shareApiMocks.revokeDocumentShare).toHaveBeenNthCalledWith(
+      2,
+      'project-1',
+      'document-1',
+      activeShare.id
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     )
   })
 })
