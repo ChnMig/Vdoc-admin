@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
+import { parseSecureHttpOrigin } from './origin-security'
 
 export type VdocEnvelope<T> = {
   code: number
@@ -38,6 +39,10 @@ type VdocHealth = {
   dependencies: Record<string, VdocHealthDependency>
 }
 
+export type AuthConfigDTO = {
+  registration_enabled: boolean
+}
+
 export type UserDTO = AuthUser
 
 export type TeamDTO = {
@@ -60,9 +65,11 @@ export type ProjectDTO = {
   updated_at: string
 }
 
-type ProjectMemberDTO = {
+export type ProjectMemberDTO = {
   project_id: string
   user_id: string
+  user_email?: string
+  user_name?: string
   role: number
   status: number
   added_by: string
@@ -102,6 +109,11 @@ export type DiffSummaryDTO = {
   removed_endpoints: number
   modified_endpoints: number
   breaking_changes: number
+  document_format?: number
+  added_lines?: number
+  removed_lines?: number
+  modified_lines?: number
+  modified_blocks?: number
 }
 
 export type DiffItemDTO = {
@@ -135,6 +147,31 @@ export type DiffDTO = {
   updated_at: string
 }
 
+export type AuditLogDTO = {
+  id: string
+  actor_type: number
+  actor_user_id?: string
+  actor_token_id?: string
+  action: string
+  resource_type: string
+  resource_id?: string
+  project_id?: string
+  document_id?: string
+  metadata: Record<string, string>
+  ip_address?: string
+  user_agent?: string
+  request_id?: string
+  created_at: string
+}
+
+export type AuditLogQuery = {
+  project_id?: string
+  action?: string
+  resource_type?: string
+  resource_id?: string
+  limit?: number
+}
+
 export type DraftDTO = {
   id: string
   project_id: string
@@ -162,6 +199,7 @@ export type DraftDTO = {
   normalized_schema_hash?: string
   status: number
   diff_preview?: DiffDTO
+  review_comment?: string
   created_by: string
   submitted_at?: string
   created_at: string
@@ -270,7 +308,6 @@ type PatchProjectMemberRolePayload = {
 type DocumentPayload = NameDescriptionPayload & {
   document_type: number
   relative_path: string
-  status?: number
 }
 
 type PatchBranchPayload = NameDescriptionPayload & {
@@ -356,6 +393,8 @@ export type AIPromptTemplateDTO = {
   readonly user_prompt_template: string
   readonly enabled: boolean
 }
+
+export type AIPromptPayload = Omit<AIPromptTemplateDTO, 'prompt_key'>
 
 export type AIPromptOverrideDTO = AIPromptTemplateDTO & {
   readonly id: string
@@ -447,17 +486,13 @@ export class VdocApiError extends Error {
 
 const localApiBaseUrl = 'http://127.0.0.1:8080'
 
-function normalizeApiBaseUrl(url: string) {
-  return url.trim().replace(/\/+$/, '')
-}
-
 export function resolveApiBaseUrl() {
   const configuredApiBaseUrl =
     window.__VDOC_ADMIN_CONFIG__?.apiBaseUrl ||
     import.meta.env.VITE_VDOC_API_BASE_URL ||
     localApiBaseUrl
 
-  return normalizeApiBaseUrl(configuredApiBaseUrl)
+  return parseSecureHttpOrigin(configuredApiBaseUrl)
 }
 
 export const apiBaseUrl = resolveApiBaseUrl()
@@ -516,6 +551,10 @@ export function register(payload: RegisterPayload) {
   return unwrapEnvelope<VdocSession>(
     vdocApi.post('/api/v1/open/auth/register', payload)
   )
+}
+
+export function getAuthConfig() {
+  return unwrapEnvelope<AuthConfigDTO>(vdocApi.get('/api/v1/open/auth/config'))
 }
 
 export function getIdentity() {
@@ -609,6 +648,12 @@ export function listProjectMembers(projectId: string) {
   )
 }
 
+export function listProjectMemberCandidates(projectId: string) {
+  return unwrapListEnvelope<UserDTO>(
+    vdocApi.get(`/api/v1/private/projects/${projectId}/member-candidates`)
+  )
+}
+
 export function addProjectMember(
   projectId: string,
   payload: AddProjectMemberPayload
@@ -637,9 +682,11 @@ export function removeProjectMember(projectId: string, userId: string) {
   )
 }
 
-export function listDocuments(projectId: string) {
+export function listDocuments(projectId: string, documentType?: number) {
   return unwrapListEnvelope<DocumentDTO>(
-    vdocApi.get(`/api/v1/private/projects/${projectId}/documents`)
+    vdocApi.get(`/api/v1/private/projects/${projectId}/documents`, {
+      params: documentType ? { document_type: documentType } : undefined,
+    })
   )
 }
 
@@ -717,10 +764,15 @@ export function archiveBranch(
   )
 }
 
-export function listDrafts(projectId: string, documentId: string) {
+export function listDrafts(
+  projectId: string,
+  documentId: string,
+  branchId?: string
+) {
   return unwrapListEnvelope<DraftDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts`,
+      { params: branchId ? { branch_id: branchId } : undefined }
     )
   )
 }
@@ -826,10 +878,15 @@ export function promoteDraft(
   )
 }
 
-export function listVersions(projectId: string, documentId: string) {
+export function listVersions(
+  projectId: string,
+  documentId: string,
+  branchId?: string
+) {
   return unwrapListEnvelope<VersionDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions`,
+      { params: branchId ? { branch_id: branchId } : undefined }
     )
   )
 }
@@ -884,6 +941,31 @@ export function compareDiff(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs`,
       payload
     )
+  )
+}
+
+export function listDiffs(
+  projectId: string,
+  documentId: string,
+  fromVersionId?: string,
+  toVersionId?: string
+) {
+  return unwrapListEnvelope<DiffDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs`,
+      {
+        params: {
+          from_version_id: fromVersionId || undefined,
+          to_version_id: toVersionId || undefined,
+        },
+      }
+    )
+  )
+}
+
+export function listAuditLogs(query: AuditLogQuery = {}) {
+  return unwrapListEnvelope<AuditLogDTO>(
+    vdocApi.get('/api/v1/private/audit-logs', { params: query })
   )
 }
 
@@ -952,7 +1034,7 @@ export function listSystemAIPrompts() {
 
 export function updateSystemAIPrompt(
   promptKey: string,
-  payload: AIPromptTemplateDTO
+  payload: AIPromptPayload
 ) {
   return unwrapEnvelope<AIPromptOverrideDTO>(
     vdocApi.put(`/api/v1/private/ai/prompts/${promptKey}`, payload)
@@ -968,7 +1050,7 @@ export function listProjectAIPrompts(projectId: string) {
 export function updateProjectAIPrompt(
   projectId: string,
   promptKey: string,
-  payload: AIPromptTemplateDTO
+  payload: AIPromptPayload
 ) {
   return unwrapEnvelope<AIPromptOverrideDTO>(
     vdocApi.put(
@@ -998,6 +1080,21 @@ export function createAIChatSession(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/ai/chat-sessions`,
       payload
+    )
+  )
+}
+
+export function listAIChatSessions(target: AISummaryTarget) {
+  return unwrapListEnvelope<AIChatSessionDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${target.projectId}/ai/chat-sessions`,
+      {
+        params: {
+          document_id: target.documentId,
+          context_type: target.ownerType,
+          context_id: target.ownerId,
+        },
+      }
     )
   )
 }

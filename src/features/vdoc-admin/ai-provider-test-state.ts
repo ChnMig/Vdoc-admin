@@ -9,7 +9,7 @@ const idleProviderTestState = {
 export type ProviderTestRequest = {
   readonly identity: string
   readonly providerIdentity: string
-  readonly payload: AIProviderPayload
+  readonly payload?: AIProviderPayload
 }
 
 export type ProjectProviderTestRequest = ProviderTestRequest & {
@@ -47,7 +47,7 @@ export function useProviderTestState(providerIdentity: string) {
     begin: (
       scope: ProviderScope,
       projectId: string,
-      payload: AIProviderPayload
+      payload?: AIProviderPayload
     ) => {
       requestCounterRef.current += 1
       const identity = providerTestIdentity(

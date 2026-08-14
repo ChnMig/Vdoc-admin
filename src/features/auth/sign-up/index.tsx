@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { getAuthConfig } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import {
   Card,
@@ -13,16 +15,28 @@ import { SignUpForm } from './components/sign-up-form'
 
 export function SignUp() {
   const { t } = useLanguage()
+  const authConfigQuery = useQuery({
+    queryKey: ['auth-config'],
+    queryFn: getAuthConfig,
+    staleTime: 60_000,
+  })
+  const registrationEnabled =
+    authConfigQuery.data?.registration_enabled === true
 
   return (
     <AuthLayout>
       <Card className='max-w-sm gap-4'>
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>
-            {t('auth.signUp.title')}
+            {registrationEnabled
+              ? t('auth.signUp.title')
+              : t('auth.registrationDisabledTitle')}
           </CardTitle>
           <CardDescription>
-            {t('auth.signUp.description')} <br />
+            {registrationEnabled
+              ? t('auth.signUp.description')
+              : t('auth.registrationDisabledDescription')}{' '}
+            <br />
             {t('auth.signUp.haveAccount')}{' '}
             <Link
               to='/sign-in'
@@ -33,7 +47,17 @@ export function SignUp() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <SignUpForm />
+          {authConfigQuery.isLoading ? (
+            <p className='text-sm text-muted-foreground'>
+              {t('auth.registrationChecking')}
+            </p>
+          ) : registrationEnabled ? (
+            <SignUpForm />
+          ) : (
+            <p className='rounded-md border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground'>
+              {t('auth.registrationDisabledRecovery')}
+            </p>
+          )}
         </CardContent>
         <CardFooter>
           <p className='px-8 text-center text-sm text-muted-foreground'>

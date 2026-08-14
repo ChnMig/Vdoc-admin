@@ -13,7 +13,7 @@ The v0.1 surface is responsible for more than CRUD administration: it guides fir
 
 ## Vdoc Backend Expectations
 
-Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin during local development, for example `http://127.0.0.1:8080`. The production Docker image is configured at container startup instead: set `VDOC_ADMIN_API_BASE_URL` to write `/runtime-config.js` before Caddy serves the Vite bundle as static files. `VITE_VDOC_API_BASE_URL` remains supported as a container startup fallback for compatibility.
+Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin during local development, for example `http://127.0.0.1:8080`. Both authenticated requests and anonymous public-share API requests use this backend origin. Public share browser links use the current Admin origin by default; set `VITE_VDOC_PUBLIC_SHARE_BASE_URL` only when `/share/*` is intentionally hosted elsewhere. The production Docker image is configured at container startup instead: set `VDOC_ADMIN_API_BASE_URL` to write `/runtime-config.js` before Caddy serves the Vite bundle as static files. `VITE_VDOC_API_BASE_URL` remains supported as a container startup fallback for compatibility. The Admin/public-share browser origins must be listed exactly in backend `VDOC_SERVER_CORS_ALLOWED_ORIGINS`; wildcard CORS is rejected.
 
 Authentication uses the Vdoc backend directly:
 
@@ -60,10 +60,12 @@ scripts/vdoc-release-dry-run.sh
 
 Do not put raw JWTs, MCP tokens, DB passwords, storage secrets, or `Authorization` header values in docs, logs, screenshots, issues, or shell history. The dry-run does not publish or deploy Admin.
 
-Tests run in Vitest's jsdom environment and do not require a Playwright or Chromium installation:
+Unit tests run in Vitest's jsdom environment. The complete local gate also runs the container-entrypoint test and token-free Playwright browser paths; install a Playwright-compatible browser before running it:
 
 ```sh
 pnpm test
+pnpm test:entrypoint
+pnpm test:browser
 ```
 
 ## Attribution

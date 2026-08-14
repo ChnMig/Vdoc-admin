@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as ShareShareIdRouteImport } from './routes/share/$shareId'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -21,12 +22,14 @@ import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as AuthenticatedVersionsIndexRouteImport } from './routes/_authenticated/versions/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
+import { Route as AuthenticatedSkillIndexRouteImport } from './routes/_authenticated/skill/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index'
 import { Route as AuthenticatedMcpTokensIndexRouteImport } from './routes/_authenticated/mcp-tokens/index'
 import { Route as AuthenticatedDraftsIndexRouteImport } from './routes/_authenticated/drafts/index'
 import { Route as AuthenticatedDocumentsIndexRouteImport } from './routes/_authenticated/documents/index'
 import { Route as AuthenticatedDiffsIndexRouteImport } from './routes/_authenticated/diffs/index'
+import { Route as AuthenticatedAuditIndexRouteImport } from './routes/_authenticated/audit/index'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -37,6 +40,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ShareShareIdRoute = ShareShareIdRouteImport.update({
+  id: '/share/$shareId',
+  path: '/share/$shareId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const errors503Route = errors503RouteImport.update({
   id: '/(errors)/503',
@@ -89,6 +97,11 @@ const AuthenticatedTeamsIndexRoute = AuthenticatedTeamsIndexRouteImport.update({
   path: '/teams/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSkillIndexRoute = AuthenticatedSkillIndexRouteImport.update({
+  id: '/skill/',
+  path: '/skill/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/settings/',
@@ -124,6 +137,11 @@ const AuthenticatedDiffsIndexRoute = AuthenticatedDiffsIndexRouteImport.update({
   path: '/diffs/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAuditIndexRoute = AuthenticatedAuditIndexRouteImport.update({
+  id: '/audit/',
+  path: '/audit/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -140,13 +158,16 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/share/$shareId': typeof ShareShareIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/audit/': typeof AuthenticatedAuditIndexRoute
   '/diffs/': typeof AuthenticatedDiffsIndexRoute
   '/documents/': typeof AuthenticatedDocumentsIndexRoute
   '/drafts/': typeof AuthenticatedDraftsIndexRoute
   '/mcp-tokens/': typeof AuthenticatedMcpTokensIndexRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/skill/': typeof AuthenticatedSkillIndexRoute
   '/teams/': typeof AuthenticatedTeamsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/versions/': typeof AuthenticatedVersionsIndexRoute
@@ -159,14 +180,17 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/share/$shareId': typeof ShareShareIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/audit': typeof AuthenticatedAuditIndexRoute
   '/diffs': typeof AuthenticatedDiffsIndexRoute
   '/documents': typeof AuthenticatedDocumentsIndexRoute
   '/drafts': typeof AuthenticatedDraftsIndexRoute
   '/mcp-tokens': typeof AuthenticatedMcpTokensIndexRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/skill': typeof AuthenticatedSkillIndexRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/versions': typeof AuthenticatedVersionsIndexRoute
@@ -181,14 +205,17 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/share/$shareId': typeof ShareShareIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/audit/': typeof AuthenticatedAuditIndexRoute
   '/_authenticated/diffs/': typeof AuthenticatedDiffsIndexRoute
   '/_authenticated/documents/': typeof AuthenticatedDocumentsIndexRoute
   '/_authenticated/drafts/': typeof AuthenticatedDraftsIndexRoute
   '/_authenticated/mcp-tokens/': typeof AuthenticatedMcpTokensIndexRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/skill/': typeof AuthenticatedSkillIndexRoute
   '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/versions/': typeof AuthenticatedVersionsIndexRoute
@@ -204,13 +231,16 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/share/$shareId'
     | '/errors/$error'
+    | '/audit/'
     | '/diffs/'
     | '/documents/'
     | '/drafts/'
     | '/mcp-tokens/'
     | '/projects/'
     | '/settings/'
+    | '/skill/'
     | '/teams/'
     | '/users/'
     | '/versions/'
@@ -223,14 +253,17 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/share/$shareId'
     | '/'
     | '/errors/$error'
+    | '/audit'
     | '/diffs'
     | '/documents'
     | '/drafts'
     | '/mcp-tokens'
     | '/projects'
     | '/settings'
+    | '/skill'
     | '/teams'
     | '/users'
     | '/versions'
@@ -244,14 +277,17 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/share/$shareId'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/audit/'
     | '/_authenticated/diffs/'
     | '/_authenticated/documents/'
     | '/_authenticated/drafts/'
     | '/_authenticated/mcp-tokens/'
     | '/_authenticated/projects/'
     | '/_authenticated/settings/'
+    | '/_authenticated/skill/'
     | '/_authenticated/teams/'
     | '/_authenticated/users/'
     | '/_authenticated/versions/'
@@ -266,6 +302,7 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  ShareShareIdRoute: typeof ShareShareIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -283,6 +320,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/share/$shareId': {
+      id: '/share/$shareId'
+      path: '/share/$shareId'
+      fullPath: '/share/$shareId'
+      preLoaderRoute: typeof ShareShareIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/(errors)/503': {
       id: '/(errors)/503'
@@ -354,6 +398,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTeamsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/skill/': {
+      id: '/_authenticated/skill/'
+      path: '/skill'
+      fullPath: '/skill/'
+      preLoaderRoute: typeof AuthenticatedSkillIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/settings'
@@ -396,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDiffsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/audit/': {
+      id: '/_authenticated/audit/'
+      path: '/audit'
+      fullPath: '/audit/'
+      preLoaderRoute: typeof AuthenticatedAuditIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -409,12 +467,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedAuditIndexRoute: typeof AuthenticatedAuditIndexRoute
   AuthenticatedDiffsIndexRoute: typeof AuthenticatedDiffsIndexRoute
   AuthenticatedDocumentsIndexRoute: typeof AuthenticatedDocumentsIndexRoute
   AuthenticatedDraftsIndexRoute: typeof AuthenticatedDraftsIndexRoute
   AuthenticatedMcpTokensIndexRoute: typeof AuthenticatedMcpTokensIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
+  AuthenticatedSkillIndexRoute: typeof AuthenticatedSkillIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedVersionsIndexRoute: typeof AuthenticatedVersionsIndexRoute
@@ -423,12 +483,14 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedAuditIndexRoute: AuthenticatedAuditIndexRoute,
   AuthenticatedDiffsIndexRoute: AuthenticatedDiffsIndexRoute,
   AuthenticatedDocumentsIndexRoute: AuthenticatedDocumentsIndexRoute,
   AuthenticatedDraftsIndexRoute: AuthenticatedDraftsIndexRoute,
   AuthenticatedMcpTokensIndexRoute: AuthenticatedMcpTokensIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
+  AuthenticatedSkillIndexRoute: AuthenticatedSkillIndexRoute,
   AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedVersionsIndexRoute: AuthenticatedVersionsIndexRoute,
@@ -446,6 +508,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  ShareShareIdRoute: ShareShareIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

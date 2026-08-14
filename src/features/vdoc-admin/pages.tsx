@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -14,6 +14,7 @@ import {
   Route,
   SearchIcon,
   Server,
+  ShieldCheck,
   UsersRound,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -41,11 +42,14 @@ import {
   getMCPToken,
   getVersionContent,
   listBranches,
+  listAuditLogs,
+  listDiffs,
   listDocuments,
   listDrafts,
   listEndpoints,
   listMCPTokens,
   listProjectMembers,
+  listProjectMemberCandidates,
   listProjects,
   listTeams,
   listUserMCPTokens,
@@ -53,6 +57,7 @@ import {
   listVersions,
   patchProjectMemberRole,
   patchUser,
+  promoteDraft,
   rejectDraft,
   removeProjectMember,
   requestDraftChanges,
@@ -65,10 +70,12 @@ import {
   updateProject,
   updateTeam,
   type AISummaryTarget,
+  type AuditLogDTO,
   type DraftReviewPayload,
   type BranchDTO,
   type DiffDTO,
   type DiffItemDTO,
+  type DiffSummaryDTO,
   type DocumentDTO,
   type DraftDTO,
   type EndpointDTO,
@@ -108,18 +115,25 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { MarkdownDocumentViewer } from '@/features/public-share/markdown-document-viewer'
 import { AIContextPanel } from './ai-panels'
 import { AISettingsPanel } from './ai-settings'
+import { DocumentSharePanel } from './document-share-panel'
 import { MarkdownFactsCard } from './markdown-facts-card'
 
 const ACTIVE_STATUS = 1
 const ARCHIVED_OR_DISABLED_STATUS = 2
 const DOCUMENT_TYPE_OPENAPI = 1
 const DOCUMENT_TYPE_MARKDOWN = 2
+const DOCUMENT_FORMAT_MARKDOWN = 3
 const ROLE_READER = 1
 const ROLE_WRITER = 2
 const ROLE_ADMIN = 3
+const DRAFT_STATUS_DRAFT = 1
 const DRAFT_STATUS_SUBMITTED = 2
+const DRAFT_STATUS_CHANGES_REQUESTED = 3
+const DRAFT_STATUS_REJECTED = 4
+const DRAFT_STATUS_PUBLISHED = 5
 
 type PageKey =
   | 'dashboard'
@@ -130,7 +144,9 @@ type PageKey =
   | 'drafts'
   | 'versions'
   | 'diffs'
+  | 'audit'
   | 'mcpTokens'
+  | 'skill'
   | 'settings'
 
 type QueryState = {
@@ -155,6 +171,7 @@ type EmptyStatePreset =
   | 'versions'
   | 'endpoints'
   | 'diffs'
+  | 'audit'
   | 'tokens'
   | 'userTokens'
 
@@ -213,11 +230,12 @@ function draftStatusLabel(
   status: number,
   t: ReturnType<typeof useLanguage>['t']
 ) {
-  if (status === 1) return t('admin.statuses.pending')
-  if (status === 2) return t('admin.statuses.submitted')
-  if (status === 3) return t('admin.statuses.changesRequested')
-  if (status === 4) return t('admin.statuses.rejected')
-  if (status === 5) return t('admin.statuses.approved')
+  if (status === DRAFT_STATUS_DRAFT) return t('admin.statuses.draft')
+  if (status === DRAFT_STATUS_SUBMITTED) return t('admin.statuses.submitted')
+  if (status === DRAFT_STATUS_CHANGES_REQUESTED)
+    return t('admin.statuses.changesRequested')
+  if (status === DRAFT_STATUS_REJECTED) return t('admin.statuses.rejected')
+  if (status === DRAFT_STATUS_PUBLISHED) return t('admin.statuses.published')
   return `${t('admin.common.unknown')} ${status}`
 }
 
@@ -376,6 +394,21 @@ function LoadingErrorState({ state }: { state: QueryState }) {
   return null
 }
 
+function AccessDeniedPage({ page }: { page: PageKey }) {
+  const { t } = useLanguage()
+  return (
+    <PageChrome page={page}>
+      <Alert variant='destructive'>
+        <ShieldCheck />
+        <AlertTitle>{t('errors.forbiddenTitle')}</AlertTitle>
+        <AlertDescription>
+          {t('admin.permissions.superAdminOnly')}
+        </AlertDescription>
+      </Alert>
+    </PageChrome>
+  )
+}
+
 function EmptyState({ preset }: { preset?: EmptyStatePreset }) {
   const { t } = useLanguage()
   const title = preset
@@ -416,6 +449,9 @@ function NativeSelect({
   placeholder,
   onChange,
   name,
+  defaultValue,
+  disabled = false,
+  required = false,
 }: {
   id?: string
   label: string
@@ -424,6 +460,9 @@ function NativeSelect({
   placeholder: string
   onChange?: (value: string) => void
   name?: string
+  defaultValue?: string
+  disabled?: boolean
+  required?: boolean
 }) {
   const generatedId = useId()
   const controlId = id ?? generatedId
@@ -434,6 +473,9 @@ function NativeSelect({
         id={controlId}
         name={name}
         value={value}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        disabled={disabled}
+        required={required}
         onChange={(event) => onChange?.(event.currentTarget.value)}
         className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
       >
@@ -492,14 +534,20 @@ function FormCard({
   submitLabel,
   pending,
   onSubmit,
+  resetOnSuccess = true,
+  disabled = false,
 }: {
   title: string
   children: React.ReactNode
   submitLabel: string
   pending: boolean
-  onSubmit: (formData: FormData) => void
+  onSubmit: (formData: FormData) => Promise<unknown>
+  resetOnSuccess?: boolean
+  disabled?: boolean
 }) {
   const { t } = useLanguage()
+  const [submitError, setSubmitError] = useState<Error | null>(null)
+  const submitLockedRef = useRef(false)
   return (
     <Card className='border-primary/25'>
       <CardHeader className='border-b pb-5'>
@@ -517,14 +565,39 @@ function FormCard({
       <CardContent>
         <form
           className='grid gap-4'
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault()
-            onSubmit(new FormData(event.currentTarget))
-            event.currentTarget.reset()
+            if (submitLockedRef.current) return
+            submitLockedRef.current = true
+            const form = event.currentTarget
+            setSubmitError(null)
+            try {
+              await onSubmit(new FormData(form))
+              if (resetOnSuccess) form.reset()
+            } catch (error) {
+              setSubmitError(
+                error instanceof Error
+                  ? error
+                  : new Error(t('toasts.somethingWrong'))
+              )
+            } finally {
+              submitLockedRef.current = false
+            }
           }}
         >
           {children}
-          <Button type='submit' className='w-fit' disabled={pending}>
+          {submitError && (
+            <Alert variant='destructive' aria-live='polite'>
+              <AlertCircle />
+              <AlertTitle>{t('admin.common.error')}</AlertTitle>
+              <AlertDescription>{submitError.message}</AlertDescription>
+            </Alert>
+          )}
+          <Button
+            type='submit'
+            className='w-fit'
+            disabled={pending || disabled}
+          >
             {submitLabel}
           </Button>
         </form>
@@ -575,6 +648,11 @@ function TextField({
   type = 'text',
   required = false,
   placeholder,
+  value,
+  onChange,
+  defaultValue,
+  disabled = false,
+  readOnly = false,
 }: {
   id?: string
   label: string
@@ -582,6 +660,11 @@ function TextField({
   type?: string
   required?: boolean
   placeholder?: string
+  value?: string
+  onChange?: (value: string) => void
+  defaultValue?: string
+  disabled?: boolean
+  readOnly?: boolean
 }) {
   const generatedId = useId()
   const controlId = id ?? generatedId
@@ -594,6 +677,13 @@ function TextField({
         type={type}
         required={required}
         placeholder={placeholder}
+        value={value}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        disabled={disabled}
+        readOnly={readOnly}
+        onChange={
+          onChange ? (event) => onChange(event.currentTarget.value) : undefined
+        }
       />
     </div>
   )
@@ -604,11 +694,15 @@ function TextAreaField({
   label,
   name,
   required = false,
+  defaultValue,
+  disabled = false,
 }: {
   id?: string
   label: string
   name: string
   required?: boolean
+  defaultValue?: string
+  disabled?: boolean
 }) {
   const generatedId = useId()
   const controlId = id ?? generatedId
@@ -619,6 +713,8 @@ function TextAreaField({
         id={controlId}
         name={name}
         required={required}
+        defaultValue={defaultValue}
+        disabled={disabled}
         className='min-h-32 font-mono'
       />
     </div>
@@ -736,10 +832,13 @@ function useProjectsAndSelection() {
   }
 }
 
-function useDocumentsAndSelection(projectId: string) {
+function useDocumentsAndSelection(projectId: string, documentType?: number) {
   const documentsQuery = useQuery({
-    queryKey: ['documents', projectId],
-    queryFn: () => listDocuments(projectId),
+    queryKey: ['documents', projectId, documentType ?? 'all'],
+    queryFn: () =>
+      documentType === undefined
+        ? listDocuments(projectId)
+        : listDocuments(projectId, documentType),
     enabled: projectId.length > 0,
   })
   const [documentId, setDocumentId] = useState('')
@@ -768,10 +867,17 @@ function useDocumentsAndSelection(projectId: string) {
   }
 }
 
-function useVersionsAndSelection(projectId: string, documentId: string) {
+function useVersionsAndSelection(
+  projectId: string,
+  documentId: string,
+  branchId?: string
+) {
   const versionsQuery = useQuery({
-    queryKey: ['versions', projectId, documentId],
-    queryFn: () => listVersions(projectId, documentId),
+    queryKey: ['versions', projectId, documentId, branchId ?? 'all'],
+    queryFn: () =>
+      branchId === undefined
+        ? listVersions(projectId, documentId)
+        : listVersions(projectId, documentId, branchId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
   const [versionId, setVersionId] = useState('')
@@ -809,12 +915,39 @@ export function DashboardPage() {
     queryFn: listUsers,
     enabled: isSuperAdmin,
   })
-  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams })
+  const teamsQuery = useQuery({
+    queryKey: ['teams'],
+    queryFn: listTeams,
+    enabled: isSuperAdmin,
+  })
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
   })
   const firstProjectId = projectsQuery.data?.items[0]?.id ?? ''
+  const membersQuery = useQuery({
+    queryKey: ['project-members', firstProjectId],
+    queryFn: () => listProjectMembers(firstProjectId),
+    enabled: firstProjectId.length > 0 && !isSuperAdmin,
+  })
+  const currentUserId = identityQuery.data?.id ?? ''
+  const projectRole = membersQuery.data?.items.find(
+    (member) => member.user_id === currentUserId
+  )?.role
+  const roleLabel = isSuperAdmin
+    ? t('admin.workbench.superAdminRole')
+    : projectRole === ROLE_ADMIN
+      ? t('admin.workbench.adminRole')
+      : projectRole === ROLE_WRITER
+        ? t('admin.workbench.writerRole')
+        : t('admin.workbench.readerRole')
+  const roleGuidance = isSuperAdmin
+    ? t('admin.workbench.superAdminGuidance')
+    : projectRole === ROLE_ADMIN
+      ? t('admin.workbench.adminGuidance')
+      : projectRole === ROLE_WRITER
+        ? t('admin.workbench.writerGuidance')
+        : t('admin.workbench.readerGuidance')
   const documentsQuery = useQuery({
     queryKey: ['documents', firstProjectId],
     queryFn: () => listDocuments(firstProjectId),
@@ -840,7 +973,7 @@ export function DashboardPage() {
       healthQuery.isLoading ||
       identityQuery.isLoading ||
       (isSuperAdmin && usersQuery.isLoading) ||
-      teamsQuery.isLoading ||
+      (isSuperAdmin && teamsQuery.isLoading) ||
       projectsQuery.isLoading ||
       documentsQuery.isLoading ||
       branchesQuery.isLoading ||
@@ -850,7 +983,7 @@ export function DashboardPage() {
       healthQuery.isError ||
       identityQuery.isError ||
       (isSuperAdmin && usersQuery.isError) ||
-      teamsQuery.isError ||
+      (isSuperAdmin && teamsQuery.isError) ||
       projectsQuery.isError ||
       documentsQuery.isError ||
       branchesQuery.isError ||
@@ -859,7 +992,7 @@ export function DashboardPage() {
     error: (healthQuery.error ??
       identityQuery.error ??
       (isSuperAdmin ? usersQuery.error : null) ??
-      teamsQuery.error ??
+      (isSuperAdmin ? teamsQuery.error : null) ??
       projectsQuery.error ??
       documentsQuery.error ??
       branchesQuery.error ??
@@ -872,11 +1005,15 @@ export function DashboardPage() {
     icon: typeof UsersRound
     done: boolean
   }> = [
-    {
-      key: 'team',
-      icon: UsersRound,
-      done: Boolean((teamsQuery.data?.total ?? 0) > 0),
-    },
+    ...(isSuperAdmin
+      ? [
+          {
+            key: 'team' as const,
+            icon: UsersRound,
+            done: Boolean((teamsQuery.data?.total ?? 0) > 0),
+          },
+        ]
+      : []),
     {
       key: 'project',
       icon: Layers3,
@@ -937,17 +1074,9 @@ export function DashboardPage() {
               <p className='text-sm font-medium'>
                 {t('admin.workbench.roleTitle')}
               </p>
-              <StatusBadge>
-                {identityQuery.data?.is_super_admin
-                  ? t('admin.workbench.superAdminRole')
-                  : t('admin.workbench.adminRole')}
-              </StatusBadge>
+              <StatusBadge>{roleLabel}</StatusBadge>
             </div>
-            <p className='text-sm text-muted-foreground'>
-              {identityQuery.data?.is_super_admin
-                ? t('admin.workbench.superAdminGuidance')
-                : t('admin.workbench.adminGuidance')}
-            </p>
+            <p className='text-sm text-muted-foreground'>{roleGuidance}</p>
           </div>
         </CardContent>
       </Card>
@@ -959,7 +1088,7 @@ export function DashboardPage() {
         />
         <StatCard
           title={t('nav.teams')}
-          value={String(teamsQuery.data?.total ?? '-')}
+          value={isSuperAdmin ? String(teamsQuery.data?.total ?? '-') : '—'}
           description={t('admin.workbench.teamsStat')}
         />
         <StatCard
@@ -1053,8 +1182,15 @@ export function DashboardPage() {
 
 export function UsersPage() {
   const { t } = useLanguage()
+  const isSuperAdmin = Boolean(
+    useAuthStore((state) => state.auth.user?.is_super_admin)
+  )
   const invalidate = useInvalidateAll()
-  const usersQuery = useQuery({ queryKey: ['users'], queryFn: listUsers })
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: listUsers,
+    enabled: isSuperAdmin,
+  })
   const [selectedUserId, setSelectedUserId] = useState('')
   const selectedUser = usersQuery.data?.items.find(
     (user) => user.id === selectedUserId
@@ -1086,6 +1222,10 @@ export function UsersPage() {
     onSuccess: invalidate,
   })
 
+  if (!isSuperAdmin) {
+    return <AccessDeniedPage page='users' />
+  }
+
   return (
     <PageChrome page='users'>
       <LoadingErrorState
@@ -1100,7 +1240,7 @@ export function UsersPage() {
         submitLabel={t('admin.common.create')}
         pending={createMutation.isPending}
         onSubmit={(formData) =>
-          createMutation.mutate({
+          createMutation.mutateAsync({
             email: fieldValue(formData, 'email'),
             name: fieldValue(formData, 'name'),
             password: fieldValue(formData, 'password'),
@@ -1229,8 +1369,15 @@ export function UsersPage() {
 
 export function TeamsPage() {
   const { t } = useLanguage()
+  const isSuperAdmin = Boolean(
+    useAuthStore((state) => state.auth.user?.is_super_admin)
+  )
   const invalidate = useInvalidateAll()
-  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams })
+  const teamsQuery = useQuery({
+    queryKey: ['teams'],
+    queryFn: listTeams,
+    enabled: isSuperAdmin,
+  })
   const createMutation = useMutation({
     mutationFn: createTeam,
     onSuccess: invalidate,
@@ -1251,6 +1398,10 @@ export function TeamsPage() {
     mutationFn: archiveTeam,
     onSuccess: invalidate,
   })
+  if (!isSuperAdmin) {
+    return <AccessDeniedPage page='teams' />
+  }
+
   return (
     <EntityPage
       page='teams'
@@ -1261,7 +1412,7 @@ export function TeamsPage() {
         error: teamsQuery.error,
       }}
       onCreate={(formData) =>
-        createMutation.mutate({
+        createMutation.mutateAsync({
           name: fieldValue(formData, 'name'),
           description: fieldValue(formData, 'description'),
         })
@@ -1293,7 +1444,7 @@ function EntityPage({
   createTitle: string
   queryState: QueryState
   children: React.ReactNode
-  onCreate: (formData: FormData) => void
+  onCreate: (formData: FormData) => Promise<unknown>
   createPending: boolean
 }) {
   const { t } = useLanguage()
@@ -1322,14 +1473,25 @@ function NameDescriptionTable({
   onArchive,
   pending,
   emptyPreset,
+  readOnly = false,
+  canEdit,
 }: {
   items: Array<TeamDTO | ProjectDTO>
   onUpdate: (id: string, name: string, description: string) => void
   onArchive: (id: string) => void
   pending: boolean
   emptyPreset: EmptyStatePreset
+  readOnly?: boolean
+  canEdit?: (id: string) => boolean
 }) {
   const { t } = useLanguage()
+  const hasEditableItem =
+    !readOnly &&
+    items.some(
+      (item) =>
+        ('status' in item ? item.status === ACTIVE_STATUS : true) &&
+        (canEdit?.(item.id) ?? true)
+    )
   return (
     <CollectionCard
       title={emptyPreset === 'teams' ? t('nav.teams') : t('nav.projects')}
@@ -1341,30 +1503,48 @@ function NameDescriptionTable({
             <TableRow>
               <TableHead>{t('admin.fields.name')}</TableHead>
               <TableHead>{t('admin.fields.id')}</TableHead>
-              <TableHead>{t('admin.fields.actions')}</TableHead>
+              {hasEditableItem && (
+                <TableHead>{t('admin.fields.actions')}</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className='min-w-80'>
-                  <InlineNameDescriptionForm
-                    item={item}
-                    onUpdate={onUpdate}
-                    pending={pending}
-                  />
+                  {readOnly ||
+                  ('status' in item && item.status !== ACTIVE_STATUS) ||
+                  (canEdit && !canEdit(item.id)) ? (
+                    <div className='grid gap-1'>
+                      <span className='font-medium'>{item.name}</span>
+                      <span className='text-sm text-muted-foreground'>
+                        {item.description || t('admin.common.none')}
+                      </span>
+                    </div>
+                  ) : (
+                    <InlineNameDescriptionForm
+                      item={item}
+                      onUpdate={onUpdate}
+                      pending={pending}
+                    />
+                  )}
                 </TableCell>
                 <TableCell className='font-mono text-xs'>{item.id}</TableCell>
-                <TableCell>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    disabled={pending}
-                    onClick={() => onArchive(item.id)}
-                  >
-                    {t('admin.common.archive')}
-                  </Button>
-                </TableCell>
+                {hasEditableItem && (
+                  <TableCell>
+                    {(!('status' in item) || item.status === ACTIVE_STATUS) &&
+                      (!canEdit || canEdit(item.id)) && (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={pending}
+                          onClick={() => onArchive(item.id)}
+                        >
+                          {t('admin.common.archive')}
+                        </Button>
+                      )}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -1378,19 +1558,73 @@ function NameDescriptionTable({
 
 export function ProjectsPage() {
   const { t } = useLanguage()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const isSuperAdmin = Boolean(authUser?.is_super_admin)
   const invalidate = useInvalidateAll()
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
   })
-  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams })
-  const usersQuery = useQuery({ queryKey: ['users'], queryFn: listUsers })
-  const [projectId, setProjectId] = useState('')
+  const teamsQuery = useQuery({
+    queryKey: ['teams'],
+    queryFn: listTeams,
+    enabled: isSuperAdmin,
+  })
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: listUsers,
+    enabled: isSuperAdmin,
+  })
+  const [requestedProjectId, setProjectId] = useState('')
+  const projectOptions = useMemo(
+    () =>
+      projectsQuery.data?.items.map((project) => ({
+        value: project.id,
+        label: project.name,
+      })) ?? [],
+    [projectsQuery.data]
+  )
+  const projectId = projectOptions.some(
+    (project) => project.value === requestedProjectId
+  )
+    ? requestedProjectId
+    : (projectOptions.find((project) => {
+        const item = projectsQuery.data?.items.find(
+          (candidate) => candidate.id === project.value
+        )
+        return item?.status === ACTIVE_STATUS
+      })?.value ??
+      projectOptions[0]?.value ??
+      '')
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
   const membersQuery = useQuery({
     queryKey: ['project-members', projectId],
     queryFn: () => listProjectMembers(projectId),
     enabled: projectId.length > 0,
   })
+  const selectedRole = membersQuery.data?.items.find(
+    (member) => member.user_id === authUser?.id
+  )?.role
+  const canManageSelectedProject = Boolean(
+    selectedProject?.status === ACTIVE_STATUS &&
+    (isSuperAdmin || selectedRole === ROLE_ADMIN)
+  )
+  const memberCandidatesQuery = useQuery({
+    queryKey: ['project-member-candidates', projectId],
+    queryFn: () => listProjectMemberCandidates(projectId),
+    enabled: projectId.length > 0 && canManageSelectedProject,
+  })
+  const memberCandidatesLoading = isSuperAdmin
+    ? usersQuery.isLoading || membersQuery.isLoading
+    : memberCandidatesQuery.isLoading
+  const memberCandidatesIsError = isSuperAdmin
+    ? usersQuery.isError || membersQuery.isError
+    : memberCandidatesQuery.isError
+  const memberCandidatesError = isSuperAdmin
+    ? (usersQuery.error ?? membersQuery.error)
+    : memberCandidatesQuery.error
   const createMutation = useMutation({
     mutationFn: createProject,
     onSuccess: invalidate,
@@ -1430,16 +1664,29 @@ export function ProjectsPage() {
       value: team.id,
       label: team.name,
     })) ?? []
-  const userOptions =
-    usersQuery.data?.items.map((user) => ({
-      value: user.id,
-      label: user.email,
-    })) ?? []
-  const projectOptions =
-    projectsQuery.data?.items.map((project) => ({
-      value: project.id,
-      label: project.name,
-    })) ?? []
+  const projectAdminOptions =
+    usersQuery.data?.items
+      .filter((user) => user.status === ACTIVE_STATUS && !user.is_super_admin)
+      .map((user) => ({
+        value: user.id,
+        label: user.name ? `${user.name} · ${user.email}` : user.email,
+      })) ?? []
+  const memberCandidateOptions = memberCandidatesLoading
+    ? []
+    : ((isSuperAdmin
+        ? usersQuery.data?.items.filter(
+            (user) =>
+              user.status === ACTIVE_STATUS &&
+              !user.is_super_admin &&
+              !membersQuery.data?.items.some(
+                (member) => member.user_id === user.id
+              )
+          )
+        : memberCandidatesQuery.data?.items
+      )?.map((user) => ({
+        value: user.id,
+        label: user.name ? `${user.name} · ${user.email}` : user.email,
+      })) ?? [])
   return (
     <PageChrome page='projects'>
       <LoadingErrorState
@@ -1449,39 +1696,49 @@ export function ProjectsPage() {
           error: projectsQuery.error,
         }}
       />
-      <FormCard
-        title={t('admin.sections.createProject')}
-        submitLabel={t('admin.common.create')}
-        pending={createMutation.isPending}
-        onSubmit={(formData) =>
-          createMutation.mutate({
-            team_id: fieldValue(formData, 'team_id'),
-            admin_user_id: fieldValue(formData, 'admin_user_id'),
-            name: fieldValue(formData, 'name'),
-            description: fieldValue(formData, 'description'),
-          })
-        }
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <NativeSelect
-            name='team_id'
-            label={t('admin.fields.team')}
-            placeholder={t('admin.placeholders.selectProject')}
-            options={teamOptions}
-          />
-          <NativeSelect
-            name='admin_user_id'
-            label={t('admin.fields.user')}
-            placeholder={t('admin.placeholders.selectUser')}
-            options={userOptions}
-          />
-          <TextField label={t('admin.fields.name')} name='name' required />
-          <TextField label={t('admin.fields.description')} name='description' />
-        </div>
-      </FormCard>
+      {isSuperAdmin && (
+        <FormCard
+          title={t('admin.sections.createProject')}
+          submitLabel={t('admin.common.create')}
+          pending={createMutation.isPending}
+          onSubmit={(formData) =>
+            createMutation.mutateAsync({
+              team_id: fieldValue(formData, 'team_id'),
+              admin_user_id: fieldValue(formData, 'admin_user_id'),
+              name: fieldValue(formData, 'name'),
+              description: fieldValue(formData, 'description'),
+            })
+          }
+        >
+          <div className='grid gap-4 md:grid-cols-2'>
+            <NativeSelect
+              name='team_id'
+              label={t('admin.fields.team')}
+              placeholder={t('admin.placeholders.selectProject')}
+              options={teamOptions}
+            />
+            <NativeSelect
+              name='admin_user_id'
+              label={t('admin.fields.user')}
+              placeholder={t('admin.placeholders.selectUser')}
+              options={projectAdminOptions}
+            />
+            <TextField label={t('admin.fields.name')} name='name' required />
+            <TextField
+              label={t('admin.fields.description')}
+              name='description'
+            />
+          </div>
+        </FormCard>
+      )}
       <NameDescriptionTable
         emptyPreset='projects'
         items={projectsQuery.data?.items ?? []}
+        canEdit={(id) =>
+          projectsQuery.data?.items.find((project) => project.id === id)
+            ?.status === ACTIVE_STATUS &&
+          (isSuperAdmin || (id === projectId && canManageSelectedProject))
+        }
         onUpdate={(id, name, description) =>
           updateMutation.mutate({ id, name, description })
         }
@@ -1500,43 +1757,73 @@ export function ProjectsPage() {
           placeholder={t('admin.placeholders.selectProject')}
           options={projectOptions}
         />
-        <form
-          className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
-          onSubmit={(event) => {
-            event.preventDefault()
-            const formData = new FormData(event.currentTarget)
-            addMemberMutation.mutate({
-              userId: fieldValue(formData, 'user_id'),
-              role: numberValue(formData, 'role', ROLE_READER),
-            })
-            event.currentTarget.reset()
-          }}
-        >
-          <NativeSelect
-            name='user_id'
-            label={t('admin.fields.user')}
-            placeholder={t('admin.placeholders.selectUser')}
-            options={userOptions}
-          />
-          <NativeSelect
-            name='role'
-            label={t('admin.fields.role')}
-            placeholder={t('admin.roles.reader')}
-            options={roleOptions(t)}
-          />
-          <Button
-            type='submit'
-            className='self-end'
-            disabled={!projectId || addMemberMutation.isPending}
-          >
-            {t('admin.common.create')}
-          </Button>
-        </form>
+        {canManageSelectedProject && (
+          <>
+            <LoadingErrorState
+              state={{
+                isLoading: memberCandidatesLoading,
+                isError: memberCandidatesIsError,
+                error: memberCandidatesError,
+              }}
+            />
+            {memberCandidateOptions.length ? (
+              <form
+                className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const form = event.currentTarget
+                  const formData = new FormData(form)
+                  addMemberMutation.mutate(
+                    {
+                      userId: fieldValue(formData, 'user_id'),
+                      role: numberValue(formData, 'role', ROLE_READER),
+                    },
+                    { onSuccess: () => form.reset() }
+                  )
+                }}
+              >
+                <NativeSelect
+                  name='user_id'
+                  label={t('admin.fields.user')}
+                  placeholder={t('admin.placeholders.selectUser')}
+                  options={memberCandidateOptions}
+                />
+                <NativeSelect
+                  name='role'
+                  label={t('admin.fields.role')}
+                  placeholder={t('admin.roles.reader')}
+                  options={roleOptions(t)}
+                />
+                <Button
+                  type='submit'
+                  className='self-end'
+                  disabled={
+                    !projectId ||
+                    memberCandidatesLoading ||
+                    addMemberMutation.isPending
+                  }
+                >
+                  {t('admin.common.add')}
+                </Button>
+              </form>
+            ) : (
+              !memberCandidatesLoading && (
+                <p className='text-sm text-muted-foreground'>
+                  {t('admin.emptyStates.memberCandidates.description')}
+                </p>
+              )
+            )}
+          </>
+        )}
         <MembersTable
           members={membersQuery.data?.items ?? []}
-          users={usersQuery.data?.items ?? []}
+          users={[
+            ...(usersQuery.data?.items ?? []),
+            ...(memberCandidatesQuery.data?.items ?? []),
+          ]}
           onRole={(userId, role) => roleMutation.mutate({ userId, role })}
           onRemove={(userId) => removeMutation.mutate(userId)}
+          readOnly={!canManageSelectedProject}
         />
       </CollectionCard>
     </PageChrome>
@@ -1556,15 +1843,17 @@ function MembersTable({
   users,
   onRole,
   onRemove,
+  readOnly = false,
 }: {
   members: Awaited<ReturnType<typeof listProjectMembers>>['items']
   users: UserDTO[]
   onRole: (userId: string, role: number) => void
   onRemove: (userId: string) => void
+  readOnly?: boolean
 }) {
   const { t } = useLanguage()
   const userEmail = (userId: string) =>
-    users.find((user) => user.id === userId)?.email ?? userId
+    users.find((user) => user.id === userId)?.email
   return members.length ? (
     <Table>
       <TableHeader>
@@ -1572,40 +1861,61 @@ function MembersTable({
           <TableHead>{t('admin.fields.user')}</TableHead>
           <TableHead>{t('admin.fields.role')}</TableHead>
           <TableHead>{t('admin.fields.status')}</TableHead>
-          <TableHead>{t('admin.fields.actions')}</TableHead>
+          {!readOnly && <TableHead>{t('admin.fields.actions')}</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
         {members.map((member) => (
           <TableRow key={member.user_id}>
-            <TableCell>{userEmail(member.user_id)}</TableCell>
             <TableCell>
-              <select
-                className='h-9 rounded-md border border-input bg-background px-3 text-sm'
-                value={String(member.role)}
-                onChange={(event) =>
-                  onRole(member.user_id, Number(event.currentTarget.value))
-                }
-              >
-                {roleOptions(t).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <div className='grid gap-1'>
+                <span className='font-medium'>
+                  {member.user_email ??
+                    userEmail(member.user_id) ??
+                    member.user_id}
+                </span>
+                {member.user_name && (
+                  <span className='text-xs text-muted-foreground'>
+                    {member.user_name}
+                  </span>
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
+              {readOnly ? (
+                roleOptions(t).find(
+                  (option) => option.value === String(member.role)
+                )?.label
+              ) : (
+                <select
+                  className='h-9 rounded-md border border-input bg-background px-3 text-sm'
+                  value={String(member.role)}
+                  onChange={(event) =>
+                    onRole(member.user_id, Number(event.currentTarget.value))
+                  }
+                >
+                  {roleOptions(t).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </TableCell>
             <TableCell>
               <StatusBadge>{statusLabel(member.status, t)}</StatusBadge>
             </TableCell>
-            <TableCell>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => onRemove(member.user_id)}
-              >
-                {t('admin.common.archive')}
-              </Button>
-            </TableCell>
+            {!readOnly && (
+              <TableCell>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={() => onRemove(member.user_id)}
+                >
+                  {t('admin.common.archive')}
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>
@@ -1618,14 +1928,85 @@ function MembersTable({
 export function DocumentsPage() {
   const { t } = useLanguage()
   const invalidate = useInvalidateAll()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const [documentTypeFilter, setDocumentTypeFilter] = useState(0)
   const { projectsQuery, projectId, setProjectId, projectOptions } =
     useProjectsAndSelection()
   const { documentsQuery, documentId, setDocumentId, documentOptions } =
-    useDocumentsAndSelection(projectId)
+    useDocumentsAndSelection(
+      projectId,
+      documentTypeFilter > 0 ? documentTypeFilter : undefined
+    )
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId, documentId],
     queryFn: () => listBranches(projectId, documentId),
     enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const membersQuery = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !authUser?.is_super_admin,
+  })
+  const canManageShares = Boolean(
+    authUser?.is_super_admin ||
+    membersQuery.data?.items.some(
+      (member) => member.user_id === authUser?.id && member.role === 3
+    )
+  )
+  const canManageDocuments = canManageShares
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
+  const selectedDocument = documentsQuery.data?.items.find(
+    (document) => document.id === documentId
+  )
+  const canMutateProject = Boolean(
+    canManageDocuments && selectedProject?.status === ACTIVE_STATUS
+  )
+  const canMutateDocument = Boolean(
+    canMutateProject && selectedDocument?.status === ACTIVE_STATUS
+  )
+  const documentVersionsQuery = useQuery({
+    queryKey: ['versions', projectId, documentId, 'document-summary'],
+    queryFn: () => listVersions(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const latestDocumentVersion = documentVersionsQuery.data?.items[0]
+  const documentEndpointsQuery = useQuery({
+    queryKey: [
+      'endpoints',
+      projectId,
+      documentId,
+      latestDocumentVersion?.id,
+      'document-summary',
+    ],
+    queryFn: () =>
+      listEndpoints(projectId, documentId, latestDocumentVersion?.id ?? ''),
+    enabled:
+      latestDocumentVersion !== undefined &&
+      documentsQuery.data?.items.find((item) => item.id === documentId)
+        ?.document_type === DOCUMENT_TYPE_OPENAPI,
+  })
+  const markdownContentQuery = useQuery({
+    queryKey: [
+      'version-content',
+      projectId,
+      documentId,
+      latestDocumentVersion?.id,
+      'raw',
+      'document-summary',
+    ],
+    queryFn: () =>
+      getVersionContent(
+        projectId,
+        documentId,
+        latestDocumentVersion?.id ?? '',
+        'raw'
+      ),
+    enabled:
+      latestDocumentVersion !== undefined &&
+      documentsQuery.data?.items.find((item) => item.id === documentId)
+        ?.document_type === DOCUMENT_TYPE_MARKDOWN,
   })
   const createDocumentMutation = useMutation({
     mutationFn: (payload: Parameters<typeof createDocument>[1]) =>
@@ -1689,42 +2070,60 @@ export function DocumentsPage() {
           placeholder={t('admin.placeholders.selectDocument')}
           options={documentOptions}
         />
+        <NativeSelect
+          label={t('admin.fields.type')}
+          value={String(documentTypeFilter)}
+          onChange={(value) => setDocumentTypeFilter(Number(value))}
+          placeholder={t('admin.common.all')}
+          options={[
+            { value: '0', label: t('admin.common.all') },
+            ...documentTypeOptions(t),
+          ]}
+        />
       </SelectorGrid>
-      <FormCard
-        title={t('admin.sections.createDocument')}
-        submitLabel={t('admin.common.create')}
-        pending={createDocumentMutation.isPending}
-        onSubmit={(formData) =>
-          createDocumentMutation.mutate({
-            name: fieldValue(formData, 'name'),
-            description: fieldValue(formData, 'description'),
-            relative_path: fieldValue(formData, 'relative_path'),
-            document_type: numberValue(
-              formData,
-              'document_type',
-              DOCUMENT_TYPE_OPENAPI
-            ),
-          })
-        }
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <TextField label={t('admin.fields.name')} name='name' required />
-          <TextField
-            label={t('admin.fields.relativePath')}
-            name='relative_path'
-            required
-          />
-          <NativeSelect
-            name='document_type'
-            label={t('admin.fields.type')}
-            placeholder={t('admin.types.openapi')}
-            options={documentTypeOptions(t)}
-          />
-          <TextField label={t('admin.fields.description')} name='description' />
-        </div>
-      </FormCard>
+      {canMutateProject && (
+        <FormCard
+          title={t('admin.sections.createDocument')}
+          submitLabel={t('admin.common.create')}
+          pending={createDocumentMutation.isPending}
+          onSubmit={(formData) =>
+            createDocumentMutation.mutateAsync({
+              name: fieldValue(formData, 'name'),
+              description: fieldValue(formData, 'description'),
+              relative_path: fieldValue(formData, 'relative_path'),
+              document_type: numberValue(
+                formData,
+                'document_type',
+                DOCUMENT_TYPE_OPENAPI
+              ),
+            })
+          }
+        >
+          <div className='grid gap-4 md:grid-cols-2'>
+            <TextField label={t('admin.fields.name')} name='name' required />
+            <TextField
+              label={t('admin.fields.relativePath')}
+              name='relative_path'
+              required
+            />
+            <NativeSelect
+              name='document_type'
+              label={t('admin.fields.type')}
+              placeholder={t('admin.types.openapi')}
+              options={documentTypeOptions(t)}
+            />
+            <TextField
+              label={t('admin.fields.description')}
+              name='description'
+            />
+          </div>
+        </FormCard>
+      )}
       <DocumentsTable
         documents={documentsQuery.data?.items ?? []}
+        pending={
+          updateDocumentMutation.isPending || archiveDocumentMutation.isPending
+        }
         onUpdate={(document) =>
           updateDocumentMutation.mutate({
             id: document.id,
@@ -1733,30 +2132,76 @@ export function DocumentsPage() {
               description: document.description ?? '',
               relative_path: document.relative_path ?? '',
               document_type: document.document_type,
-              status: document.status,
             },
           })
         }
         onArchive={(id) => archiveDocumentMutation.mutate(id)}
+        readOnly={!canMutateProject}
       />
-      <FormCard
-        title={t('admin.sections.createBranch')}
-        submitLabel={t('admin.common.create')}
-        pending={createBranchMutation.isPending}
-        onSubmit={(formData) =>
-          createBranchMutation.mutate({
-            name: fieldValue(formData, 'name'),
-            description: fieldValue(formData, 'description'),
-          })
-        }
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <TextField label={t('admin.fields.name')} name='name' required />
-          <TextField label={t('admin.fields.description')} name='description' />
-        </div>
-      </FormCard>
+      {documentId && (
+        <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+          <StatCard
+            title={t('admin.sections.versions')}
+            value={String(documentVersionsQuery.data?.total ?? 0)}
+            description={t('admin.pages.versions.cue')}
+          />
+          <StatCard
+            title={t('admin.fields.versionName')}
+            value={latestDocumentVersion?.version_name ?? '—'}
+            description={t('admin.pages.versions.next')}
+          />
+          <StatCard
+            title={
+              documentsQuery.data?.items.find((item) => item.id === documentId)
+                ?.document_type === DOCUMENT_TYPE_MARKDOWN
+                ? t('admin.markdownFacts.lineCount', {
+                    count: String(
+                      markdownContentQuery.data?.content.split('\n').length ?? 0
+                    ),
+                  })
+                : t('admin.sections.endpoints')
+            }
+            value={
+              documentsQuery.data?.items.find((item) => item.id === documentId)
+                ?.document_type === DOCUMENT_TYPE_MARKDOWN
+                ? `${new TextEncoder().encode(markdownContentQuery.data?.content ?? '').length} B`
+                : String(documentEndpointsQuery.data?.total ?? 0)
+            }
+            description={t('admin.pages.documents.cue')}
+          />
+          <StatCard
+            title={t('admin.sections.branches')}
+            value={String(branchesQuery.data?.total ?? 0)}
+            description={t('admin.pages.documents.next')}
+          />
+        </section>
+      )}
+      {canMutateDocument && (
+        <FormCard
+          title={t('admin.sections.createBranch')}
+          submitLabel={t('admin.common.create')}
+          pending={createBranchMutation.isPending}
+          onSubmit={(formData) =>
+            createBranchMutation.mutateAsync({
+              name: fieldValue(formData, 'name'),
+              description: fieldValue(formData, 'description'),
+            })
+          }
+        >
+          <div className='grid gap-4 md:grid-cols-2'>
+            <TextField label={t('admin.fields.name')} name='name' required />
+            <TextField
+              label={t('admin.fields.description')}
+              name='description'
+            />
+          </div>
+        </FormCard>
+      )}
       <BranchesTable
         branches={branchesQuery.data?.items ?? []}
+        pending={
+          updateBranchMutation.isPending || archiveBranchMutation.isPending
+        }
         onUpdate={(branch) =>
           updateBranchMutation.mutate({
             id: branch.id,
@@ -1769,6 +2214,16 @@ export function DocumentsPage() {
           })
         }
         onArchive={(id) => archiveBranchMutation.mutate(id)}
+        readOnly={!canMutateDocument}
+      />
+      <DocumentSharePanel
+        key={`${projectId}:${documentId}`}
+        projectId={projectId}
+        documentId={documentId}
+        branches={branchesQuery.data?.items ?? []}
+        versions={documentVersionsQuery.data?.items ?? []}
+        canManage={canManageShares}
+        interactive={canMutateDocument}
       />
     </PageChrome>
   )
@@ -1785,10 +2240,14 @@ function DocumentsTable({
   documents,
   onUpdate,
   onArchive,
+  pending,
+  readOnly = false,
 }: {
   documents: DocumentDTO[]
   onUpdate: (document: DocumentDTO) => void
   onArchive: (id: string) => void
+  pending: boolean
+  readOnly?: boolean
 }) {
   const { t } = useLanguage()
   return (
@@ -1800,17 +2259,27 @@ function DocumentsTable({
               <TableHead>{t('admin.fields.name')}</TableHead>
               <TableHead>{t('admin.fields.type')}</TableHead>
               <TableHead>{t('admin.fields.status')}</TableHead>
-              <TableHead>{t('admin.fields.actions')}</TableHead>
+              {!readOnly && <TableHead>{t('admin.fields.actions')}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {documents.map((document) => (
               <TableRow key={document.id}>
-                <TableCell>
-                  <div className='font-medium'>{document.name}</div>
-                  <div className='text-xs text-muted-foreground'>
-                    {document.relative_path}
-                  </div>
+                <TableCell className='min-w-96'>
+                  {readOnly || document.status !== ACTIVE_STATUS ? (
+                    <div className='grid gap-1'>
+                      <span className='font-medium'>{document.name}</span>
+                      <span className='text-xs text-muted-foreground'>
+                        {document.relative_path}
+                      </span>
+                    </div>
+                  ) : (
+                    <DocumentEditForm
+                      document={document}
+                      pending={pending}
+                      onUpdate={onUpdate}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   {documentTypeLabel(document.document_type, t)}
@@ -1818,24 +2287,20 @@ function DocumentsTable({
                 <TableCell>
                   <StatusBadge>{statusLabel(document.status, t)}</StatusBadge>
                 </TableCell>
-                <TableCell>
-                  <div className='flex gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onUpdate(document)}
-                    >
-                      {t('admin.common.update')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onArchive(document.id)}
-                    >
-                      {t('admin.common.archive')}
-                    </Button>
-                  </div>
-                </TableCell>
+                {!readOnly && (
+                  <TableCell>
+                    {document.status === ACTIVE_STATUS && (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled={pending}
+                        onClick={() => onArchive(document.id)}
+                      >
+                        {t('admin.common.archive')}
+                      </Button>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -1847,14 +2312,66 @@ function DocumentsTable({
   )
 }
 
+function DocumentEditForm({
+  document,
+  pending,
+  onUpdate,
+}: {
+  document: DocumentDTO
+  pending: boolean
+  onUpdate: (document: DocumentDTO) => void
+}) {
+  const { t } = useLanguage()
+  return (
+    <form
+      className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.2fr_auto]'
+      onSubmit={(event) => {
+        event.preventDefault()
+        const formData = new FormData(event.currentTarget)
+        onUpdate({
+          ...document,
+          name: fieldValue(formData, 'name'),
+          description: fieldValue(formData, 'description'),
+          relative_path: fieldValue(formData, 'relative_path'),
+        })
+      }}
+    >
+      <Input
+        name='name'
+        defaultValue={document.name}
+        aria-label={t('admin.fields.name')}
+        required
+      />
+      <Input
+        name='relative_path'
+        defaultValue={document.relative_path ?? ''}
+        aria-label={t('admin.fields.relativePath')}
+        required
+      />
+      <Input
+        name='description'
+        defaultValue={document.description ?? ''}
+        aria-label={t('admin.fields.description')}
+      />
+      <Button type='submit' variant='outline' size='sm' disabled={pending}>
+        {t('admin.common.save')}
+      </Button>
+    </form>
+  )
+}
+
 function BranchesTable({
   branches,
   onUpdate,
   onArchive,
+  pending,
+  readOnly = false,
 }: {
   branches: BranchDTO[]
   onUpdate: (branch: BranchDTO) => void
   onArchive: (id: string) => void
+  pending: boolean
+  readOnly?: boolean
 }) {
   const { t } = useLanguage()
   return (
@@ -1868,39 +2385,45 @@ function BranchesTable({
             <TableRow>
               <TableHead>{t('admin.fields.name')}</TableHead>
               <TableHead>{t('admin.fields.status')}</TableHead>
-              <TableHead>{t('admin.fields.actions')}</TableHead>
+              {!readOnly && <TableHead>{t('admin.fields.actions')}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {branches.map((branch) => (
               <TableRow key={branch.id}>
-                <TableCell>
-                  <div className='font-medium'>{branch.name}</div>
-                  <div className='text-xs text-muted-foreground'>
-                    {branch.description}
-                  </div>
+                <TableCell className='min-w-96'>
+                  {readOnly || branch.status !== ACTIVE_STATUS ? (
+                    <div className='grid gap-1'>
+                      <span className='font-medium'>{branch.name}</span>
+                      <span className='text-xs text-muted-foreground'>
+                        {branch.description || t('admin.common.none')}
+                      </span>
+                    </div>
+                  ) : (
+                    <BranchEditForm
+                      branch={branch}
+                      pending={pending}
+                      onUpdate={onUpdate}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   <StatusBadge>{statusLabel(branch.status, t)}</StatusBadge>
                 </TableCell>
-                <TableCell>
-                  <div className='flex gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onUpdate(branch)}
-                    >
-                      {t('admin.common.update')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onArchive(branch.id)}
-                    >
-                      {t('admin.common.archive')}
-                    </Button>
-                  </div>
-                </TableCell>
+                {!readOnly && (
+                  <TableCell>
+                    {branch.status === ACTIVE_STATUS && (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        disabled={pending || branch.is_default}
+                        onClick={() => onArchive(branch.id)}
+                      >
+                        {t('admin.common.archive')}
+                      </Button>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
@@ -1912,10 +2435,74 @@ function BranchesTable({
   )
 }
 
+function BranchEditForm({
+  branch,
+  pending,
+  onUpdate,
+}: {
+  branch: BranchDTO
+  pending: boolean
+  onUpdate: (branch: BranchDTO) => void
+}) {
+  const { t } = useLanguage()
+  return (
+    <form
+      className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.2fr_auto]'
+      onSubmit={(event) => {
+        event.preventDefault()
+        const formData = new FormData(event.currentTarget)
+        onUpdate({
+          ...branch,
+          name: fieldValue(formData, 'name'),
+          description: fieldValue(formData, 'description'),
+          is_default: branch.is_default || formData.get('is_default') === 'on',
+          is_protected: formData.get('is_protected') === 'on',
+        })
+      }}
+    >
+      <Input
+        name='name'
+        defaultValue={branch.name}
+        aria-label={t('admin.fields.name')}
+        required
+      />
+      <Input
+        name='description'
+        defaultValue={branch.description ?? ''}
+        aria-label={t('admin.fields.description')}
+      />
+      <div className='flex flex-wrap items-center gap-3 xl:col-span-2'>
+        <label className='flex items-center gap-2 text-sm'>
+          <input
+            type='checkbox'
+            name='is_default'
+            defaultChecked={branch.is_default}
+            disabled={branch.is_default}
+          />
+          {t('admin.fields.defaultBranch')}
+        </label>
+        <label className='flex items-center gap-2 text-sm'>
+          <input
+            type='checkbox'
+            name='is_protected'
+            defaultChecked={branch.is_protected}
+          />
+          {t('admin.fields.protectedBranch')}
+        </label>
+        <Button type='submit' variant='outline' size='sm' disabled={pending}>
+          {t('admin.common.save')}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 export function DraftsPage() {
   const { t } = useLanguage()
   const invalidate = useInvalidateAll()
-  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const { projectsQuery, projectId, setProjectId, projectOptions } =
+    useProjectsAndSelection()
   const { documentId, selectedDocument, setDocumentId, documentOptions } =
     useDocumentsAndSelection(projectId)
   const branchesQuery = useQuery({
@@ -1923,20 +2510,62 @@ export function DraftsPage() {
     queryFn: () => listBranches(projectId, documentId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
+  const [branchFilter, setBranchFilter] = useState('')
+  const membersQuery = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !authUser?.is_super_admin,
+  })
+  const canPublishForRole = Boolean(
+    authUser?.is_super_admin ||
+    membersQuery.data?.items.some(
+      (member) => member.user_id === authUser?.id && member.role === 3
+    )
+  )
+  const canDraftForRole = Boolean(
+    authUser?.is_super_admin ||
+    membersQuery.data?.items.some(
+      (member) => member.user_id === authUser?.id && member.role >= ROLE_WRITER
+    )
+  )
   const draftsQuery = useQuery({
-    queryKey: ['drafts', projectId, documentId],
-    queryFn: () => listDrafts(projectId, documentId),
+    queryKey: ['drafts', projectId, documentId, branchFilter || 'all'],
+    queryFn: () =>
+      branchFilter
+        ? listDrafts(projectId, documentId, branchFilter)
+        : listDrafts(projectId, documentId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
   const [draftId, setDraftId] = useState('')
   const [contentKind, setContentKind] = useState('raw')
   const [reviewNote, setReviewNote] = useState('')
+  const [promoteSourceBranchId, setPromoteSourceBranchId] = useState('')
+  const [promoteTargetBranchId, setPromoteTargetBranchId] = useState('')
   const draftExistsInDocument = (draftsQuery.data?.items ?? []).some(
     (draft) => draft.id === draftId
   )
   const selectedDraft = draftsQuery.data?.items.find(
     (draft) => draft.id === draftId
   )
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
+  const activeBranches = (branchesQuery.data?.items ?? []).filter(
+    (branch) => branch.status === ACTIVE_STATUS
+  )
+  const activeBranchIds = new Set(activeBranches.map((branch) => branch.id))
+  const activeDocumentContext = Boolean(
+    selectedProject?.status === ACTIVE_STATUS &&
+    selectedDocument?.status === ACTIVE_STATUS
+  )
+  const selectedDraftBranchActive = Boolean(
+    selectedDraft && activeBranchIds.has(selectedDraft.branch_id)
+  )
+  const selectedDraftAIInteractive = Boolean(
+    selectedDraft && activeDocumentContext && selectedDraftBranchActive
+  )
+  const canDraft = canDraftForRole && activeDocumentContext
+  const canPublish = canPublishForRole && activeDocumentContext
   const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
     ? {
         projectId,
@@ -1969,6 +2598,31 @@ export function DraftsPage() {
       draftId.length > 0 &&
       draftExistsInDocument,
   })
+  const editorRawContentQuery = useQuery({
+    queryKey: ['draft-content', projectId, documentId, draftId, 'raw'],
+    queryFn: () => getDraftContent(projectId, documentId, draftId, 'raw'),
+    enabled:
+      selectedDraft !== undefined &&
+      (selectedDraft.status === DRAFT_STATUS_DRAFT ||
+        selectedDraft.status === DRAFT_STATUS_CHANGES_REQUESTED),
+  })
+  const versionsQuery = useQuery({
+    queryKey: ['versions', projectId, documentId, 'promote-sources'],
+    queryFn: () => listVersions(projectId, documentId),
+    enabled: canPublish,
+  })
+  const publishedBranchIds = new Set(
+    versionsQuery.data?.items.map((version) => version.branch_id) ?? []
+  )
+  const promoteSourceOptions = activeBranches
+    .filter((branch) => publishedBranchIds.has(branch.id))
+    .map((branch) => ({ value: branch.id, label: branch.name }))
+  const promoteTargetOptions = activeBranches
+    .filter((branch) => branch.id !== promoteSourceBranchId)
+    .map((branch) => ({ value: branch.id, label: branch.name }))
+  const promotionAvailable = promoteSourceOptions.some((source) =>
+    activeBranches.some((target) => target.id !== source.value)
+  )
   const createMutation = useMutation({
     mutationFn: (payload: Parameters<typeof createDraft>[2]) =>
       createDraft(projectId, documentId, payload),
@@ -1982,6 +2636,11 @@ export function DraftsPage() {
       id: string
       payload: Parameters<typeof updateDraft>[3]
     }) => updateDraft(projectId, documentId, id, payload),
+    onSuccess: invalidate,
+  })
+  const promoteMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof promoteDraft>[2]) =>
+      promoteDraft(projectId, documentId, payload),
     onSuccess: invalidate,
   })
   const actionMutation = useMutation({
@@ -2000,20 +2659,33 @@ export function DraftsPage() {
   })
   const handleProjectChange = (value: string) => {
     setDraftId('')
+    setBranchFilter('')
     setContentKind('raw')
     setReviewNote('')
+    setPromoteSourceBranchId('')
+    setPromoteTargetBranchId('')
     setProjectId(value)
   }
   const handleDocumentChange = (value: string) => {
     setDraftId('')
+    setBranchFilter('')
     setContentKind('raw')
     setReviewNote('')
+    setPromoteSourceBranchId('')
+    setPromoteTargetBranchId('')
     setDocumentId(value)
   }
   const handleDraftSelect = (value: string) => {
     setDraftId(value)
     setReviewNote('')
   }
+  const selectedDraftContent =
+    contentQuery.data?.content ??
+    selectedDraftInlineContent(
+      draftsQuery.data?.items,
+      draftId,
+      activeDraftContentKind
+    )
   return (
     <PageChrome page='drafts'>
       <SelectorGrid>
@@ -2032,8 +2704,24 @@ export function DraftsPage() {
           options={documentOptions}
         />
         <NativeSelect
+          label={t('admin.fields.branch')}
+          value={branchFilter}
+          onChange={(value) => {
+            setDraftId('')
+            setBranchFilter(value)
+          }}
+          placeholder={t('admin.common.all')}
+          options={[
+            { value: '', label: t('admin.common.all') },
+            ...(branchesQuery.data?.items.map((branch) => ({
+              value: branch.id,
+              label: branch.name,
+            })) ?? []),
+          ]}
+        />
+        <NativeSelect
           label={t('admin.fields.draft')}
-          value={draftId}
+          value={draftExistsInDocument ? draftId : ''}
           onChange={handleDraftSelect}
           placeholder={t('admin.fields.draft')}
           options={
@@ -2044,66 +2732,133 @@ export function DraftsPage() {
           }
         />
       </SelectorGrid>
-      <FormCard
-        title={t('admin.sections.createDraft')}
-        submitLabel={
-          draftId ? t('admin.common.update') : t('admin.common.create')
-        }
-        pending={createMutation.isPending || updateMutation.isPending}
-        onSubmit={(formData) => {
-          const payload = {
-            branch_id: fieldValue(formData, 'branch_id'),
-            version_name: fieldValue(formData, 'version_name'),
-            changelog: fieldValue(formData, 'changelog'),
-            source_git_commit_id: fieldValue(formData, 'source_git_commit_id'),
-            content: fieldValue(formData, 'content'),
-            schema_content: fieldValue(formData, 'content'),
+      {canDraftForRole && (
+        <DraftEditorCard
+          selectedDraft={selectedDraft}
+          rawContent={editorRawContentQuery.data?.content}
+          rawContentState={{
+            isLoading: editorRawContentQuery.isLoading,
+            isError: editorRawContentQuery.isError,
+            error: editorRawContentQuery.error,
+          }}
+          branches={activeBranches}
+          contextActive={activeDocumentContext}
+          pending={createMutation.isPending || updateMutation.isPending}
+          onClear={() => handleDraftSelect('')}
+          onCreate={(payload) => createMutation.mutateAsync(payload)}
+          onUpdate={(id, payload) =>
+            updateMutation.mutateAsync({ id, payload })
           }
-          if (draftId) updateMutation.mutate({ id: draftId, payload })
-          else createMutation.mutate(payload)
-        }}
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <NativeSelect
-            name='branch_id'
-            label={t('admin.fields.branch')}
-            placeholder={t('admin.placeholders.selectBranch')}
-            options={
-              branchesQuery.data?.items.map((branch) => ({
-                value: branch.id,
-                label: branch.name,
-              })) ?? []
-            }
-          />
-          <TextField
-            label={t('admin.fields.versionName')}
-            name='version_name'
-            required
-          />
-          <TextField
-            label={t('admin.fields.gitCommit')}
-            name='source_git_commit_id'
-          />
-          <TextField label={t('admin.fields.changelog')} name='changelog' />
-        </div>
-        <TextAreaField
-          label={t('admin.fields.content')}
-          name='content'
-          required
         />
-      </FormCard>
+      )}
+      {canPublish && (
+        <>
+          {promotionAvailable ? (
+            <FormCard
+              title={t('admin.sections.promoteDraft')}
+              submitLabel={t('admin.common.promote')}
+              pending={promoteMutation.isPending}
+              onSubmit={async (formData) => {
+                await promoteMutation.mutateAsync({
+                  source_branch_id: fieldValue(formData, 'source_branch_id'),
+                  target_branch_id: fieldValue(formData, 'target_branch_id'),
+                  version_name: fieldValue(formData, 'version_name'),
+                  changelog: fieldValue(formData, 'changelog'),
+                })
+                setPromoteSourceBranchId('')
+                setPromoteTargetBranchId('')
+              }}
+            >
+              <div className='grid gap-4 md:grid-cols-2'>
+                <NativeSelect
+                  name='source_branch_id'
+                  label={t('admin.fields.sourceBranch')}
+                  placeholder={t('admin.placeholders.selectPublishedBranch')}
+                  options={promoteSourceOptions}
+                  value={promoteSourceBranchId}
+                  onChange={(value) => {
+                    setPromoteSourceBranchId(value)
+                    setPromoteTargetBranchId('')
+                  }}
+                  required
+                />
+                <NativeSelect
+                  name='target_branch_id'
+                  label={t('admin.fields.targetBranch')}
+                  placeholder={t('admin.placeholders.selectBranch')}
+                  options={promoteTargetOptions}
+                  value={promoteTargetBranchId}
+                  onChange={setPromoteTargetBranchId}
+                  disabled={!promoteSourceBranchId}
+                  required
+                />
+                <TextField
+                  label={t('admin.fields.versionName')}
+                  name='version_name'
+                  required
+                />
+                <TextField
+                  label={t('admin.fields.changelog')}
+                  name='changelog'
+                />
+              </div>
+            </FormCard>
+          ) : (
+            !versionsQuery.isLoading && (
+              <Alert>
+                <Route />
+                <AlertTitle>{t('admin.promote.unavailableTitle')}</AlertTitle>
+                <AlertDescription>
+                  {t('admin.promote.unavailableDescription')}
+                </AlertDescription>
+              </Alert>
+            )
+          )}
+        </>
+      )}
       <DraftsTable
         drafts={draftsQuery.data?.items ?? []}
         selected={draftId}
         onSelect={handleDraftSelect}
         onAction={(id, action) => actionMutation.mutate({ id, action })}
+        canDraft={canDraft}
+        canPublish={canPublish}
+        activeBranchIds={activeBranchIds}
       />
-      <ReviewNotePanel
-        selectedDraftName={selectedDraft?.version_name}
-        value={reviewNote}
-        onChange={setReviewNote}
-        pending={actionMutation.isPending}
-      />
+      {canPublish && (
+        <ReviewNotePanel
+          selectedDraftName={selectedDraft?.version_name}
+          value={reviewNote}
+          onChange={setReviewNote}
+          pending={actionMutation.isPending}
+        />
+      )}
+      {selectedDraft?.review_comment && (
+        <Alert>
+          <BookOpenText />
+          <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
+          <AlertDescription>{selectedDraft.review_comment}</AlertDescription>
+        </Alert>
+      )}
+      {selectedDraft?.diff_preview && (
+        <CollectionCard
+          title={t('admin.sections.diffPreview')}
+          count={selectedDraft.diff_preview.items.length}
+        >
+          <DiffSummaryCards
+            summary={selectedDraft.diff_preview.summary}
+            isMarkdown={
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
+          <DiffReviewList
+            items={selectedDraft.diff_preview.items}
+            isMarkdown={
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
+        </CollectionCard>
+      )}
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.contentKind')}
@@ -2115,17 +2870,195 @@ export function DraftsPage() {
       </SelectorGrid>
       <ContentViewer
         title={t('admin.sections.contentViewer')}
-        content={
-          contentQuery.data?.content ??
-          selectedDraftInlineContent(
-            draftsQuery.data?.items,
-            draftId,
-            activeDraftContentKind
-          )
-        }
+        content={selectedDraftContent}
       />
-      <AIContextPanel target={selectedDraftAITarget} />
+      {selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN &&
+        selectedDraftContent && (
+          <MarkdownDocumentViewer content={selectedDraftContent} />
+        )}
+      <AIContextPanel
+        target={selectedDraftAITarget}
+        interactive={selectedDraftAIInteractive}
+        canRegenerate={canPublishForRole && selectedDraftAIInteractive}
+      />
     </PageChrome>
+  )
+}
+
+type DraftPayload = Parameters<typeof createDraft>[2]
+
+function DraftEditorCard({
+  selectedDraft,
+  rawContent,
+  rawContentState,
+  branches,
+  contextActive,
+  pending,
+  onClear,
+  onCreate,
+  onUpdate,
+}: {
+  selectedDraft?: DraftDTO
+  rawContent?: string
+  rawContentState: QueryState
+  branches: BranchDTO[]
+  contextActive: boolean
+  pending: boolean
+  onClear: () => void
+  onCreate: (payload: DraftPayload) => Promise<unknown>
+  onUpdate: (id: string, payload: DraftPayload) => Promise<unknown>
+}) {
+  const { t } = useLanguage()
+  const editable = Boolean(
+    selectedDraft &&
+    (selectedDraft.status === DRAFT_STATUS_DRAFT ||
+      selectedDraft.status === DRAFT_STATUS_CHANGES_REQUESTED)
+  )
+  const selectedBranchActive = selectedDraft
+    ? branches.some((branch) => branch.id === selectedDraft.branch_id)
+    : true
+  const formKey = selectedDraft
+    ? `${selectedDraft.id}:${rawContent ?? 'loading'}`
+    : 'new'
+
+  if (selectedDraft && !editable) {
+    return (
+      <Card className='border-primary/20'>
+        <CardHeader className='border-b pb-5'>
+          <Badge variant='outline' className='w-fit'>
+            {draftStatusLabel(selectedDraft.status, t)}
+          </Badge>
+          <CardTitle>{t('admin.draftEditor.readOnlyTitle')}</CardTitle>
+          <CardDescription>
+            {t('admin.draftEditor.readOnlyDescription')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button type='button' variant='outline' onClick={onClear}>
+            {t('admin.draftEditor.newDraft')}
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (editable && rawContentState.isLoading) {
+    return <LoadingErrorState state={rawContentState} />
+  }
+
+  return (
+    <FormCard
+      key={formKey}
+      title={
+        editable
+          ? t('admin.draftEditor.editTitle')
+          : t('admin.draftEditor.createTitle')
+      }
+      submitLabel={
+        editable ? t('admin.common.update') : t('admin.common.create')
+      }
+      pending={pending}
+      resetOnSuccess={!editable}
+      disabled={!contextActive || !selectedBranchActive}
+      onSubmit={async (formData) => {
+        const file = formData.get('schema_file')
+        const uploadedContent =
+          file instanceof File && file.size > 0 ? await file.text() : ''
+        const content = uploadedContent || fieldValue(formData, 'content')
+        const payload = {
+          branch_id: editable
+            ? (selectedDraft?.branch_id ?? '')
+            : fieldValue(formData, 'branch_id'),
+          version_name: fieldValue(formData, 'version_name'),
+          changelog: fieldValue(formData, 'changelog'),
+          source_git_commit_id: fieldValue(formData, 'source_git_commit_id'),
+          content,
+          schema_content: content,
+        }
+        if (editable && selectedDraft) {
+          await onUpdate(selectedDraft.id, payload)
+        } else {
+          await onCreate(payload)
+        }
+      }}
+    >
+      {editable && (
+        <div className='flex flex-wrap items-center justify-between gap-3 rounded-md border bg-[var(--surface-control)] p-3'>
+          <p className='text-sm text-muted-foreground'>
+            {t('admin.draftEditor.branchImmutable')}
+          </p>
+          <Button type='button' variant='outline' size='sm' onClick={onClear}>
+            {t('admin.draftEditor.newDraft')}
+          </Button>
+        </div>
+      )}
+      {(!contextActive || !selectedBranchActive) && (
+        <Alert>
+          <AlertCircle />
+          <AlertTitle>{t('admin.draftEditor.archivedTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('admin.draftEditor.archivedDescription')}
+          </AlertDescription>
+        </Alert>
+      )}
+      {rawContentState.isError && <LoadingErrorState state={rawContentState} />}
+      <div className='grid gap-4 md:grid-cols-2'>
+        {editable ? (
+          <TextField
+            label={t('admin.fields.branch')}
+            name='branch_display'
+            defaultValue={
+              branches.find((branch) => branch.id === selectedDraft?.branch_id)
+                ?.name ?? selectedDraft?.branch_id
+            }
+            readOnly
+          />
+        ) : (
+          <NativeSelect
+            name='branch_id'
+            label={t('admin.fields.branch')}
+            placeholder={t('admin.placeholders.selectBranch')}
+            options={branches.map((branch) => ({
+              value: branch.id,
+              label: branch.name,
+            }))}
+            required
+          />
+        )}
+        <TextField
+          label={t('admin.fields.versionName')}
+          name='version_name'
+          defaultValue={selectedDraft?.version_name}
+          required
+        />
+        <TextField
+          label={t('admin.fields.gitCommit')}
+          name='source_git_commit_id'
+          defaultValue={selectedDraft?.source_git_commit_id}
+        />
+        <TextField
+          label={t('admin.fields.changelog')}
+          name='changelog'
+          defaultValue={selectedDraft?.changelog}
+        />
+      </div>
+      <TextAreaField
+        label={t('admin.fields.content')}
+        name='content'
+        defaultValue={editable ? rawContent : ''}
+      />
+      <div className='grid gap-2'>
+        <Label htmlFor={`schema-file-${selectedDraft?.id ?? 'new'}`}>
+          {t('admin.fields.schemaFile')}
+        </Label>
+        <Input
+          id={`schema-file-${selectedDraft?.id ?? 'new'}`}
+          name='schema_file'
+          type='file'
+          accept='.yaml,.yml,.json,.md,text/markdown,application/json,application/yaml,text/yaml'
+        />
+      </div>
+    </FormCard>
   )
 }
 
@@ -2249,11 +3182,17 @@ function DraftsTable({
   selected,
   onSelect,
   onAction,
+  canDraft,
+  canPublish,
+  activeBranchIds,
 }: {
   drafts: DraftDTO[]
   selected: string
   onSelect: (id: string) => void
   onAction: (id: string, action: DraftAction) => void
+  canDraft: boolean
+  canPublish: boolean
+  activeBranchIds: ReadonlySet<string>
 }) {
   const { t } = useLanguage()
   return (
@@ -2268,68 +3207,90 @@ function DraftsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {drafts.map((draft) => (
-              <TableRow
-                key={draft.id}
-                data-state={selected === draft.id ? 'selected' : undefined}
-              >
-                <TableCell>
-                  <button
-                    type='button'
-                    className='font-medium underline-offset-4 hover:underline'
-                    onClick={() => onSelect(draft.id)}
-                  >
-                    {draft.version_name}
-                  </button>
-                  <div className='text-xs text-muted-foreground'>
-                    {draft.changelog}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge>{draftStatusLabel(draft.status, t)}</StatusBadge>
-                </TableCell>
-                <TableCell>
-                  <div className='flex flex-wrap gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
+            {drafts.map((draft) => {
+              const canSubmit =
+                canDraft &&
+                activeBranchIds.has(draft.branch_id) &&
+                (draft.status === DRAFT_STATUS_DRAFT ||
+                  draft.status === DRAFT_STATUS_CHANGES_REQUESTED)
+              const canReview =
+                canPublish &&
+                activeBranchIds.has(draft.branch_id) &&
+                draft.status === DRAFT_STATUS_SUBMITTED
+              return (
+                <TableRow
+                  key={draft.id}
+                  data-state={selected === draft.id ? 'selected' : undefined}
+                >
+                  <TableCell>
+                    <button
+                      type='button'
+                      className='font-medium underline-offset-4 hover:underline'
                       onClick={() => onSelect(draft.id)}
                     >
-                      {t('admin.common.view')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onAction(draft.id, 'submit')}
-                    >
-                      {t('admin.common.submit')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={draft.status !== DRAFT_STATUS_SUBMITTED}
-                      onClick={() => onAction(draft.id, 'approve')}
-                    >
-                      {t('admin.common.approve')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onAction(draft.id, 'request')}
-                    >
-                      {t('admin.common.requestChanges')}
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => onAction(draft.id, 'reject')}
-                    >
-                      {t('admin.common.reject')}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                      {draft.version_name}
+                    </button>
+                    <div className='text-xs text-muted-foreground'>
+                      {draft.changelog}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge>
+                      {draftStatusLabel(draft.status, t)}
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => onSelect(draft.id)}
+                      >
+                        {t('admin.common.view')}
+                      </Button>
+                      {canDraft && (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={!canSubmit}
+                          onClick={() => onAction(draft.id, 'submit')}
+                        >
+                          {t('admin.common.submit')}
+                        </Button>
+                      )}
+                      {canPublish && (
+                        <>
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={!canReview}
+                            onClick={() => onAction(draft.id, 'approve')}
+                          >
+                            {t('admin.common.approve')}
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={!canReview}
+                            onClick={() => onAction(draft.id, 'request')}
+                          >
+                            {t('admin.common.requestChanges')}
+                          </Button>
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={!canReview}
+                            onClick={() => onAction(draft.id, 'reject')}
+                          >
+                            {t('admin.common.reject')}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       ) : (
@@ -2341,11 +3302,24 @@ function DraftsTable({
 
 export function VersionsPage() {
   const { t } = useLanguage()
-  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const { projectsQuery, projectId, setProjectId, projectOptions } =
+    useProjectsAndSelection()
   const { documentId, selectedDocument, setDocumentId, documentOptions } =
     useDocumentsAndSelection(projectId)
+  const branchesQuery = useQuery({
+    queryKey: ['branches', projectId, documentId],
+    queryFn: () => listBranches(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const membersQuery = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !authUser?.is_super_admin,
+  })
+  const [branchFilter, setBranchFilter] = useState('')
   const { versionsQuery, versionId, setVersionId, versionOptions } =
-    useVersionsAndSelection(projectId, documentId)
+    useVersionsAndSelection(projectId, documentId, branchFilter || undefined)
   const [contentKind, setContentKind] = useState('raw')
   const isMarkdownDocument =
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
@@ -2439,6 +3413,34 @@ export function VersionsPage() {
       versionId,
       activeVersionContentKind
     )
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
+  const selectedVersion = versionsQuery.data?.items.find(
+    (version) => version.id === versionId
+  )
+  const selectedVersionBranchActive = Boolean(
+    selectedVersion &&
+    branchesQuery.data?.items.some(
+      (branch) =>
+        branch.id === selectedVersion.branch_id &&
+        branch.status === ACTIVE_STATUS
+    )
+  )
+  const selectedVersionAIInteractive = Boolean(
+    selectedVersion &&
+    selectedProject?.status === ACTIVE_STATUS &&
+    selectedDocument?.status === ACTIVE_STATUS &&
+    selectedVersionBranchActive
+  )
+  const canRegenerateVersionSummary = Boolean(
+    selectedVersionAIInteractive &&
+    (authUser?.is_super_admin ||
+      membersQuery.data?.items.some(
+        (member) =>
+          member.user_id === authUser?.id && member.role === ROLE_ADMIN
+      ))
+  )
   const selectedVersionAITarget: AISummaryTarget | undefined = versionId
     ? {
         projectId,
@@ -2463,6 +3465,22 @@ export function VersionsPage() {
           onChange={handleDocumentChange}
           placeholder={t('admin.placeholders.selectDocument')}
           options={documentOptions}
+        />
+        <NativeSelect
+          label={t('admin.fields.branch')}
+          value={branchFilter}
+          onChange={(value) => {
+            setVersionId('')
+            setBranchFilter(value)
+          }}
+          placeholder={t('admin.common.all')}
+          options={[
+            { value: '', label: t('admin.common.all') },
+            ...(branchesQuery.data?.items.map((branch) => ({
+              value: branch.id,
+              label: branch.name,
+            })) ?? []),
+          ]}
         />
         <NativeSelect
           label={t('admin.fields.version')}
@@ -2548,7 +3566,12 @@ export function VersionsPage() {
         content={selectedVersionContent}
       />
       {isMarkdownDocument ? (
-        <MarkdownFactsCard content={selectedVersionContent} />
+        <>
+          {selectedVersionContent && (
+            <MarkdownDocumentViewer content={selectedVersionContent} />
+          )}
+          <MarkdownFactsCard content={selectedVersionContent} />
+        </>
       ) : (
         <EndpointsCard
           endpoints={visibleEndpoints}
@@ -2559,7 +3582,11 @@ export function VersionsPage() {
           untaggedLabel={untaggedLabel}
         />
       )}
-      <AIContextPanel target={selectedVersionAITarget} />
+      <AIContextPanel
+        target={selectedVersionAITarget}
+        interactive={selectedVersionAIInteractive}
+        canRegenerate={canRegenerateVersionSummary}
+      />
     </PageChrome>
   )
 }
@@ -2834,10 +3861,25 @@ function EndpointJsonSection({
 
 export function DiffsPage() {
   const { t } = useLanguage()
-  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection()
-  const { documentId, setDocumentId, documentOptions } =
+  const authUser = useAuthStore((state) => state.auth.user)
+  const { projectsQuery, projectId, setProjectId, projectOptions } =
+    useProjectsAndSelection()
+  const { documentId, selectedDocument, setDocumentId, documentOptions } =
     useDocumentsAndSelection(projectId)
-  const { versionOptions } = useVersionsAndSelection(projectId, documentId)
+  const branchesQuery = useQuery({
+    queryKey: ['branches', projectId, documentId],
+    queryFn: () => listBranches(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const membersQuery = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !authUser?.is_super_admin,
+  })
+  const { versionsQuery, versionOptions } = useVersionsAndSelection(
+    projectId,
+    documentId
+  )
   const [diff, setDiff] = useState<DiffDTO | null>(null)
   const [fromVersionId, setFromVersionId] = useState('')
   const [toVersionId, setToVersionId] = useState('')
@@ -2853,12 +3895,37 @@ export function DiffsPage() {
   const selectedToVersionId = validVersionIds.has(toVersionId)
     ? toVersionId
     : ''
+  const diffHistoryQuery = useQuery({
+    queryKey: [
+      'diffs',
+      projectId,
+      documentId,
+      selectedFromVersionId,
+      selectedToVersionId,
+    ],
+    queryFn: () =>
+      listDiffs(
+        projectId,
+        documentId,
+        selectedFromVersionId || undefined,
+        selectedToVersionId || undefined
+      ),
+    enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const persistedDiff =
+    selectedFromVersionId && selectedToVersionId
+      ? diffHistoryQuery.data?.items.find(
+          (item) =>
+            item.from_version_id === selectedFromVersionId &&
+            item.to_version_id === selectedToVersionId
+        )
+      : undefined
   const activeDiff =
     diff?.document_id === documentId &&
     diff.from_version_id === selectedFromVersionId &&
     diff.to_version_id === selectedToVersionId
       ? diff
-      : null
+      : (persistedDiff ?? null)
   const activeDiffAITarget: AISummaryTarget | undefined = activeDiff
     ? {
         projectId,
@@ -2867,13 +3934,45 @@ export function DiffsPage() {
         ownerId: activeDiff.id,
       }
     : undefined
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
+  const selectedToVersion = versionsQuery.data?.items.find(
+    (version) => version.id === activeDiff?.to_version_id
+  )
+  const activeDiffBranchActive = Boolean(
+    selectedToVersion &&
+    branchesQuery.data?.items.some(
+      (branch) =>
+        branch.id === selectedToVersion.branch_id &&
+        branch.status === ACTIVE_STATUS
+    )
+  )
+  const activeDocumentContext = Boolean(
+    selectedProject?.status === ACTIVE_STATUS &&
+    selectedDocument?.status === ACTIVE_STATUS
+  )
+  const activeDiffAIInteractive = Boolean(
+    activeDiff && activeDocumentContext && activeDiffBranchActive
+  )
+  const canRegenerateDiffSummary = Boolean(
+    activeDiffAIInteractive &&
+    (authUser?.is_super_admin ||
+      membersQuery.data?.items.some(
+        (member) =>
+          member.user_id === authUser?.id && member.role === ROLE_ADMIN
+      ))
+  )
   const diffMutation = useMutation({
     mutationFn: () =>
       compareDiff(projectId, documentId, {
         from_version_id: selectedFromVersionId,
         to_version_id: selectedToVersionId,
       }),
-    onSuccess: setDiff,
+    onSuccess: (result) => {
+      setDiff(result)
+      void diffHistoryQuery.refetch()
+    },
   })
   const summaryQuery = useQuery({
     queryKey: ['diff-summary', projectId, documentId, activeDiff?.id],
@@ -2943,45 +4042,72 @@ export function DiffsPage() {
           disabled={
             !selectedFromVersionId ||
             !selectedToVersionId ||
+            selectedFromVersionId === selectedToVersionId ||
+            !activeDocumentContext ||
+            Boolean(persistedDiff) ||
             diffMutation.isPending
           }
           onClick={() => diffMutation.mutate()}
         >
           <GitCompareArrows className='size-4' />
-          {t('admin.common.compare')}
+          {persistedDiff
+            ? t('admin.diff.existingLoaded')
+            : t('admin.common.compare')}
         </Button>
         <p className='text-sm text-muted-foreground'>
           {t('admin.diff.compareHint')}
         </p>
       </div>
+      <LoadingErrorState
+        state={{
+          isLoading: diffHistoryQuery.isLoading,
+          isError: diffHistoryQuery.isError,
+          error: diffHistoryQuery.error,
+        }}
+      />
+      <CollectionCard
+        title={t('admin.diff.historyTitle')}
+        description={t('admin.diff.historyDescription')}
+        count={diffHistoryQuery.data?.total ?? 0}
+      >
+        {diffHistoryQuery.data?.items.length ? (
+          <div className='grid gap-2'>
+            {diffHistoryQuery.data.items.map((item) => (
+              <button
+                key={item.id}
+                type='button'
+                className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
+                onClick={() => {
+                  setFromVersionId(item.from_version_id ?? '')
+                  setToVersionId(item.to_version_id ?? '')
+                  setDiff(item)
+                }}
+              >
+                <span className='truncate font-mono text-xs'>{item.id}</span>
+                <span className='text-sm text-muted-foreground'>
+                  {item.from_version_id} → {item.to_version_id} ·{' '}
+                  {formatDate(item.created_at)}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState preset='diffs' />
+        )}
+      </CollectionCard>
       <CollectionCard
         title={t('admin.sections.diffResult')}
         description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
         count={visibleItems.length}
       >
         {summary && (
-          <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-            <StatCard
-              title={t('admin.diff.addedEndpoints')}
-              value={String(summary.added_endpoints)}
-              description={t('admin.diff.addedDescription')}
-            />
-            <StatCard
-              title={t('admin.diff.removedEndpoints')}
-              value={String(summary.removed_endpoints)}
-              description={t('admin.diff.removedDescription')}
-            />
-            <StatCard
-              title={t('admin.diff.modifiedEndpoints')}
-              value={String(summary.modified_endpoints)}
-              description={t('admin.diff.modifiedDescription')}
-            />
-            <StatCard
-              title={t('admin.diff.breakingChanges')}
-              value={String(summary.breaking_changes)}
-              description={t('admin.diff.breakingDescription')}
-            />
-          </section>
+          <DiffSummaryCards
+            summary={summary}
+            isMarkdown={
+              summary.document_format === DOCUMENT_FORMAT_MARKDOWN ||
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
         )}
         <SelectorGrid>
           <div className='grid gap-2'>
@@ -3014,17 +4140,240 @@ export function DiffsPage() {
           />
         </SelectorGrid>
         {visibleItems.length ? (
-          <DiffReviewList items={visibleItems} />
+          <DiffReviewList
+            items={visibleItems}
+            isMarkdown={
+              summary?.document_format === DOCUMENT_FORMAT_MARKDOWN ||
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
         ) : (
           <EmptyState preset='diffs' />
         )}
       </CollectionCard>
-      <AIContextPanel target={activeDiffAITarget} />
+      <AIContextPanel
+        target={activeDiffAITarget}
+        interactive={activeDiffAIInteractive}
+        canRegenerate={canRegenerateDiffSummary}
+      />
     </PageChrome>
   )
 }
 
-function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
+export function AuditPage() {
+  const { t } = useLanguage()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const isSuperAdmin = Boolean(authUser?.is_super_admin)
+  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection()
+  const membersQuery = useQuery({
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !isSuperAdmin,
+  })
+  const isProjectAdmin = Boolean(
+    membersQuery.data?.items.some(
+      (member) => member.user_id === authUser?.id && member.role === ROLE_ADMIN
+    )
+  )
+  const [action, setAction] = useState('')
+  const [resourceType, setResourceType] = useState('')
+  const auditQuery = useQuery({
+    queryKey: ['audit-logs', projectId, action, resourceType, isSuperAdmin],
+    queryFn: () =>
+      listAuditLogs({
+        project_id: projectId || undefined,
+        action: action || undefined,
+        resource_type: resourceType || undefined,
+        limit: 200,
+      }),
+    enabled: isSuperAdmin || (projectId.length > 0 && isProjectAdmin),
+  })
+
+  return (
+    <PageChrome page='audit'>
+      <SelectorGrid>
+        <NativeSelect
+          label={t('admin.fields.project')}
+          value={projectId}
+          onChange={setProjectId}
+          placeholder={
+            isSuperAdmin
+              ? t('admin.audit.allProjects')
+              : t('admin.placeholders.selectProject')
+          }
+          options={projectOptions}
+        />
+        <TextField
+          id='audit-action'
+          label={t('admin.audit.action')}
+          name='audit_action'
+          placeholder={t('admin.audit.actionPlaceholder')}
+          value={action}
+          onChange={setAction}
+        />
+        <TextField
+          id='audit-resource-type'
+          label={t('admin.audit.resourceType')}
+          name='audit_resource_type'
+          placeholder={t('admin.audit.resourceTypePlaceholder')}
+          value={resourceType}
+          onChange={setResourceType}
+        />
+      </SelectorGrid>
+      {!isSuperAdmin &&
+      projectId &&
+      !membersQuery.isLoading &&
+      !isProjectAdmin ? (
+        <Alert variant='destructive'>
+          <ShieldCheck />
+          <AlertTitle>{t('errors.forbiddenTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('admin.audit.projectAdminRequired')}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <LoadingErrorState
+          state={{
+            isLoading: membersQuery.isLoading || auditQuery.isLoading,
+            isError: membersQuery.isError || auditQuery.isError,
+            error: (membersQuery.error ?? auditQuery.error) as Error | null,
+          }}
+        />
+      )}
+      <CollectionCard
+        title={t('admin.audit.title')}
+        description={t('admin.audit.description')}
+        count={auditQuery.data?.total ?? 0}
+      >
+        {auditQuery.data?.items.length ? (
+          <AuditLogTable logs={auditQuery.data.items} />
+        ) : (
+          <EmptyState preset='audit' />
+        )}
+      </CollectionCard>
+    </PageChrome>
+  )
+}
+
+function AuditLogTable({ logs }: { logs: AuditLogDTO[] }) {
+  const { t } = useLanguage()
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('admin.audit.time')}</TableHead>
+          <TableHead>{t('admin.audit.action')}</TableHead>
+          <TableHead>{t('admin.audit.actor')}</TableHead>
+          <TableHead>{t('admin.audit.resource')}</TableHead>
+          <TableHead>{t('admin.fields.project')}</TableHead>
+          <TableHead>{t('admin.audit.result')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {logs.map((log) => (
+          <TableRow key={log.id}>
+            <TableCell className='text-xs whitespace-nowrap'>
+              {formatDate(log.created_at)}
+            </TableCell>
+            <TableCell className='font-mono text-xs'>{log.action}</TableCell>
+            <TableCell className='max-w-44 truncate font-mono text-xs'>
+              {log.actor_user_id ?? log.actor_token_id ?? '-'}
+            </TableCell>
+            <TableCell className='max-w-56'>
+              <div className='font-mono text-xs'>{log.resource_type}</div>
+              <div className='truncate font-mono text-xs text-muted-foreground'>
+                {log.resource_id ?? log.document_id ?? '-'}
+              </div>
+            </TableCell>
+            <TableCell className='max-w-40 truncate font-mono text-xs'>
+              {log.project_id ?? '-'}
+            </TableCell>
+            <TableCell>
+              <StatusBadge muted={log.metadata.result !== 'success'}>
+                {log.metadata.result ?? t('admin.common.unknown')}
+              </StatusBadge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function DiffSummaryCards({
+  summary,
+  isMarkdown,
+}: {
+  summary: DiffSummaryDTO
+  isMarkdown: boolean
+}) {
+  const { t } = useLanguage()
+  const cards = isMarkdown
+    ? [
+        [
+          t('admin.diff.addedLines'),
+          summary.added_lines ?? 0,
+          t('admin.diff.addedLinesDescription'),
+        ],
+        [
+          t('admin.diff.removedLines'),
+          summary.removed_lines ?? 0,
+          t('admin.diff.removedLinesDescription'),
+        ],
+        [
+          t('admin.diff.modifiedLines'),
+          summary.modified_lines ?? 0,
+          t('admin.diff.modifiedLinesDescription'),
+        ],
+        [
+          t('admin.diff.modifiedBlocks'),
+          summary.modified_blocks ?? 0,
+          t('admin.diff.modifiedBlocksDescription'),
+        ],
+      ]
+    : [
+        [
+          t('admin.diff.addedEndpoints'),
+          summary.added_endpoints,
+          t('admin.diff.addedDescription'),
+        ],
+        [
+          t('admin.diff.removedEndpoints'),
+          summary.removed_endpoints,
+          t('admin.diff.removedDescription'),
+        ],
+        [
+          t('admin.diff.modifiedEndpoints'),
+          summary.modified_endpoints,
+          t('admin.diff.modifiedDescription'),
+        ],
+        [
+          t('admin.diff.breakingChanges'),
+          summary.breaking_changes,
+          t('admin.diff.breakingDescription'),
+        ],
+      ]
+  return (
+    <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+      {cards.map(([title, value, description]) => (
+        <StatCard
+          key={String(title)}
+          title={String(title)}
+          value={String(value)}
+          description={String(description)}
+        />
+      ))}
+    </section>
+  )
+}
+
+function DiffReviewList({
+  items,
+  isMarkdown = false,
+}: {
+  items: DiffItemDTO[]
+  isMarkdown?: boolean
+}) {
   const { t } = useLanguage()
   const groups = useMemo(() => {
     const bySeverity = new Map<string, DiffItemDTO[]>()
@@ -3036,6 +4385,46 @@ function DiffReviewList({ items }: { items: DiffItemDTO[] }) {
     })
     return Array.from(bySeverity.entries())
   }, [items, t])
+
+  if (isMarkdown) {
+    return (
+      <section className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
+        <div>
+          <p className='font-medium'>{t('admin.diff.unifiedDiff')}</p>
+          <p className='text-xs text-muted-foreground'>
+            {items.length} {t('admin.diff.changeCount')}
+          </p>
+        </div>
+        <div className='overflow-hidden rounded-md border bg-background font-mono text-xs'>
+          {items.map((item) => (
+            <div key={item.id} className='border-b last:border-b-0'>
+              <div className='bg-muted/50 px-3 py-2 text-muted-foreground'>
+                @@ {item.location ?? item.message} @@
+              </div>
+              <pre className='overflow-x-auto px-3 py-2 leading-6'>
+                {(item.frontend_impact ?? item.message)
+                  .split('\n')
+                  .map((line, index) => (
+                    <span
+                      key={`${item.id}-${index}`}
+                      className={`block px-2 ${
+                        line.startsWith('+')
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                          : line.startsWith('-')
+                            ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+                            : ''
+                      }`}
+                    >
+                      {line || ' '}
+                    </span>
+                  ))}
+              </pre>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <div className='grid gap-4'>
@@ -3126,23 +4515,79 @@ export function MCPTokensPage() {
     queryKey: ['mcp-tokens'],
     queryFn: listMCPTokens,
   })
-  const [oneTimeToken, setOneTimeToken] = useState('')
-  const [redactedToken, setRedactedToken] = useState<MCPTokenDTO | null>(null)
-  const createMutation = useMutation({
-    mutationFn: createMCPToken,
-    onSuccess: (token) => {
-      setOneTimeToken(token.token ?? '')
+  const [visibleToken, setVisibleToken] = useState('')
+  const [selectedToken, setSelectedToken] = useState<MCPTokenDTO | null>(null)
+  const [copyStatus, setCopyStatus] = useState<'success' | 'failure'>()
+  const latestTokenOperationRequestId = useRef(0)
+  const [activeTokenOperationRequestId, setActiveTokenOperationRequestId] =
+    useState(0)
+  const latestTokenCopyRequestId = useRef(0)
+  function beginTokenOperation() {
+    const requestId = latestTokenOperationRequestId.current + 1
+    latestTokenOperationRequestId.current = requestId
+    setActiveTokenOperationRequestId(requestId)
+    return requestId
+  }
+  const getMutation = useMutation({
+    mutationFn: ({ tokenId }: { tokenId: string; requestId: number }) =>
+      getMCPToken(tokenId),
+    onSuccess: (token, variables) => {
+      if (variables.requestId !== latestTokenOperationRequestId.current) return
+      setSelectedToken(token)
+      setVisibleToken(token.token ?? '')
+      latestTokenCopyRequestId.current += 1
+      setCopyStatus(undefined)
+    },
+  })
+  const revokeMutation = useMutation({
+    mutationFn: ({ tokenId }: { tokenId: string; requestId: number }) =>
+      revokeMCPToken(tokenId),
+    onSuccess: (token, variables) => {
+      if (variables.requestId === latestTokenOperationRequestId.current) {
+        setSelectedToken(token)
+      }
       invalidate()
     },
   })
-  const getMutation = useMutation({
-    mutationFn: getMCPToken,
-    onSuccess: setRedactedToken,
+  const createMutation = useMutation({
+    mutationFn: ({
+      payload,
+    }: {
+      payload: Parameters<typeof createMCPToken>[0]
+      requestId: number
+    }) => createMCPToken(payload),
+    onMutate: () => {
+      latestTokenCopyRequestId.current += 1
+      setVisibleToken('')
+      setSelectedToken(null)
+      setCopyStatus(undefined)
+      getMutation.reset()
+      revokeMutation.reset()
+    },
+    onSuccess: (token, variables) => {
+      if (variables.requestId === latestTokenOperationRequestId.current) {
+        setVisibleToken(token.token ?? '')
+        setSelectedToken(token)
+      }
+      invalidate()
+    },
   })
-  const revokeMutation = useMutation({
-    mutationFn: revokeMCPToken,
-    onSuccess: invalidate,
-  })
+  async function copyVisibleToken() {
+    if (!visibleToken) return
+    const requestId = latestTokenCopyRequestId.current + 1
+    latestTokenCopyRequestId.current = requestId
+    setCopyStatus(undefined)
+    try {
+      await navigator.clipboard.writeText(visibleToken)
+      if (requestId === latestTokenCopyRequestId.current) {
+        setCopyStatus('success')
+      }
+    } catch {
+      if (requestId === latestTokenCopyRequestId.current) {
+        setCopyStatus('failure')
+      }
+    }
+  }
   return (
     <PageChrome page='mcpTokens'>
       <LoadingErrorState
@@ -3156,64 +4601,223 @@ export function MCPTokensPage() {
         title={t('admin.sections.createToken')}
         submitLabel={t('admin.common.create')}
         pending={createMutation.isPending}
-        onSubmit={(formData) =>
-          createMutation.mutate({
-            name: fieldValue(formData, 'name'),
-            scopes: fieldValue(formData, 'scopes')
-              .split(',')
-              .map((value) => Number(value.trim()))
-              .filter(Number.isFinite),
-            expires_at: optionalFieldValue(formData, 'expires_at') ?? null,
+        onSubmit={(formData) => {
+          const requestId = beginTokenOperation()
+          return createMutation.mutateAsync({
+            requestId,
+            payload: {
+              name: fieldValue(formData, 'name'),
+              scopes: formData.getAll('scopes').map(Number),
+              expires_at: optionalFieldValue(formData, 'expires_at') ?? null,
+            },
           })
-        }
+        }}
       >
-        <div className='grid gap-4 md:grid-cols-3'>
+        <div className='grid gap-4 md:grid-cols-2'>
           <TextField label={t('admin.fields.name')} name='name' required />
-          <TextField
-            label={t('admin.fields.scopes')}
-            name='scopes'
-            placeholder='1,2,3,4'
-            required
-          />
           <TextField
             label={t('admin.fields.expiresAt')}
             name='expires_at'
             placeholder={t('admin.placeholders.optionalIsoDate')}
           />
         </div>
+        <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
+          <legend className='px-2 text-sm font-medium'>
+            {t('admin.token.scopesTitle')}
+          </legend>
+          {[
+            [1, t('admin.token.apiRead')],
+            [2, t('admin.token.apiDraft')],
+            [3, t('admin.token.docRead')],
+            [4, t('admin.token.docDraft')],
+          ].map(([scope, label]) => (
+            <label
+              key={String(scope)}
+              className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
+            >
+              <input
+                type='checkbox'
+                name='scopes'
+                value={String(scope)}
+                defaultChecked={scope === 1}
+                className='mt-0.5 size-4 accent-primary'
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </fieldset>
       </FormCard>
-      {oneTimeToken && (
+      {visibleToken && (
         <Alert>
-          <Copy />
-          <AlertTitle>{t('admin.common.generated')}</AlertTitle>
-          <AlertDescription>
-            <p>{t('admin.common.tokenWarning')}</p>
+          <KeyRound />
+          <AlertTitle>{t('admin.token.secretAvailable')}</AlertTitle>
+          <AlertDescription className='grid gap-3'>
+            <p>{t('admin.token.secretGuidance')}</p>
             <code className='mt-2 block rounded-md border bg-muted p-3 text-xs'>
-              {oneTimeToken}
+              {visibleToken}
             </code>
+            <Button
+              type='button'
+              variant='outline'
+              className='w-fit'
+              onClick={() => void copyVisibleToken()}
+            >
+              <Copy className='size-4' />
+              {t('admin.token.copy')}
+            </Button>
+            {copyStatus && (
+              <p
+                role='status'
+                className={
+                  copyStatus === 'failure'
+                    ? 'text-sm text-destructive'
+                    : 'text-sm text-muted-foreground'
+                }
+              >
+                {t(
+                  copyStatus === 'failure'
+                    ? 'admin.token.copyFailed'
+                    : 'admin.token.copySuccess'
+                )}
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       )}
+      {getMutation.isError &&
+        getMutation.variables.requestId === activeTokenOperationRequestId && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.token.revealErrorTitle')}</AlertTitle>
+            <AlertDescription>{getMutation.error.message}</AlertDescription>
+          </Alert>
+        )}
+      {revokeMutation.isError &&
+        revokeMutation.variables.requestId ===
+          activeTokenOperationRequestId && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.token.revokeErrorTitle')}</AlertTitle>
+            <AlertDescription>{revokeMutation.error.message}</AlertDescription>
+          </Alert>
+        )}
       <TokenTable
         tokens={tokensQuery.data?.items ?? []}
-        onView={(tokenId) => getMutation.mutate(tokenId)}
-        onRevoke={(tokenId) => revokeMutation.mutate(tokenId)}
+        onView={(tokenId) => {
+          latestTokenCopyRequestId.current += 1
+          setVisibleToken('')
+          setSelectedToken(null)
+          setCopyStatus(undefined)
+          revokeMutation.reset()
+          getMutation.reset()
+          const requestId = beginTokenOperation()
+          getMutation.mutate({ tokenId, requestId })
+        }}
+        onRevoke={(tokenId) => {
+          const requestId = beginTokenOperation()
+          latestTokenCopyRequestId.current += 1
+          setVisibleToken('')
+          setSelectedToken(null)
+          setCopyStatus(undefined)
+          getMutation.reset()
+          revokeMutation.reset()
+          revokeMutation.mutate({ tokenId, requestId })
+        }}
       />
-      {redactedToken && (
+      {selectedToken && (
         <ContentViewer
           title={t('admin.sections.tokenDetails')}
-          content={stringify(redactedMCPToken(redactedToken))}
+          content={stringify(tokenDetails(selectedToken))}
         />
       )}
+      <CollectionCard
+        title={t('admin.token.configTitle')}
+        description={t('admin.token.configDescription')}
+      >
+        <pre className='overflow-x-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed'>
+          {stringify({
+            mcpServers: {
+              vdoc: {
+                command: 'npx',
+                args: ['--yes', 'github:ChnMig/Vdoc-mcp'],
+                env: {
+                  VDOC_BASE_URL: apiBaseUrl,
+                  VDOC_MCP_TOKEN: visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>',
+                },
+              },
+            },
+          })}
+        </pre>
+      </CollectionCard>
     </PageChrome>
   )
 }
 
-function redactedMCPToken(token: MCPTokenDTO) {
+export function SkillPage() {
+  const { t } = useLanguage()
+  return (
+    <PageChrome page='skill'>
+      <CollectionCard
+        title={t('admin.skill.installTitle')}
+        description={t('admin.skill.installDescription')}
+      >
+        <ol className='grid gap-3'>
+          {[
+            t('admin.skill.stepPackage'),
+            t('admin.skill.stepMcp'),
+            t('admin.skill.stepVerify'),
+          ].map((step, index) => (
+            <li
+              key={step}
+              className='grid grid-cols-[2rem_1fr] items-start gap-3 rounded-md border bg-[var(--surface-control)] p-4 text-sm'
+            >
+              <Badge className='justify-center' variant='outline'>
+                {index + 1}
+              </Badge>
+              <span className='leading-6'>{step}</span>
+            </li>
+          ))}
+        </ol>
+        <pre className='overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
+          {`# Codex personal Skill (available to all workspaces)\ngit clone --depth 1 https://github.com/ChnMig/Vdoc-skill.git "$HOME/.agents/skills/vdoc"\n\n# Or install only for the current repository\ngit clone --depth 1 https://github.com/ChnMig/Vdoc-skill.git .agents/skills/vdoc\n\n# Verify\ntest -f "$HOME/.agents/skills/vdoc/SKILL.md"`}
+        </pre>
+      </CollectionCard>
+      <Alert>
+        <ShieldCheck />
+        <AlertTitle>{t('admin.skill.boundaryTitle')}</AlertTitle>
+        <AlertDescription>
+          {t('admin.skill.boundaryDescription')}
+        </AlertDescription>
+      </Alert>
+      <CollectionCard
+        title={t('admin.token.configTitle')}
+        description={t('admin.token.configDescription')}
+      >
+        <pre className='overflow-x-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed'>
+          {stringify({
+            mcpServers: {
+              vdoc: {
+                command: 'npx',
+                args: ['--yes', 'github:ChnMig/Vdoc-mcp'],
+                env: {
+                  VDOC_BASE_URL: apiBaseUrl,
+                  VDOC_MCP_TOKEN: '<YOUR_ACTIVE_VDOC_TOKEN>',
+                },
+              },
+            },
+          })}
+        </pre>
+      </CollectionCard>
+    </PageChrome>
+  )
+}
+
+function tokenDetails(token: MCPTokenDTO) {
   return {
     id: token.id,
     user_id: token.user_id,
     name: token.name,
+    token: token.token,
     scopes: token.scopes,
     status: token.status,
     created_at: token.created_at,
@@ -3280,6 +4884,7 @@ function TokenTable({
                       <Button
                         variant='outline'
                         size='sm'
+                        disabled={token.status !== ACTIVE_STATUS}
                         onClick={() => onView(token.id)}
                       >
                         {t('admin.common.view')}
@@ -3288,6 +4893,7 @@ function TokenTable({
                     <Button
                       variant='outline'
                       size='sm'
+                      disabled={token.status !== ACTIVE_STATUS}
                       onClick={() => onRevoke(token.id)}
                     >
                       {t('admin.common.revoke')}
@@ -3350,7 +4956,7 @@ export function SettingsPage() {
           ]}
         />
       </section>
-      <AISettingsPanel />
+      {identity && <AISettingsPanel user={identity} />}
       <Alert>
         <CheckCircle2 />
         <AlertTitle>satnaing/shadcn-admin</AlertTitle>

@@ -25,15 +25,9 @@
         circle at 100% 12rem,
         var(--workspace-vignette),
         transparent 34rem
-      ),
-      linear-gradient(to right, var(--workspace-grid) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--workspace-grid) 1px, transparent 1px);
+      );
     background-attachment: fixed;
-    background-size:
-      auto,
-      auto,
-      48px 48px,
-      48px 48px;
+    background-size: auto, auto;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'tnum';
   }
 

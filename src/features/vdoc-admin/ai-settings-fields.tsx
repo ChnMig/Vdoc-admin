@@ -45,12 +45,14 @@ export function AITextAreaField({
   name,
   defaultValue,
   disabled,
+  required = false,
 }: {
   readonly id?: string
   readonly label: string
   readonly name: string
   readonly defaultValue: string
   readonly disabled: boolean
+  readonly required?: boolean
 }) {
   return (
     <div className='grid gap-2'>
@@ -60,6 +62,7 @@ export function AITextAreaField({
         name={name}
         defaultValue={defaultValue}
         disabled={disabled}
+        required={required}
         className='min-h-28'
       />
     </div>

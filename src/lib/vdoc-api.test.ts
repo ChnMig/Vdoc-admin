@@ -13,6 +13,8 @@ import {
   getSystemAIProvider,
   getAISummary,
   listSystemAIPrompts,
+  listProjectMemberCandidates,
+  listAIChatSessions,
   listUsers,
   rejectDraft,
   regenerateAISummary,
@@ -70,6 +72,27 @@ describe('vdoc-api', () => {
     vi.stubEnv('VITE_VDOC_API_BASE_URL', 'https://vite-api.example.test/')
 
     expect(resolveApiBaseUrl()).toBe('https://vite-api.example.test')
+  })
+
+  it.each([
+    'http://api.example.test',
+    'https://user:pass@api.example.test',
+    'https://api.example.test/path',
+    'https://api.example.test?query=1',
+    ' https://api.example.test',
+  ])('rejects an insecure or non-origin API base URL: %s', (value) => {
+    window.__VDOC_ADMIN_CONFIG__ = { apiBaseUrl: value }
+    expect(() => resolveApiBaseUrl()).toThrow()
+  })
+
+  it.each([
+    'http://localhost:8080',
+    'http://dev.localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://[::1]:8080',
+  ])('allows HTTP only for local development: %s', (value) => {
+    window.__VDOC_ADMIN_CONFIG__ = { apiBaseUrl: value }
+    expect(resolveApiBaseUrl()).toBe(new URL(value).origin)
   })
 
   it('sends the raw Vdoc JWT in the Authorization header', async () => {
@@ -159,6 +182,56 @@ describe('vdoc-api', () => {
 
     expect(requests[0]?.url).toBe('/api/v1/private/system/users')
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBe('admin.jwt')
+  })
+
+  it('loads project-scoped member candidates without using the system user API', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      total: 1,
+      detail: [sampleUser],
+    })
+
+    await expect(listProjectMemberCandidates('project-1')).resolves.toEqual({
+      items: [sampleUser],
+      total: 1,
+    })
+
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/member-candidates'
+    )
+  })
+
+  it('lists AI chat sessions for the exact document context', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+      total: 0,
+      detail: [],
+    })
+
+    await expect(
+      listAIChatSessions({
+        projectId: 'project-1',
+        documentId: 'document-1',
+        ownerType: 'version',
+        ownerId: 'version-1',
+      })
+    ).resolves.toEqual({ items: [], total: 0 })
+
+    expect(requests[0]?.method).toBe('get')
+    expect(requests[0]?.url).toBe(
+      '/api/v1/private/projects/project-1/ai/chat-sessions'
+    )
+    expect(requests[0]?.params).toEqual({
+      document_id: 'document-1',
+      context_type: 'version',
+      context_id: 'version-1',
+    })
   })
 
   it('submits drafts without a request body', async () => {
@@ -375,13 +448,23 @@ describe('vdoc-api', () => {
       items: [prompt],
       total: 1,
     })
-    await updateProjectAIPrompt('project-1', 'diff_change_summary', prompt)
+    await updateProjectAIPrompt('project-1', 'diff_change_summary', {
+      system_prompt: prompt.system_prompt,
+      user_prompt_template: prompt.user_prompt_template,
+      enabled: prompt.enabled,
+    })
 
     expect(requests[0]?.url).toBe('/api/v1/private/ai/prompts')
     expect(requests[1]?.url).toBe(
       '/api/v1/private/projects/project-1/ai/prompts/diff_change_summary'
     )
-    expect(requests[1]?.data).toBe(JSON.stringify(prompt))
+    expect(requests[1]?.data).toBe(
+      JSON.stringify({
+        system_prompt: prompt.system_prompt,
+        user_prompt_template: prompt.user_prompt_template,
+        enabled: prompt.enabled,
+      })
+    )
   })
 
   it('uses AI summary endpoints for page-scoped summaries', async () => {

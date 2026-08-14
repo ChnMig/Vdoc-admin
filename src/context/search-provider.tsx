@@ -10,9 +10,13 @@ const SearchContext = createContext<SearchContextType | null>(null)
 
 type SearchProviderProps = {
   children: React.ReactNode
+  auditAccess?: boolean
 }
 
-export function SearchProvider({ children }: SearchProviderProps) {
+export function SearchProvider({
+  children,
+  auditAccess = false,
+}: SearchProviderProps) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -29,7 +33,7 @@ export function SearchProvider({ children }: SearchProviderProps) {
   return (
     <SearchContext value={{ open, setOpen }}>
       {children}
-      <CommandMenu />
+      <CommandMenu auditAccess={auditAccess} />
     </SearchContext>
   )
 }

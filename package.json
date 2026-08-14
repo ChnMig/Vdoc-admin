@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,9 +13,12 @@
     "format": "prettier --write .",
     "knip": "knip",
     "test": "vitest run",
+    "test:entrypoint": "sh scripts/test-docker-entrypoint.sh",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:browser": "node scripts/run-playwright.mjs",
+    "test:browser:live": "node scripts/run-playwright.mjs --project=live-capability-text"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -50,8 +54,10 @@
     "react-day-picker": "10.0.1",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.80.0",
+    "react-markdown": "^10.1.0",
     "react-top-loading-bar": "^3.0.2",
     "recharts": "^3.9.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.1",
@@ -60,7 +66,9 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.61.1",
     "@tanstack/eslint-plugin-query": "^5.101.2",
     "@tanstack/react-query-devtools": "^5.101.2",
     "@tanstack/react-router-devtools": "^1.167.0",

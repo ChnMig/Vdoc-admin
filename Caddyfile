@@ -2,11 +2,27 @@
 	auto_https off
 }
 
-:80 {
+:8080 {
 	root * /usr/share/caddy
+
+	header {
+		Content-Security-Policy "default-src 'self'; base-uri 'none'; connect-src 'self' {$VDOC_PUBLIC_SHARE_CONNECT_SRC}; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
 
 	header /runtime-config.js Cache-Control "no-store, no-cache, must-revalidate"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+
+	@public_share path /share/*
+	header @public_share {
+		Cache-Control "no-store, max-age=0"
+		Pragma "no-cache"
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
 
 	try_files {path} {path}/ /index.html
 	file_server

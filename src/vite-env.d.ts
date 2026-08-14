@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_VDOC_API_BASE_URL: string
+  readonly VITE_VDOC_PUBLIC_SHARE_BASE_URL?: string
 }
 
 interface ImportMeta {
@@ -10,6 +11,7 @@ interface ImportMeta {
 
 type VdocAdminRuntimeConfig = {
   apiBaseUrl?: string
+  publicShareBaseUrl?: string
 }
 
 interface Window {

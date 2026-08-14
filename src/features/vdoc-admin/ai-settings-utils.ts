@@ -5,15 +5,22 @@ import {
   type AIProviderAPIMode,
   type AIProviderDTO,
   type AIProviderPayload,
-  type AIPromptTemplateDTO,
+  type AIPromptPayload,
   type ProjectDTO,
 } from '@/lib/vdoc-api'
 import type { ProviderScope, SelectOption } from './ai-settings-types'
 
 export function toProjectOptions(
-  projects: readonly ProjectDTO[]
+  projects: readonly ProjectDTO[],
+  t: TFunction
 ): readonly SelectOption[] {
-  return projects.map((project) => ({ value: project.id, label: project.name }))
+  return projects.map((project) => ({
+    value: project.id,
+    label:
+      project.status === 1
+        ? project.name
+        : `${project.name} — ${t('admin.statuses.archived')}`,
+  }))
 }
 
 export function providerPayload(formData: FormData): AIProviderPayload {
@@ -40,12 +47,8 @@ export function providerPayload(formData: FormData): AIProviderPayload {
   }
 }
 
-export function promptPayload(
-  promptKey: string,
-  formData: FormData
-): AIPromptTemplateDTO {
+export function promptPayload(formData: FormData): AIPromptPayload {
   return {
-    prompt_key: promptKey,
     system_prompt: fieldValue(formData, 'system_prompt'),
     user_prompt_template: fieldValue(formData, 'user_prompt_template'),
     enabled: fieldValue(formData, 'enabled') === 'true',
@@ -82,13 +85,26 @@ export function providerKeyStatus(
 
 export function providerConfigurationStatus(
   provider: AIProviderDTO | undefined,
-  t: TFunction
+  t: TFunction,
+  scope: ProviderScope = 'system'
 ) {
+  if (scope === 'project' && !providerIsConfigured(provider)) {
+    return t('admin.ai.projectProviderFallbackStatus')
+  }
   return t('admin.ai.providerConfigurationStatus', {
     status: providerIsConfigured(provider)
       ? t('admin.ai.providerConfigured')
       : t('admin.ai.providerUnconfigured'),
   })
+}
+
+export function providerPayloadIsBlank(payload: AIProviderPayload) {
+  return (
+    payload.name.length === 0 &&
+    payload.base_url.length === 0 &&
+    payload.model.length === 0 &&
+    (payload.api_key ?? '').length === 0
+  )
 }
 
 export function providerFormKey(

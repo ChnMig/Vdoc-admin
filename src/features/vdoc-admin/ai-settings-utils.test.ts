@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { TFunction } from '@/lib/i18n'
 import { AI_PROVIDER_DEFAULT_TUNING } from './ai-settings-types'
-import { providerPayload } from './ai-settings-utils'
+import {
+  providerConfigurationStatus,
+  providerPayload,
+  providerPayloadIsBlank,
+  toProjectOptions,
+} from './ai-settings-utils'
 
 describe('providerPayload', () => {
   it('parses tuning fields and preserves zero temperature', () => {
@@ -53,6 +59,69 @@ describe('providerPayload', () => {
       timeout_ms: 30000,
       max_output_tokens: 1000,
     })
+  })
+
+  it('detects an empty project override form for effective-provider testing', () => {
+    const payload = providerPayload(
+      providerFormData({
+        name: '',
+        base_url: '',
+        model: '',
+        api_key: '',
+      })
+    )
+
+    expect(providerPayloadIsBlank(payload)).toBe(true)
+    expect(
+      providerConfigurationStatus(
+        undefined,
+        ((key) =>
+          key === 'admin.ai.projectProviderFallbackStatus'
+            ? 'Uses fallback'
+            : key) as TFunction,
+        'project'
+      )
+    ).toBe('Uses fallback')
+  })
+})
+
+describe('toProjectOptions', () => {
+  it('keeps archived projects reachable and labels their read-only state', () => {
+    const timestamps = {
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+
+    expect(
+      toProjectOptions(
+        [
+          {
+            id: 'active-project',
+            team_id: 'team-1',
+            name: 'Active project',
+            status: 1,
+            created_by: 'user-1',
+            ...timestamps,
+          },
+          {
+            id: 'archived-project',
+            team_id: 'team-1',
+            name: 'Archived project',
+            status: 2,
+            created_by: 'user-1',
+            ...timestamps,
+          },
+        ],
+        ((key) =>
+          key === 'admin.statuses.archived' ? 'Archived' : key) as TFunction
+      )
+    ).toEqual([
+      { value: 'active-project', label: 'Active project' },
+      {
+        value: 'archived-project',
+        label: 'Archived project — Archived',
+      },
+    ])
   })
 })
 

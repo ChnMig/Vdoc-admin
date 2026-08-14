@@ -3,6 +3,8 @@ import {
   Diff,
   FileArchive,
   FileText,
+  GraduationCap,
+  History,
   KeyRound,
   Layers3,
   LayoutDashboard,
@@ -44,12 +46,14 @@ export const sidebarData: SidebarData = {
           titleKey: 'nav.users',
           url: '/users',
           icon: Users,
+          requiresSuperAdmin: true,
         },
         {
           title: 'Teams',
           titleKey: 'nav.teams',
           url: '/teams',
           icon: Boxes,
+          requiresSuperAdmin: true,
         },
         {
           title: 'Projects',
@@ -105,12 +109,25 @@ export const sidebarData: SidebarData = {
           url: '/mcp-tokens',
           icon: KeyRound,
         },
+        {
+          title: 'Vdoc Skill',
+          titleKey: 'nav.skill',
+          url: '/skill',
+          icon: GraduationCap,
+        },
       ],
     },
     {
       title: 'System/settings',
       titleKey: 'nav.groupSystemSettings',
       items: [
+        {
+          title: 'Audit Logs',
+          titleKey: 'nav.audit',
+          url: '/audit',
+          icon: History,
+          requiresAuditAccess: true,
+        },
         {
           title: 'Settings',
           titleKey: 'nav.settings',

@@ -20,6 +20,8 @@ type BaseNavItem = {
   titleKey?: TranslationKey
   badge?: string
   icon?: React.ElementType
+  requiresSuperAdmin?: boolean
+  requiresAuditAccess?: boolean
 }
 
 type NavLink = BaseNavItem & {

@@ -16,6 +16,7 @@ const config: KnipConfig = {
     'src/components/layout/top-nav.tsx',
     'src/test-utils/tanstack-table.ts',
     'public/runtime-config.js',
+    'tests/browser/fixtures/viewers.tsx',
   ],
   ignoreIssues: {
     'src/lib/handle-server-error.ts': ['exports'],

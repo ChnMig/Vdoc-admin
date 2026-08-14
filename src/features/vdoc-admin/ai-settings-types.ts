@@ -1,6 +1,7 @@
 import type {
   AIProviderDTO,
   AIProviderPayload,
+  AIPromptPayload,
   AIPromptTemplateDTO,
 } from '@/lib/vdoc-api'
 
@@ -30,11 +31,12 @@ export type ProviderPanelProps = {
   readonly scope: ProviderScope
   readonly provider?: AIProviderDTO
   readonly projectId?: string
+  readonly readOnly?: boolean
   readonly pending: boolean
   readonly testing: boolean
   readonly testResult: ProviderTestState
-  readonly onSave: (payload: AIProviderPayload) => void
-  readonly onTest: (payload: AIProviderPayload) => void
+  readonly onSave: (payload: AIProviderPayload) => Promise<unknown>
+  readonly onTest: (payload?: AIProviderPayload) => Promise<unknown>
   readonly onTestPayloadChange?: () => void
 }
 
@@ -42,11 +44,17 @@ export type PromptPanelProps = {
   readonly scope: ProviderScope
   readonly prompts: readonly AIPromptTemplateDTO[]
   readonly projectId?: string
+  readonly readOnly?: boolean
+  readonly loading?: boolean
+  readonly error?: Error | null
   readonly pending: boolean
-  readonly onSave: (promptKey: string, payload: AIPromptTemplateDTO) => void
+  readonly onSave: (
+    promptKey: string,
+    payload: AIPromptPayload
+  ) => Promise<unknown>
 }
 
 export type PromptSaveRequest = {
   readonly promptKey: string
-  readonly payload: AIPromptTemplateDTO
+  readonly payload: AIPromptPayload
 }

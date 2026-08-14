@@ -1,5 +1,8 @@
-import type { AIPromptTemplateDTO } from '@/lib/vdoc-api'
+import { useRef } from 'react'
+import { TriangleAlert } from 'lucide-react'
+import type { AIPromptPayload, AIPromptTemplateDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AINativeSelect, AITextAreaField } from './ai-settings-fields'
@@ -10,11 +13,15 @@ export function AIPromptPanel({
   scope,
   prompts,
   projectId,
+  readOnly = false,
+  loading = false,
+  error,
   pending,
   onSave,
 }: PromptPanelProps) {
   const { t } = useLanguage()
-  const disabled = scope === 'project' && (projectId ?? '').length === 0
+  const disabled =
+    readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   return (
     <section className='grid content-start gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
       <div className='grid gap-1'>
@@ -27,7 +34,22 @@ export function AIPromptPanel({
           {t('admin.ai.promptSettingsDescription')}
         </p>
       </div>
-      {prompts.length ? (
+      {loading ? (
+        <p
+          role='status'
+          className='rounded-md border bg-background p-4 text-sm text-muted-foreground'
+        >
+          {t('admin.ai.loadingPrompts')}
+        </p>
+      ) : error ? (
+        <Alert variant='destructive'>
+          <TriangleAlert />
+          <AlertTitle>{t('admin.ai.promptsLoadErrorTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('admin.ai.promptsLoadErrorDescription')}
+          </AlertDescription>
+        </Alert>
+      ) : prompts.length ? (
         prompts.map((prompt) => (
           <PromptForm
             key={`${scope}-${prompt.prompt_key}`}
@@ -55,19 +77,29 @@ function PromptForm({
   readonly scope: ProviderScope
   readonly prompt: AIPromptTemplateDTO
   readonly pending: boolean
-  readonly onSave: (promptKey: string, payload: AIPromptTemplateDTO) => void
+  readonly onSave: (
+    promptKey: string,
+    payload: AIPromptPayload
+  ) => Promise<unknown>
 }) {
   const { t } = useLanguage()
+  const saveLockedRef = useRef(false)
   return (
     <form
       key={`${prompt.prompt_key}-${prompt.system_prompt}-${prompt.user_prompt_template}`}
       className='grid gap-3 rounded-md border bg-background p-4'
       onSubmit={(event) => {
         event.preventDefault()
-        onSave(
+        if (saveLockedRef.current) return
+        saveLockedRef.current = true
+        void onSave(
           prompt.prompt_key,
-          promptPayload(prompt.prompt_key, new FormData(event.currentTarget))
+          promptPayload(new FormData(event.currentTarget))
         )
+          .catch(() => undefined)
+          .finally(() => {
+            saveLockedRef.current = false
+          })
       }}
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
@@ -84,6 +116,7 @@ function PromptForm({
         name='system_prompt'
         defaultValue={prompt.system_prompt}
         disabled={pending}
+        required
       />
       <AITextAreaField
         id={`${scope}-${prompt.prompt_key}-user-prompt-template`}
@@ -91,6 +124,7 @@ function PromptForm({
         name='user_prompt_template'
         defaultValue={prompt.user_prompt_template}
         disabled={pending}
+        required
       />
       <AINativeSelect
         id={`${scope}-${prompt.prompt_key}-enabled`}

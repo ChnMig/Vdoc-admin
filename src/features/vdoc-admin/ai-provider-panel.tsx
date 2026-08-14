@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { AI_PROVIDER_API_MODES } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
@@ -18,12 +19,14 @@ import {
   providerFormKey,
   providerKeyStatus,
   providerPayload,
+  providerPayloadIsBlank,
 } from './ai-settings-utils'
 
 export function AIProviderPanel({
   scope,
   provider,
   projectId,
+  readOnly = false,
   pending,
   testing,
   testResult,
@@ -32,7 +35,10 @@ export function AIProviderPanel({
   onTestPayloadChange,
 }: ProviderPanelProps) {
   const { t } = useLanguage()
-  const disabled = scope === 'project' && (projectId ?? '').length === 0
+  const saveLockedRef = useRef(false)
+  const testLockedRef = useRef(false)
+  const disabled =
+    readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   const tuning = {
     temperature:
       provider?.temperature ?? AI_PROVIDER_DEFAULT_TUNING.temperature,
@@ -63,7 +69,7 @@ export function AIProviderPanel({
         </Badge>
       </div>
       <div className='grid gap-2 rounded-md border bg-[var(--surface-control)] p-3 text-sm text-muted-foreground'>
-        <p>{providerConfigurationStatus(provider, t)}</p>
+        <p>{providerConfigurationStatus(provider, t, scope)}</p>
         <p>{providerKeyStatus(provider, t)}</p>
         <p>
           {t('admin.ai.providerTestStatus', {
@@ -76,7 +82,13 @@ export function AIProviderPanel({
         className='grid gap-4'
         onSubmit={(event) => {
           event.preventDefault()
-          onSave(providerPayload(new FormData(event.currentTarget)))
+          if (saveLockedRef.current) return
+          saveLockedRef.current = true
+          void onSave(providerPayload(new FormData(event.currentTarget)))
+            .catch(() => undefined)
+            .finally(() => {
+              saveLockedRef.current = false
+            })
         }}
         onChange={onTestPayloadChange}
       >
@@ -127,6 +139,7 @@ export function AIProviderPanel({
             defaultValue=''
             disabled={disabled}
             placeholder={t('admin.ai.apiKeyPlaceholder')}
+            required={!provider?.api_key_set}
           />
           <AINativeSelect
             id={`${scope}-ai-provider-enabled`}
@@ -179,8 +192,30 @@ export function AIProviderPanel({
             variant='outline'
             disabled={disabled || testing}
             onClick={(event) => {
+              if (testLockedRef.current) return
               const form = event.currentTarget.form
-              if (form) onTest(providerPayload(new FormData(form)))
+              if (!form) return
+              const payload = providerPayload(new FormData(form))
+              if (
+                scope === 'project' &&
+                !provider?.api_key_set &&
+                providerPayloadIsBlank(payload)
+              ) {
+                testLockedRef.current = true
+                void onTest()
+                  .catch(() => undefined)
+                  .finally(() => {
+                    testLockedRef.current = false
+                  })
+                return
+              }
+              if (!form.reportValidity()) return
+              testLockedRef.current = true
+              void onTest(payload)
+                .catch(() => undefined)
+                .finally(() => {
+                  testLockedRef.current = false
+                })
             }}
           >
             {scope === 'system'

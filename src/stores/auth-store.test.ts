@@ -17,6 +17,7 @@ const sampleUser = {
 describe('useAuthStore', () => {
   beforeEach(() => {
     clearCookies()
+    window.sessionStorage.clear()
     vi.resetModules()
   })
 
@@ -27,7 +28,7 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().auth.user).toBeNull()
   })
 
-  it('persists access token so a new store instance reads it back', async () => {
+  it('persists access token in the browser session so a reload reads it back', async () => {
     const useAuthStore = await importAuthStore()
     useAuthStore.getState().auth.setAccessToken('session-token')
 
@@ -37,6 +38,7 @@ describe('useAuthStore', () => {
     expect(useAuthStoreAfterReload.getState().auth.accessToken).toBe(
       'session-token'
     )
+    expect(document.cookie).not.toContain('vdoc_admin_access_token')
   })
 
   it('clears persisted access token when resetAccessToken is used', async () => {

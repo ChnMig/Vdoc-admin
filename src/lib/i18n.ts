@@ -42,7 +42,9 @@ const en = {
     drafts: 'Drafts',
     versions: 'Versions',
     diffs: 'Diffs',
+    audit: 'Audit Logs',
     mcpTokens: 'MCP Tokens',
+    skill: 'Vdoc Skill',
     settings: 'Settings',
   },
   team: {
@@ -80,6 +82,59 @@ const en = {
   passwordInput: {
     show: 'Show password',
     hide: 'Hide password',
+  },
+  publicShare: {
+    title: 'Shared document',
+    security:
+      'This capability grants read-only access to published content. It is never stored in this browser.',
+    loading: 'Loading the shared document…',
+    unavailable:
+      'This link is invalid, expired, revoked, or requires a password.',
+    passwordPrompt: 'Enter the share password to continue.',
+    password: 'Share password',
+    passwordHint:
+      'Use 12–72 UTF-8 bytes with no leading or trailing whitespace.',
+    passwordInvalid:
+      'Enter a password of 12–72 UTF-8 bytes without leading or trailing whitespace.',
+    unlock: 'Unlock document',
+    version: 'Version',
+    history: 'Published history',
+    latestOnly: 'This link always follows the latest published version.',
+    expires: 'Expires {date}',
+    download: 'Download original',
+    downloadFailed: 'The original file could not be downloaded.',
+    retry: 'Try again',
+    managementTitle: 'Public sharing',
+    managementDescription:
+      'Create independent, revocable capability links for published branch content.',
+    readOnlyTitle: 'Archived context is read-only',
+    readOnlyDescription:
+      'Existing share links can still be listed and revoked, but new links and secret reveal are unavailable.',
+    managementError:
+      'The sharing action could not be completed. Check the branch, password, and current permissions, then try again.',
+    branch: 'Published branch',
+    scope: 'Version access',
+    latest: 'Latest published version',
+    allVersions: 'All published versions',
+    expiry: 'Expiry',
+    passwordOptional: 'Optional password (12–72 bytes)',
+    create: 'Create share link',
+    linkReady: 'Active share link',
+    copy: 'Copy link',
+    copySuccess: 'Share link copied.',
+    copyFailed:
+      'The share link could not be copied. Select and copy it manually.',
+    reveal: 'Show link',
+    revoke: 'Revoke',
+    revokeConfirmTitle: 'Revoke this public link?',
+    revokeConfirmDescription:
+      'This action is irreversible. Anyone using this link will immediately lose access to the shared document and downloads.',
+    protected: 'Password protected',
+    unprotected: 'No password',
+    noShares: 'No public links have been created for this document.',
+    active: 'Active',
+    revoked: 'Revoked',
+    expired: 'Expired',
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
@@ -128,6 +183,8 @@ const en = {
       loading: 'Loading backend data...',
       error: 'Backend request failed',
       empty: 'No records returned by the backend.',
+      all: 'All',
+      add: 'Add',
       create: 'Create',
       update: 'Update',
       archive: 'Archive',
@@ -141,6 +198,7 @@ const en = {
       save: 'Save',
       view: 'View',
       compare: 'Compare',
+      clear: 'Clear',
       selected: 'Selected',
       none: 'None',
       yes: 'Yes',
@@ -170,10 +228,16 @@ const en = {
       roleTitle: 'Role guidance',
       superAdminRole: 'Super admin workspace',
       adminRole: 'Project admin workspace',
+      writerRole: 'Writer workspace',
+      readerRole: 'Reader workspace',
       superAdminGuidance:
         'Start with users and teams, then create projects with an accountable admin before writers publish drafts.',
       adminGuidance:
         'Focus on project membership, document branches, draft review, version browsing, and token hygiene.',
+      writerGuidance:
+        'Create and revise drafts, inspect review comments, and submit changes for an administrator to publish.',
+      readerGuidance:
+        'Browse published documents, versions, diffs, and AI explanations without changing project state.',
       usersStat: 'People who can collaborate in Vdoc',
       teamsStat: 'Ownership boundaries for projects',
       projectsStat: 'Product spaces ready for docs',
@@ -242,6 +306,12 @@ const en = {
           'Select a project, then add readers, writers, and admins so review responsibility is explicit.',
         action: 'Use the member form after selecting a project.',
       },
+      memberCandidates: {
+        title: 'No eligible users',
+        description:
+          'Every active account is already a member of this project. Create or reactivate an account before adding another member.',
+        action: 'Manage accounts from the Users page if you are a SuperAdmin.',
+      },
       documents: {
         title: 'No documents in this project',
         description:
@@ -277,6 +347,13 @@ const en = {
         description:
           'Compare two published versions, then filter by breaking, must-handle, or high-severity changes.',
         action: 'Select from and to versions, then run Compare.',
+      },
+      audit: {
+        title: 'No audit events match these filters',
+        description:
+          'Audit history appears after authorized mutations and MCP activity. Narrow filters may also hide existing events.',
+        action:
+          'Choose another project or clear the action and resource filters.',
       },
       tokens: {
         title: 'No MCP tokens yet',
@@ -320,12 +397,50 @@ const en = {
       schemaRefs: 'Schema refs',
       normalizedOperation: 'Normalized operation',
     },
+    permissions: {
+      superAdminOnly:
+        'This page is available only to active system administrators.',
+    },
+    audit: {
+      title: 'Audit history',
+      description:
+        'Newest-first product activity. Project admins can inspect only projects they administer.',
+      allProjects: 'All projects',
+      projectAdminRequired:
+        'Select a project where you hold the Project Admin role.',
+      action: 'Action',
+      actionPlaceholder: 'For example document.create',
+      resourceType: 'Resource type',
+      resourceTypePlaceholder: 'For example document',
+      time: 'Time',
+      actor: 'Actor',
+      resource: 'Resource',
+      result: 'Result',
+    },
     review: {
       noteTitle: 'Review note',
       noteDescription:
         'Optional context sent only with approve, request-changes, or reject actions. Submit remains a bodyless lifecycle transition.',
       selectedDraft: 'Applies to selected draft: {draft}',
       noDraftSelected: 'Select a draft before adding review context.',
+    },
+    draftEditor: {
+      createTitle: 'Create draft',
+      editTitle: 'Edit selected draft',
+      readOnlyTitle: 'Selected draft is read-only',
+      readOnlyDescription:
+        'Submitted, rejected, and published drafts keep their review history and cannot be edited. Start a new draft to continue.',
+      newDraft: 'New draft',
+      branchImmutable:
+        'A draft stays on its original branch. Create a new draft to target another branch.',
+      archivedTitle: 'Archived context is read-only',
+      archivedDescription:
+        'The selected project, document, or draft branch is archived. Historical content remains available, but no draft mutation is allowed.',
+    },
+    promote: {
+      unavailableTitle: 'Promotion is not available yet',
+      unavailableDescription:
+        'Publish a version on one active branch and keep a different active target branch before promoting.',
     },
     ai: {
       badge: 'AI',
@@ -335,12 +450,17 @@ const en = {
       summaryTitle: 'AI summary',
       regenerateSummary: 'Regenerate AI summary',
       chatTitle: 'AI chat',
+      chatSession: 'Chat history',
       noMessages: 'No AI chat messages yet.',
       chatMessage: 'AI chat message',
       sendMessage: 'Send AI message',
+      readOnlyTitle: 'Archived context is read-only',
+      readOnlyDescription:
+        'Historical summaries and chat sessions remain available, but no new AI work can be started.',
       noSummary: 'No AI summary has been generated yet.',
       summaryStatus: 'AI summary status: {status}',
       summaryStatusReady: 'Ready',
+      summaryStatusPending: 'Pending',
       summaryStatusSucceeded: 'Succeeded',
       summaryStatusFailed: 'Failed',
       summaryStatusSkipped: 'Skipped',
@@ -348,12 +468,40 @@ const en = {
       settingsDescription:
         'Configure providers and prompt templates without exposing stored API keys.',
       projectScope: 'Project provider scope',
+      noReadableProjects: 'No readable projects are available for AI settings.',
+      loadingProjects: 'Loading projects…',
+      projectsLoadErrorTitle: 'Projects could not be loaded',
+      projectsLoadErrorDescription:
+        'Refresh the page before selecting an AI configuration scope.',
+      checkingProjectPermission: 'Checking project configuration permission…',
+      archivedSettingsTitle: 'Archived project settings are read-only',
+      archivedSettingsDescription:
+        'Saved provider and prompt configuration remains available to Project Admins and SuperAdmins for history. Provider updates, tests, and prompt changes are disabled.',
+      readOnlySettingsTitle: 'Project AI configuration is restricted',
+      readOnlySettingsDescription:
+        'Only a Project Admin or SuperAdmin can read, change, or test provider and prompt configuration. You can still use page summaries and chat where your document permissions allow it.',
+      permissionCheckFailedTitle: 'Project permissions could not be verified',
+      permissionCheckFailedDescription:
+        'The configuration remains read-only. Refresh after project membership is available.',
+      loadingProjectSettings: 'Loading project AI settings…',
+      loadingSystemProvider: 'Loading the system AI provider…',
+      systemProviderLoadErrorTitle: 'System AI provider could not be loaded',
+      systemProviderLoadErrorDescription:
+        'Refresh the page before changing or testing the system provider.',
+      projectSettingsErrorTitle: 'Project AI settings could not be loaded',
+      projectSettingsErrorDescription:
+        'The selected project configuration is unavailable. Refresh or select another project.',
+      projectPromptsErrorTitle: 'Project prompts could not be loaded',
+      projectPromptsErrorDescription:
+        'Prompt history for the selected project is unavailable. Refresh or select another project.',
       systemProviderTitle: 'System AI provider',
       projectProviderTitle: 'Project AI provider override',
       systemProviderDescription:
         'Default provider for SuperAdmin-capable system workflows.',
       projectProviderDescription:
         'Optional project override used only for the selected project.',
+      projectProviderFallbackStatus:
+        'Project override: not configured. AI can use the enabled system provider fallback.',
       providerName: 'Provider name',
       baseUrl: 'Base URL',
       model: 'Model',
@@ -381,10 +529,17 @@ const en = {
       providerTestSuccess: 'Success',
       providerTestError: 'Error',
       providerTestUnknownError: 'Provider test failed without a message.',
+      settingsMutationErrorTitle: 'AI settings were not saved',
+      settingsMutationErrorRecovery:
+        'Your form values are preserved. Fix the error and try again.',
       systemPromptsTitle: 'System prompt settings',
       projectPromptsTitle: 'Project prompt settings',
       promptSettingsDescription:
         'Edit system and user prompt text for AI summaries and chats.',
+      loadingPrompts: 'Loading AI prompt templates…',
+      promptsLoadErrorTitle: 'AI prompts could not be loaded',
+      promptsLoadErrorDescription:
+        'Refresh the page before changing prompt configuration.',
       noPrompts: 'No AI prompt templates returned.',
       systemPrompt: 'System prompt',
       userPromptTemplate: 'User prompt template',
@@ -413,13 +568,58 @@ const en = {
       noLanguage: 'plain text',
       unsafeLink: 'Unsafe link',
     },
+    token: {
+      scopesTitle: 'Token scopes',
+      apiRead: 'api:read — query OpenAPI contracts and diffs',
+      apiDraft: 'api:draft — create and update OpenAPI drafts',
+      docRead: 'doc:read — query Markdown documents and diffs',
+      docDraft: 'doc:draft — create and update Markdown drafts',
+      secretAvailable: 'Active token secret',
+      secretGuidance:
+        'Active tokens can be viewed and copied again. Revoked or expired tokens remain redacted.',
+      copy: 'Copy token',
+      copySuccess: 'Token copied.',
+      copyFailed: 'The token could not be copied. Select and copy it manually.',
+      revealErrorTitle: 'Token could not be revealed',
+      revokeErrorTitle: 'Token could not be revoked',
+      configTitle: 'MCP client configuration',
+      configDescription:
+        'Run the Vdoc stdio adapter. The token stays in VDOC_MCP_TOKEN instead of command arguments or copied HTTP headers.',
+    },
+    skill: {
+      installTitle: 'Install the official Skill',
+      installDescription:
+        'The Vdoc Skill teaches agents to query reviewed facts, compare versions, and submit drafts without bypassing human publication.',
+      stepPackage:
+        'Clone the public Vdoc-skill repository into a Codex user or repository Skill directory.',
+      stepMcp:
+        'Run the Vdoc MCP stdio adapter with the backend URL and an appropriately scoped active token in environment variables.',
+      stepVerify:
+        'Restart the agent and verify list_projects, list_documents, and read tools before draft workflows.',
+      boundaryTitle: 'Human publication boundary',
+      boundaryDescription:
+        'The Skill and MCP may create, update, and submit drafts. Only Project Admin or SuperAdmin can approve and publish in this workbench.',
+    },
     diff: {
-      compareHint: 'Only existing compare and summary APIs are used.',
+      compareHint:
+        'Stored comparisons load automatically. A new comparison is created only when the selected pair has no history.',
       noDiffSelected: 'Run a comparison to review changes.',
+      existingLoaded: 'Stored diff loaded',
+      historyTitle: 'Stored diff history',
+      historyDescription:
+        'Select a previous comparison or choose an exact version pair above.',
       addedEndpoints: 'Added endpoints',
       removedEndpoints: 'Removed endpoints',
       modifiedEndpoints: 'Modified endpoints',
       breakingChanges: 'Breaking changes',
+      addedLines: 'Added lines',
+      removedLines: 'Removed lines',
+      modifiedLines: 'Modified lines',
+      modifiedBlocks: 'Changed blocks',
+      addedLinesDescription: 'Lines added to the target Markdown file',
+      removedLinesDescription: 'Lines removed from the source Markdown file',
+      modifiedLinesDescription: 'Line replacements requiring review',
+      modifiedBlocksDescription: 'Unified diff groups containing changes',
       addedDescription: 'New operations in the target version',
       removedDescription: 'Removed operations from the source version',
       modifiedDescription: 'Changed operations requiring review',
@@ -444,6 +644,7 @@ const en = {
       severity: 'Severity',
       oldValue: 'Old value',
       newValue: 'New value',
+      unifiedDiff: 'Unified line diff',
     },
     fields: {
       id: 'ID',
@@ -460,6 +661,8 @@ const en = {
       user: 'User',
       document: 'Document',
       branch: 'Branch',
+      sourceBranch: 'Source branch',
+      targetBranch: 'Target branch',
       version: 'Version',
       draft: 'Draft',
       role: 'Role',
@@ -470,6 +673,7 @@ const en = {
       changelog: 'Changelog',
       gitCommit: 'Git commit',
       content: 'Content',
+      schemaFile: 'Schema or Markdown file',
       contentKind: 'Content kind',
       reviewNote: 'Review note',
       scopes: 'Scopes',
@@ -487,12 +691,15 @@ const en = {
       apiBaseUrl: 'API base URL',
       health: 'Health',
       identity: 'Identity',
+      defaultBranch: 'Default branch',
+      protectedBranch: 'Protected branch',
     },
     placeholders: {
       selectProject: 'Select a project',
       selectDocument: 'Select a document',
       selectVersion: 'Select a version',
       selectBranch: 'Select a branch',
+      selectPublishedBranch: 'Select a published source branch',
       selectUser: 'Select a user',
       optionalIsoDate: 'Optional ISO date',
       endpointPath: 'Filter endpoint path',
@@ -557,10 +764,18 @@ const en = {
       diffs: {
         title: 'Diffs',
         description:
-          'Compare two versions on demand. Vdoc has no diff history list endpoint.',
+          'Load stored comparisons and create a diff only when a version pair has no history.',
         stage: 'Versions/diffs',
         cue: 'Diffs expose risk between reviewed versions before downstream consumers rely on them.',
         next: 'Choose source and target versions, then filter by breaking or must-handle changes.',
+      },
+      audit: {
+        title: 'Audit Logs',
+        description:
+          'Inspect authorized product activity by project, action, and resource type.',
+        stage: 'System/audit',
+        cue: 'Audit evidence connects operator and agent actions to the affected resource.',
+        next: 'Select an administered project or use system-wide filters as a SuperAdmin.',
       },
       mcpTokens: {
         title: 'MCP Tokens',
@@ -569,6 +784,14 @@ const en = {
         stage: 'Agent access',
         cue: 'Tokens give agents access to approved Vdoc facts, not direct publication rights.',
         next: 'Issue scoped tokens only after the workspace and documents are clear.',
+      },
+      skill: {
+        title: 'Vdoc Skill',
+        description:
+          'Install the official agent workflow package and connect it to the Vdoc MCP endpoint.',
+        stage: 'Agent access',
+        cue: 'MCP provides tools; the Skill supplies the safe workflow and output templates.',
+        next: 'Install the package, configure an active scoped token, then verify read tools before submitting drafts.',
       },
       settings: {
         title: 'Settings',
@@ -586,6 +809,8 @@ const en = {
       createDocument: 'Create document',
       createBranch: 'Create branch',
       createDraft: 'Create or update draft',
+      promoteDraft: 'Promote published branch to draft',
+      diffPreview: 'Draft diff preview',
       createToken: 'Create MCP token',
       members: 'Project members',
       branches: 'Branches',
@@ -596,7 +821,7 @@ const en = {
       contentViewer: 'Content viewer',
       dependencies: 'Dependencies',
       userTokens: 'Selected user MCP tokens',
-      tokenDetails: 'Redacted token details',
+      tokenDetails: 'Token details',
     },
     statuses: {
       enabled: 'Enabled',
@@ -604,8 +829,10 @@ const en = {
       active: 'Active',
       archived: 'Archived',
       pending: 'Pending',
+      draft: 'Draft',
       submitted: 'Submitted',
       approved: 'Approved',
+      published: 'Published',
       rejected: 'Rejected',
       changesRequested: 'Changes requested',
       ready: 'Ready',
@@ -641,6 +868,14 @@ const en = {
     password: 'Password',
     name: 'Name',
     confirmPassword: 'Confirm Password',
+    registrationChecking: 'Checking registration availability…',
+    registrationDisabledShort:
+      'Registration is disabled. Ask a system administrator for an account.',
+    registrationDisabledTitle: 'Registration is unavailable',
+    registrationDisabledDescription:
+      'This Vdoc instance does not allow anonymous account creation.',
+    registrationDisabledRecovery:
+      'Return to sign in and use an account created by a system administrator.',
     terms: 'Terms of Service',
     privacy: 'Privacy Policy',
     validation: {
@@ -754,7 +989,9 @@ const zhCN = {
     drafts: '草稿',
     versions: '版本',
     diffs: '差异',
+    audit: '审计日志',
     mcpTokens: 'MCP 令牌',
+    skill: 'Vdoc Skill',
     settings: '设置',
   },
   team: {
@@ -791,6 +1028,52 @@ const zhCN = {
   passwordInput: {
     show: '显示密码',
     hide: '隐藏密码',
+  },
+  publicShare: {
+    title: '共享文档',
+    security: '此能力链接仅可读取已发布内容，分享密钥不会存入浏览器存储。',
+    loading: '正在加载共享文档…',
+    unavailable: '链接无效、已过期、已撤销，或需要输入密码。',
+    passwordPrompt: '请输入分享密码后继续。',
+    password: '分享密码',
+    passwordHint: '请输入 12–72 个 UTF-8 字节，且首尾不能包含空白字符。',
+    passwordInvalid: '密码必须为 12–72 个 UTF-8 字节，且首尾不能包含空白字符。',
+    unlock: '解锁文档',
+    version: '版本',
+    history: '已发布历史',
+    latestOnly: '此链接始终跟随最新发布版本。',
+    expires: '有效期至 {date}',
+    download: '下载原文件',
+    downloadFailed: '原文件下载失败。',
+    retry: '重试',
+    managementTitle: '公开分享',
+    managementDescription: '为已发布分支创建相互独立、可随时撤销的能力链接。',
+    readOnlyTitle: '归档上下文为只读',
+    readOnlyDescription:
+      '仍可查看和撤销已有分享链接，但不能创建新链接或再次揭示密钥。',
+    managementError: '分享操作未完成。请检查分支、密码和当前权限后重试。',
+    branch: '已发布分支',
+    scope: '版本范围',
+    latest: '最新已发布版本',
+    allVersions: '全部已发布版本',
+    expiry: '有效期',
+    passwordOptional: '可选密码（12–72 字节）',
+    create: '创建分享链接',
+    linkReady: '有效分享链接',
+    copy: '复制链接',
+    copySuccess: '分享链接已复制。',
+    copyFailed: '分享链接复制失败，请手动选择并复制。',
+    reveal: '显示链接',
+    revoke: '撤销',
+    revokeConfirmTitle: '确认撤销此公开链接？',
+    revokeConfirmDescription:
+      '此操作不可恢复。任何正在使用该链接的人都将立即失去共享文档的查看和下载权限。',
+    protected: '密码保护',
+    unprotected: '无密码',
+    noShares: '该文档尚未创建公开链接。',
+    active: '有效',
+    revoked: '已撤销',
+    expired: '已过期',
   },
   dashboard: {
     eyebrow: 'Vdoc Admin',
@@ -839,6 +1122,8 @@ const zhCN = {
       loading: '正在加载后端数据...',
       error: '后端请求失败',
       empty: '后端未返回记录。',
+      all: '全部',
+      add: '添加',
       create: '创建',
       update: '更新',
       archive: '归档',
@@ -852,6 +1137,7 @@ const zhCN = {
       save: '保存',
       view: '查看',
       compare: '比较',
+      clear: '清空',
       selected: '已选择',
       none: '无',
       yes: '是',
@@ -881,10 +1167,14 @@ const zhCN = {
       roleTitle: '角色指引',
       superAdminRole: '超级管理员工作区',
       adminRole: '项目管理员工作区',
+      writerRole: '写作者工作区',
+      readerRole: '只读工作区',
       superAdminGuidance:
         '先创建用户和团队，再创建带负责管理员的项目，让作者进入草稿发布流程。',
       adminGuidance:
         '重点关注项目成员、文档分支、草稿审阅、版本浏览和令牌治理。',
+      writerGuidance: '创建和修订草稿、查看审核意见，并提交给管理员人工发布。',
+      readerGuidance: '浏览已发布文档、版本、差异和 AI 解释，不修改项目状态。',
       usersStat: '可在 Vdoc 中协作的成员',
       teamsStat: '项目的归属边界',
       projectsStat: '已准备承载文档的产品空间',
@@ -945,6 +1235,12 @@ const zhCN = {
         description: '选择项目后添加只读、写作和管理员角色，让审阅责任明确。',
         action: '选择项目后使用成员表单。',
       },
+      memberCandidates: {
+        title: '没有可添加的用户',
+        description:
+          '所有有效账号都已经是该项目成员。请先创建或重新启用账号，再添加成员。',
+        action: '如果你是超级管理员，请前往用户页面管理账号。',
+      },
       documents: {
         title: '此项目还没有文档',
         description:
@@ -977,6 +1273,12 @@ const zhCN = {
         description:
           '比较两个已发布版本后，可按破坏性、必须处理或高严重级别筛选。',
         action: '选择源版本和目标版本，然后点击比较。',
+      },
+      audit: {
+        title: '没有匹配筛选条件的审计事件',
+        description:
+          '授权变更和 MCP 活动发生后会产生审计记录；筛选条件也可能隐藏已有事件。',
+        action: '选择其他项目，或清空动作和资源类型筛选。',
       },
       tokens: {
         title: '还没有 MCP 令牌',
@@ -1019,12 +1321,46 @@ const zhCN = {
       schemaRefs: 'Schema 引用',
       normalizedOperation: '规范化操作',
     },
+    permissions: {
+      superAdminOnly: '此页面仅对有效的系统超级管理员开放。',
+    },
+    audit: {
+      title: '审计历史',
+      description: '按时间倒序展示产品活动。项目管理员只能查看自己管理的项目。',
+      allProjects: '全部项目',
+      projectAdminRequired: '请选择你拥有项目管理员角色的项目。',
+      action: '动作',
+      actionPlaceholder: '例如 document.create',
+      resourceType: '资源类型',
+      resourceTypePlaceholder: '例如 document',
+      time: '时间',
+      actor: '操作者',
+      resource: '资源',
+      result: '结果',
+    },
     review: {
       noteTitle: '审阅备注',
       noteDescription:
         '可选上下文只会随批准、请求修改或拒绝操作发送。提交仍是不带请求体的生命周期变更。',
       selectedDraft: '作用于所选草稿：{draft}',
       noDraftSelected: '请先选择草稿，再添加审阅上下文。',
+    },
+    draftEditor: {
+      createTitle: '创建草稿',
+      editTitle: '编辑所选草稿',
+      readOnlyTitle: '所选草稿为只读状态',
+      readOnlyDescription:
+        '已提交、已拒绝和已发布的草稿会保留审阅历史，不能继续编辑。请新建草稿后继续。',
+      newDraft: '新建草稿',
+      branchImmutable: '草稿创建后所属分支不可更改。如需换分支，请新建草稿。',
+      archivedTitle: '归档上下文为只读',
+      archivedDescription:
+        '所选项目、文档或草稿所属分支已归档。历史内容仍可查看，但不再允许修改草稿。',
+    },
+    promote: {
+      unavailableTitle: '当前无法提升',
+      unavailableDescription:
+        '请先在一个有效分支发布版本，并保留另一个不同的有效目标分支。',
     },
     ai: {
       badge: 'AI',
@@ -1034,12 +1370,17 @@ const zhCN = {
       summaryTitle: 'AI 摘要',
       regenerateSummary: '重新生成 AI 摘要',
       chatTitle: 'AI 聊天',
+      chatSession: '聊天历史',
       noMessages: '还没有 AI 聊天消息。',
       chatMessage: 'AI 聊天消息',
       sendMessage: '发送 AI 消息',
+      readOnlyTitle: '归档上下文为只读',
+      readOnlyDescription:
+        '历史摘要和聊天会话仍可查看，但不能再启动新的 AI 工作。',
       noSummary: '还没有生成 AI 摘要。',
       summaryStatus: 'AI 摘要状态：{status}',
       summaryStatusReady: '就绪',
+      summaryStatusPending: '生成中',
       summaryStatusSucceeded: '已成功',
       summaryStatusFailed: '失败',
       summaryStatusSkipped: '已跳过',
@@ -1047,10 +1388,37 @@ const zhCN = {
       settingsDescription:
         '配置提供商和提示词模板，同时不暴露已保存的 API key。',
       projectScope: '项目提供商范围',
+      noReadableProjects: '当前没有可查看 AI 设置的项目。',
+      loadingProjects: '正在加载项目…',
+      projectsLoadErrorTitle: '无法加载项目',
+      projectsLoadErrorDescription: '请刷新页面后再选择 AI 配置范围。',
+      checkingProjectPermission: '正在确认项目配置权限…',
+      archivedSettingsTitle: '归档项目设置为只读',
+      archivedSettingsDescription:
+        '已保存的提供商和提示词配置仅供项目管理员和超级管理员查看历史；不能更新或测试提供商，也不能修改提示词。',
+      readOnlySettingsTitle: '项目 AI 配置受权限保护',
+      readOnlySettingsDescription:
+        '只有项目管理员或超级管理员可以读取、修改或测试提供商及提示词配置。你仍可在文档权限允许时使用页面摘要和聊天。',
+      permissionCheckFailedTitle: '无法确认项目权限',
+      permissionCheckFailedDescription:
+        '配置将保持只读。项目成员信息恢复后请刷新页面。',
+      loadingProjectSettings: '正在加载项目 AI 设置…',
+      loadingSystemProvider: '正在加载系统 AI 提供商…',
+      systemProviderLoadErrorTitle: '无法加载系统 AI 提供商',
+      systemProviderLoadErrorDescription:
+        '请刷新页面后再修改或测试系统提供商。',
+      projectSettingsErrorTitle: '无法加载项目 AI 设置',
+      projectSettingsErrorDescription:
+        '所选项目的配置当前不可用，请刷新或选择其他项目。',
+      projectPromptsErrorTitle: '无法加载项目提示词',
+      projectPromptsErrorDescription:
+        '所选项目的提示词历史当前不可用，请刷新或选择其他项目。',
       systemProviderTitle: '系统 AI 提供商',
       projectProviderTitle: '项目 AI 提供商覆盖',
       systemProviderDescription: '用于超级管理员系统工作流的默认提供商。',
       projectProviderDescription: '仅用于所选项目的可选项目级覆盖。',
+      projectProviderFallbackStatus:
+        '项目覆盖：未配置。AI 可以回退使用已启用的系统提供商。',
       providerName: '提供商名称',
       baseUrl: 'Base URL',
       model: '模型',
@@ -1078,10 +1446,15 @@ const zhCN = {
       providerTestSuccess: '成功',
       providerTestError: '错误',
       providerTestUnknownError: '提供商测试失败，但没有返回错误消息。',
+      settingsMutationErrorTitle: 'AI 设置未保存',
+      settingsMutationErrorRecovery: '表单内容已保留，请修正错误后重试。',
       systemPromptsTitle: '系统提示词设置',
       projectPromptsTitle: '项目提示词设置',
       promptSettingsDescription:
         '编辑 AI 摘要和聊天使用的系统提示词和用户提示词。',
+      loadingPrompts: '正在加载 AI 提示词模板…',
+      promptsLoadErrorTitle: '无法加载 AI 提示词',
+      promptsLoadErrorDescription: '请刷新页面后再修改提示词配置。',
       noPrompts: '后端没有返回 AI 提示词模板。',
       systemPrompt: '系统提示词',
       userPromptTemplate: '用户提示词模板',
@@ -1109,13 +1482,55 @@ const zhCN = {
       noLanguage: '纯文本',
       unsafeLink: '不安全链接',
     },
+    token: {
+      scopesTitle: '令牌权限范围',
+      apiRead: 'api:read — 查询 OpenAPI 契约和差异',
+      apiDraft: 'api:draft — 创建和更新 OpenAPI 草稿',
+      docRead: 'doc:read — 查询 Markdown 文档和差异',
+      docDraft: 'doc:draft — 创建和更新 Markdown 草稿',
+      secretAvailable: '有效令牌明文',
+      secretGuidance: '有效令牌可再次查看和复制；已撤销或过期令牌保持脱敏。',
+      copy: '复制令牌',
+      copySuccess: '令牌已复制。',
+      copyFailed: '令牌复制失败，请手动选择并复制。',
+      revealErrorTitle: '无法查看令牌',
+      revokeErrorTitle: '无法撤销令牌',
+      configTitle: 'MCP 客户端配置',
+      configDescription:
+        '运行 Vdoc stdio 适配器，并把令牌放入 VDOC_MCP_TOKEN 环境变量，而不是命令参数或 HTTP 配置。',
+    },
+    skill: {
+      installTitle: '安装官方 Skill',
+      installDescription:
+        'Vdoc Skill 指导智能体查询已审阅事实、比较版本并提交草稿，同时不绕过人工发布。',
+      stepPackage:
+        '把公开 Vdoc-skill 仓库克隆到 Codex 用户级或仓库级 Skill 目录。',
+      stepMcp:
+        '运行 Vdoc MCP stdio 适配器，并通过环境变量配置后端地址和限定范围的有效令牌。',
+      stepVerify:
+        '重启智能体，先验证 list_projects、list_documents 和读取工具，再执行草稿工作流。',
+      boundaryTitle: '人工发布边界',
+      boundaryDescription:
+        'Skill 和 MCP 可以创建、更新并提交草稿；只有 Project Admin 或 SuperAdmin 能在工作台批准并发布。',
+    },
     diff: {
-      compareHint: '仅使用现有比较和摘要 API。',
+      compareHint: '自动加载历史比较；只有所选版本对没有记录时才创建新差异。',
       noDiffSelected: '运行比较后审阅变更。',
+      existingLoaded: '已加载历史差异',
+      historyTitle: '历史差异',
+      historyDescription: '选择既有比较，或在上方指定精确版本对。',
       addedEndpoints: '新增端点',
       removedEndpoints: '删除端点',
       modifiedEndpoints: '修改端点',
       breakingChanges: '破坏性变更',
+      addedLines: '新增行',
+      removedLines: '删除行',
+      modifiedLines: '修改行',
+      modifiedBlocks: '变更块',
+      addedLinesDescription: '目标 Markdown 文件新增的行',
+      removedLinesDescription: '从源 Markdown 文件删除的行',
+      modifiedLinesDescription: '需要审阅的行替换',
+      modifiedBlocksDescription: '包含变更的统一差异分组',
       addedDescription: '目标版本中的新增操作',
       removedDescription: '从源版本删除的操作',
       modifiedDescription: '需要审阅的已变更操作',
@@ -1140,6 +1555,7 @@ const zhCN = {
       severity: '严重级别',
       oldValue: '旧值',
       newValue: '新值',
+      unifiedDiff: '统一行差异',
     },
     fields: {
       id: 'ID',
@@ -1156,6 +1572,8 @@ const zhCN = {
       user: '用户',
       document: '文档',
       branch: '分支',
+      sourceBranch: '源分支',
+      targetBranch: '目标分支',
       version: '版本',
       draft: '草稿',
       role: '角色',
@@ -1166,6 +1584,7 @@ const zhCN = {
       changelog: '变更日志',
       gitCommit: 'Git 提交',
       content: '内容',
+      schemaFile: 'Schema 或 Markdown 文件',
       contentKind: '内容类型',
       reviewNote: '审阅备注',
       scopes: '范围',
@@ -1183,12 +1602,15 @@ const zhCN = {
       apiBaseUrl: 'API 基础地址',
       health: '健康状态',
       identity: '身份',
+      defaultBranch: '默认分支',
+      protectedBranch: '受保护分支',
     },
     placeholders: {
       selectProject: '选择项目',
       selectDocument: '选择文档',
       selectVersion: '选择版本',
       selectBranch: '选择分支',
+      selectPublishedBranch: '选择已有发布版本的源分支',
       selectUser: '选择用户',
       optionalIsoDate: '可选 ISO 日期',
       endpointPath: '筛选端点路径',
@@ -1249,10 +1671,17 @@ const zhCN = {
       },
       diffs: {
         title: '差异',
-        description: '按需比较两个版本。Vdoc 没有差异历史列表端点。',
+        description: '优先加载历史比较，仅在版本对没有记录时创建差异。',
         stage: '版本/差异',
         cue: '差异揭示已审阅版本之间的风险，避免下游消费者误用。',
         next: '选择来源和目标版本，再按破坏性或必须处理变更过滤。',
+      },
+      audit: {
+        title: '审计日志',
+        description: '按项目、动作和资源类型检查有权限查看的产品活动。',
+        stage: '系统/审计',
+        cue: '审计证据把操作员和智能体动作关联到受影响资源。',
+        next: '项目管理员选择自己管理的项目；超级管理员可使用全局筛选。',
       },
       mcpTokens: {
         title: 'MCP 令牌',
@@ -1260,6 +1689,13 @@ const zhCN = {
         stage: '智能体访问',
         cue: '令牌允许智能体访问已批准的 Vdoc 事实，而不是直接发布。',
         next: '工作区和文档清晰后，再签发限定范围的令牌。',
+      },
+      skill: {
+        title: 'Vdoc Skill',
+        description: '安装官方智能体工作流包，并连接 Vdoc MCP 端点。',
+        stage: '智能体访问',
+        cue: 'MCP 提供工具，Skill 提供安全工作流和输出模板。',
+        next: '安装包、配置有效的限定范围令牌，并在提交草稿前验证读取工具。',
       },
       settings: {
         title: '设置',
@@ -1276,6 +1712,8 @@ const zhCN = {
       createDocument: '创建文档',
       createBranch: '创建分支',
       createDraft: '创建或更新草稿',
+      promoteDraft: '把已发布分支提升为草稿',
+      diffPreview: '草稿差异预览',
       createToken: '创建 MCP 令牌',
       members: '项目成员',
       branches: '分支',
@@ -1286,7 +1724,7 @@ const zhCN = {
       contentViewer: '内容查看器',
       dependencies: '依赖',
       userTokens: '所选用户 MCP 令牌',
-      tokenDetails: '脱敏令牌详情',
+      tokenDetails: '令牌详情',
     },
     statuses: {
       enabled: '启用',
@@ -1294,8 +1732,10 @@ const zhCN = {
       active: '激活',
       archived: '已归档',
       pending: '待处理',
+      draft: '草稿',
       submitted: '已提交',
       approved: '已批准',
+      published: '已发布',
       rejected: '已拒绝',
       changesRequested: '请求修改',
       ready: '就绪',
@@ -1329,6 +1769,11 @@ const zhCN = {
     password: '密码',
     name: '姓名',
     confirmPassword: '确认密码',
+    registrationChecking: '正在检查注册状态…',
+    registrationDisabledShort: '注册已关闭，请联系系统管理员创建账号。',
+    registrationDisabledTitle: '暂不开放注册',
+    registrationDisabledDescription: '此 Vdoc 实例不允许匿名创建账号。',
+    registrationDisabledRecovery: '请返回登录，并使用系统管理员创建的账号。',
     terms: '服务条款',
     privacy: '隐私政策',
     validation: {

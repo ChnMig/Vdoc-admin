@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAIChatSession,
+  listAIChatSessions,
   sendAIChatMessage,
   type AIChatMessageDTO,
   type AIChatSessionDTO,
@@ -19,6 +20,7 @@ const apiMocks = vi.hoisted(() => ({
   createAIChatSession: vi.fn(),
   getAIChatSession: vi.fn(),
   getAISummary: vi.fn(),
+  listAIChatSessions: vi.fn(),
   regenerateAISummary: vi.fn(),
   sendAIChatMessage: vi.fn(),
 }))
@@ -30,6 +32,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     createAIChatSession: apiMocks.createAIChatSession,
     getAIChatSession: apiMocks.getAIChatSession,
     getAISummary: apiMocks.getAISummary,
+    listAIChatSessions: apiMocks.listAIChatSessions,
     regenerateAISummary: apiMocks.regenerateAISummary,
     sendAIChatMessage: apiMocks.sendAIChatMessage,
   }
@@ -51,14 +54,17 @@ const targetB = {
 
 const chatMessagesBySession = new Map<string, AIChatMessageDTO[]>()
 
-function renderPanel(target: AISummaryTarget) {
+function renderPanel(
+  target: AISummaryTarget,
+  permissions: { interactive?: boolean; canRegenerate?: boolean } = {}
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   const elementForTarget = (nextTarget: AISummaryTarget) => (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <AIContextPanel target={nextTarget} />
+        <AIContextPanel target={nextTarget} {...permissions} />
       </LanguageProvider>
     </QueryClientProvider>
   )
@@ -130,6 +136,14 @@ function messageForSession(sessionId: string, content: string) {
   } satisfies AIChatMessageDTO
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('AIContextPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -140,6 +154,7 @@ describe('AIContextPanel', () => {
     apiMocks.regenerateAISummary.mockImplementation(
       async (target: AISummaryTarget) => summaryForTarget(target)
     )
+    apiMocks.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
     apiMocks.createAIChatSession.mockImplementation(
       async (projectId: string, payload: AIChatSessionPayload) =>
         chatSessionFor(projectId, payload)
@@ -232,6 +247,137 @@ describe('AIContextPanel', () => {
     expect(
       screen.queryByText('No AI summary has been generated yet.')
     ).not.toBeInTheDocument()
+  })
+
+  it('renders an in-flight summary as pending', async () => {
+    apiMocks.getAISummary.mockResolvedValueOnce({
+      ...summaryForTarget(targetA),
+      status: 'pending',
+      content: undefined,
+      error_message: undefined,
+    } satisfies AISummaryDTO)
+
+    const screen = renderPanel(targetA)
+
+    expect(
+      await screen.findByText('AI summary status: Pending')
+    ).toBeInTheDocument()
+  })
+
+  it('preserves a failed chat message and clears it only after success', async () => {
+    const user = userEvent.setup()
+    apiMocks.sendAIChatMessage
+      .mockRejectedValueOnce(new Error('Provider unavailable'))
+      .mockImplementationOnce(
+        async (_projectId: string, sessionId: string, content: string) =>
+          messageForSession(sessionId, content)
+      )
+    const screen = renderPanel(targetA)
+    const message = await screen.findByLabelText('AI chat message')
+
+    await user.type(message, 'Please keep this prompt')
+    await user.click(screen.getByRole('button', { name: 'Send AI message' }))
+    await waitFor(() =>
+      expect(apiMocks.sendAIChatMessage).toHaveBeenCalledOnce()
+    )
+    expect(await screen.findByText('Provider unavailable')).toBeInTheDocument()
+    expect(message).toHaveValue('Please keep this prompt')
+
+    await user.click(screen.getByRole('button', { name: 'Send AI message' }))
+    await waitFor(() => expect(message).toHaveValue(''))
+  })
+
+  it('coalesces rapid first-message submissions into one session and one send', async () => {
+    const sessionCreation = deferred<AIChatSessionDTO>()
+    apiMocks.createAIChatSession.mockReturnValueOnce(sessionCreation.promise)
+    const screen = renderPanel(targetA)
+    const message = await screen.findByLabelText('AI chat message')
+    fireEvent.change(message, { target: { value: 'Only send once' } })
+    const form = message.closest('form')
+    if (!form) throw new Error('missing chat form')
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(apiMocks.createAIChatSession).toHaveBeenCalledOnce()
+    )
+    expect(apiMocks.sendAIChatMessage).not.toHaveBeenCalled()
+    sessionCreation.resolve(
+      chatSessionFor(targetA.projectId, {
+        document_id: targetA.documentId,
+        context_type: targetA.ownerType,
+        context_id: targetA.ownerId,
+        title: 'AI chat for version version-1',
+      })
+    )
+
+    await waitFor(() =>
+      expect(apiMocks.sendAIChatMessage).toHaveBeenCalledOnce()
+    )
+    expect(apiMocks.sendAIChatMessage).toHaveBeenCalledWith(
+      'project-1',
+      'session-version-1',
+      'Only send once'
+    )
+  })
+
+  it('restores the newest existing chat session after a refresh', async () => {
+    const existing = chatSessionFor('project-1', {
+      document_id: 'document-1',
+      context_type: 'version',
+      context_id: 'version-1',
+      title: 'Earlier discussion',
+    })
+    chatMessagesBySession.set(existing.id, [
+      messageForSession(existing.id, 'Recovered history'),
+    ])
+    apiMocks.listAIChatSessions.mockResolvedValue({
+      items: [existing],
+      total: 1,
+    })
+    const screen = renderPanel(targetA)
+
+    expect(await screen.findByText('Earlier discussion')).toBeInTheDocument()
+    expect(
+      await screen.findByText('answer for version-1: Recovered history')
+    ).toBeInTheDocument()
+    expect(listAIChatSessions).toHaveBeenCalledWith(targetA)
+    expect(apiMocks.createAIChatSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps archived AI history readable and disables new work', async () => {
+    const existing = chatSessionFor('project-1', {
+      document_id: 'document-1',
+      context_type: 'version',
+      context_id: 'version-1',
+      title: 'Archived discussion',
+    })
+    chatMessagesBySession.set(existing.id, [
+      messageForSession(existing.id, 'Archived answer'),
+    ])
+    apiMocks.listAIChatSessions.mockResolvedValue({
+      items: [existing],
+      total: 1,
+    })
+    const user = userEvent.setup()
+    const screen = renderPanel(targetA, {
+      interactive: false,
+      canRegenerate: false,
+    })
+
+    expect(await screen.findByText('Summary for version-1')).toBeInTheDocument()
+    expect(
+      await screen.findByText('answer for version-1: Archived answer')
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('AI chat message')).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Regenerate AI summary' })
+    ).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Send AI message' }))
+    expect(apiMocks.createAIChatSession).not.toHaveBeenCalled()
+    expect(apiMocks.sendAIChatMessage).not.toHaveBeenCalled()
+    expect(apiMocks.regenerateAISummary).not.toHaveBeenCalled()
   })
 
   it('renders failed summary status and backend error when content is blank', async () => {

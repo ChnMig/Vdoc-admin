@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth-store'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
@@ -8,12 +9,21 @@ import {
 } from '@/components/ui/sidebar'
 // import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
+import { visibleNavGroups } from './data/visible-sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
 
-export function AppSidebar() {
+export function AppSidebar({
+  hasAuditAccess = false,
+}: {
+  hasAuditAccess?: boolean
+}) {
   const { collapsible, variant } = useLayout()
+  const isSuperAdmin = Boolean(
+    useAuthStore((state) => state.auth.user?.is_super_admin)
+  )
+  const navGroups = visibleNavGroups(isSuperAdmin, hasAuditAccess)
   return (
     <Sidebar
       collapsible={collapsible}
@@ -28,7 +38,7 @@ export function AppSidebar() {
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
+        {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
