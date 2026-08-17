@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseDocumentShareSecret } from '@/lib/document-share-url'
 import { LANGUAGE_COOKIE_NAME } from '@/lib/i18n'
+import { PublicShareRequestError } from '@/lib/public-share-api'
 import { LanguageProvider } from '@/context/language-provider'
 import { PublicDocumentSharePage } from './public-document-share-page'
 
@@ -44,7 +45,9 @@ describe('PublicDocumentSharePage', () => {
     vi.clearAllMocks()
     clearCookies(LANGUAGE_COOKIE_NAME)
     publicShareApiMocks.getPublicShareMetadata
-      .mockRejectedValueOnce(new Error('password required'))
+      .mockRejectedValueOnce(
+        new PublicShareRequestError(401, 'PASSWORD_REQUIRED')
+      )
       .mockResolvedValue({
         document_name: 'Release policy',
         document_type: 2,
@@ -136,6 +139,21 @@ describe('PublicDocumentSharePage', () => {
   })
 
   it('recovers an initial transient failure without asking for a password', async () => {
+    publicShareApiMocks.getPublicShareMetadata.mockReset()
+    publicShareApiMocks.getPublicShareMetadata
+      .mockRejectedValueOnce(
+        new PublicShareRequestError(408, 'REQUEST_TIMEOUT')
+      )
+      .mockResolvedValue({
+        document_name: 'Release policy',
+        document_type: 2,
+        version_scope: 1,
+        current_version: {
+          id: versionId,
+          version_name: 'v1',
+          published_at: '2026-01-01T00:00:00Z',
+        },
+      })
     const user = userEvent.setup()
     const screen = render(
       <LanguageProvider>
@@ -143,7 +161,10 @@ describe('PublicDocumentSharePage', () => {
       </LanguageProvider>
     )
 
-    await screen.findByText('Enter the share password to continue.')
+    await screen.findByText(
+      'Check your connection and try again. The link and password have not been stored.'
+    )
+    expect(screen.queryByLabelText('Share password')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Try again' }))
 
     expect(
@@ -151,6 +172,26 @@ describe('PublicDocumentSharePage', () => {
     ).toBeInTheDocument()
     expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(2)
     expect(publicShareApiMocks.unlockPublicShare).not.toHaveBeenCalled()
+  })
+
+  it('shows invalid or revoked links as unavailable without a password form', async () => {
+    publicShareApiMocks.getPublicShareMetadata.mockReset()
+    publicShareApiMocks.getPublicShareMetadata.mockRejectedValueOnce(
+      new PublicShareRequestError(404, 'NOT_FOUND')
+    )
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    expect(
+      await screen.findByText('This link is invalid, expired, or revoked.')
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Share password')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Try again' })
+    ).not.toBeInTheDocument()
   })
 
   it('ignores an older full-page retry that finishes after a newer retry', async () => {
@@ -197,7 +238,9 @@ describe('PublicDocumentSharePage', () => {
       </LanguageProvider>
     )
 
-    await screen.findByText('Enter the share password to continue.')
+    await screen.findByText(
+      'Check your connection and try again. The link and password have not been stored.'
+    )
     const retry = screen.getByRole('button', { name: 'Try again' })
     act(() => {
       retry.click()
@@ -307,7 +350,7 @@ describe('PublicDocumentSharePage', () => {
 
   it('allows password re-entry when an in-memory unlock proof stops working', async () => {
     publicShareApiMocks.downloadPublicShareVersion.mockRejectedValueOnce(
-      new Error('unlock proof expired')
+      new PublicShareRequestError(401, 'PASSWORD_REQUIRED')
     )
     const user = userEvent.setup()
     const screen = render(
@@ -325,7 +368,9 @@ describe('PublicDocumentSharePage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Download original' }))
     expect(
-      await screen.findByText('The original file could not be downloaded.')
+      await screen.findByText(
+        'Your password session expired. Enter the password again to continue.'
+      )
     ).toBeInTheDocument()
     await user.click(
       screen.getByRole('button', { name: 'Enter password again' })

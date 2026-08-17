@@ -138,7 +138,6 @@ export type DiffDTO = {
   document_id: string
   from_version_id?: string
   to_version_id?: string
-  diff_object_key?: string
   diff_hash?: string
   diff_status: number
   summary: DiffSummaryDTO
@@ -185,18 +184,9 @@ export type DraftDTO = {
   source_branch_id?: string
   source_version_id?: string
   base_version_id?: string
-  raw_content?: string
-  normalized_content?: string
-  raw_schema?: string
-  normalized_schema?: string
-  raw_content_object_key?: string
-  normalized_content_object_key?: string
-  raw_schema_object_key?: string
-  normalized_schema_object_key?: string
   raw_content_hash?: string
   normalized_content_hash?: string
-  raw_schema_hash?: string
-  normalized_schema_hash?: string
+  stable_content_hash?: string
   status: number
   diff_preview?: DiffDTO
   review_comment?: string
@@ -224,7 +214,6 @@ type ContentDTO = {
   kind: string
   content_kind: string
   content: string
-  object_key?: string
   hash: string
 }
 

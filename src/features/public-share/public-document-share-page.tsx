@@ -6,7 +6,15 @@ import {
   useState,
   type FormEvent,
 } from 'react'
-import { Download, FileText, LockKeyhole, ShieldCheck } from 'lucide-react'
+import {
+  CircleAlert,
+  Download,
+  FileText,
+  LoaderCircle,
+  LockKeyhole,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react'
 import { documentSharePasswordError } from '@/lib/document-share-password'
 import {
   createPublicShareSession,
@@ -48,6 +56,14 @@ import { MarkdownDocumentViewer } from './markdown-document-viewer'
 import { OpenApiCodeViewer } from './openapi-code-viewer'
 
 type LoadState = 'loading' | 'locked' | 'ready' | 'recoverable' | 'unavailable'
+
+function hasPublicShareStatus(error: unknown, status: string): boolean {
+  return error instanceof PublicShareRequestError && error.status === status
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
 
 export function PublicDocumentSharePage({
   shareId: rawShareId,
@@ -137,13 +153,19 @@ function PublicDocumentShareSession({
         setContent(nextContent)
         setLoadState('ready')
       } catch (error) {
-        if (
-          !requestIsCurrent() ||
-          (error instanceof DOMException && error.name === 'AbortError')
-        )
+        if (!requestIsCurrent() || isAbortError(error)) return
+        if (hasPublicShareStatus(error, 'PASSWORD_REQUIRED')) {
+          setLoadState(proof ? 'recoverable' : 'locked')
+          setMessage(proof ? 'publicShare.sessionExpired' : undefined)
           return
-        setLoadState(proof ? 'recoverable' : 'locked')
-        setMessage('publicShare.unavailable')
+        }
+        if (hasPublicShareStatus(error, 'NOT_FOUND')) {
+          setLoadState('unavailable')
+          setMessage(undefined)
+          return
+        }
+        setLoadState('recoverable')
+        setMessage('publicShare.recoverable')
       }
     },
     []
@@ -196,8 +218,12 @@ function PublicDocumentShareSession({
       setFailedVersionId('')
       await loadShare(session, unlocked.unlock_proof)
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
-        setMessage('publicShare.unavailable')
+      if (!isAbortError(error)) {
+        setMessage(
+          hasPublicShareStatus(error, 'NOT_FOUND')
+            ? 'publicShare.unlockRejected'
+            : 'publicShare.unlockRetryable'
+        )
         setLoadState('locked')
       }
     } finally {
@@ -236,7 +262,13 @@ function PublicDocumentShareSession({
         sessionRef.current !== session
       )
         return
-      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      if (!isAbortError(error)) {
+        if (hasPublicShareStatus(error, 'PASSWORD_REQUIRED')) {
+          setFailedVersionId('')
+          setMessage('publicShare.sessionExpired')
+          if (!unlockProof) setLoadState('locked')
+          return
+        }
         setFailedVersionId(nextVersionId)
         setMessage('publicShare.versionLoadFailed')
       }
@@ -274,12 +306,13 @@ function PublicDocumentShareSession({
       if (sessionRef.current !== session) return
       savePublicShareDownload(download)
     } catch (error) {
-      if (
-        error instanceof PublicShareRequestError ||
-        !(error instanceof DOMException && error.name === 'AbortError')
-      ) {
-        setMessage('publicShare.downloadFailed')
+      if (isAbortError(error)) return
+      if (hasPublicShareStatus(error, 'PASSWORD_REQUIRED')) {
+        setMessage('publicShare.sessionExpired')
+        if (!unlockProof) setLoadState('locked')
+        return
       }
+      setMessage('publicShare.downloadFailed')
     } finally {
       downloadLockedRef.current = false
       setDownloading(false)
@@ -294,7 +327,7 @@ function PublicDocumentShareSession({
     <main className='min-h-svh bg-background text-foreground'>
       <header className='border-b bg-background/95 backdrop-blur'>
         <div className='mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6'>
-          <div className='flex items-center gap-3'>
+          <div className='flex min-w-0 items-center gap-3'>
             <span className='flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground'>
               <FileText className='size-4' />
             </span>
@@ -317,8 +350,16 @@ function PublicDocumentShareSession({
 
         {loadState === 'loading' && (
           <Card>
-            <CardContent className='py-12 text-center text-sm text-muted-foreground'>
-              {t('publicShare.loading')}
+            <CardContent
+              className='flex items-center justify-center gap-2 py-12 text-center text-sm text-muted-foreground'
+              role='status'
+              aria-live='polite'
+            >
+              <LoaderCircle
+                className='size-4 animate-spin'
+                aria-hidden='true'
+              />
+              <span>{t('publicShare.loading')}</span>
             </CardContent>
           </Card>
         )}
@@ -331,7 +372,7 @@ function PublicDocumentShareSession({
               </div>
               <CardTitle>{t('publicShare.passwordPrompt')}</CardTitle>
               <CardDescription>
-                {message ? t(message) : t('publicShare.unavailable')}
+                {message ? t(message) : t('publicShare.passwordDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -377,10 +418,9 @@ function PublicDocumentShareSession({
                   }
                   type='submit'
                 >
-                  {t('publicShare.unlock')}
-                </Button>
-                <Button type='button' variant='outline' onClick={handleRetry}>
-                  {t('publicShare.retry')}
+                  {unlocking
+                    ? t('publicShare.unlocking')
+                    : t('publicShare.unlock')}
                 </Button>
               </form>
             </CardContent>
@@ -391,10 +431,26 @@ function PublicDocumentShareSession({
           <Card className='mx-auto w-full max-w-lg'>
             <CardHeader>
               <div className='mb-2 flex size-10 items-center justify-center rounded-md bg-muted'>
-                <LockKeyhole className='size-5' />
+                {loadState === 'recoverable' ? (
+                  <RefreshCw className='size-5' />
+                ) : (
+                  <CircleAlert className='size-5' />
+                )}
               </div>
-              <CardTitle>{t('publicShare.unavailableTitle')}</CardTitle>
-              <CardDescription>{t('publicShare.unavailable')}</CardDescription>
+              <CardTitle>
+                {t(
+                  loadState === 'recoverable'
+                    ? 'publicShare.recoverableTitle'
+                    : 'publicShare.unavailableTitle'
+                )}
+              </CardTitle>
+              <CardDescription>
+                {t(
+                  loadState === 'recoverable'
+                    ? (message ?? 'publicShare.recoverable')
+                    : 'publicShare.unavailable'
+                )}
+              </CardDescription>
             </CardHeader>
             {loadState === 'recoverable' && (
               <CardContent className='flex flex-wrap gap-2'>
@@ -428,7 +484,7 @@ function PublicDocumentShareSession({
                       {selectedVersion?.version_name}
                     </Badge>
                   </div>
-                  <CardTitle className='text-2xl'>
+                  <CardTitle className='text-2xl break-words'>
                     {metadata.document_name}
                   </CardTitle>
                   <CardDescription>
@@ -450,7 +506,9 @@ function PublicDocumentShareSession({
                   onClick={handleDownload}
                 >
                   <Download className='size-4' />
-                  {t('publicShare.download')}
+                  {downloading
+                    ? t('publicShare.downloading')
+                    : t('publicShare.download')}
                 </Button>
               </CardHeader>
               {versions.length > 1 && (
@@ -461,7 +519,7 @@ function PublicDocumentShareSession({
                     </Label>
                     <select
                       id='public-version'
-                      className='h-10 rounded-md border border-input bg-background px-3 text-sm'
+                      className='h-10 min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:text-sm'
                       value={versionId}
                       onChange={(event) =>
                         void handleVersionChange(event.currentTarget.value)

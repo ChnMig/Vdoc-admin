@@ -18,16 +18,16 @@ const publicVersionSchema = z
     id: z.string().regex(/^[0-9a-f]{32}$/),
     version_name: z.string(),
     changelog: z.string().optional(),
-    published_at: z.string(),
+    published_at: z.string().datetime({ offset: true }),
   })
   .strict()
 
 const publicShareMetadataSchema = z
   .object({
     document_name: z.string(),
-    document_type: z.number(),
-    version_scope: z.number(),
-    expires_at: z.string().optional(),
+    document_type: z.union([z.literal(1), z.literal(2)]),
+    version_scope: z.union([z.literal(1), z.literal(2)]),
+    expires_at: z.string().datetime({ offset: true }).optional(),
     current_version: publicVersionSchema,
   })
   .strict()
@@ -80,7 +80,7 @@ export const PUBLIC_SHARE_REQUEST_TIMEOUT_MS = 15_000
 const publicShareUnlockSchema = z
   .object({
     unlock_proof: z.string().min(1),
-    expires_at: z.string(),
+    expires_at: z.string().datetime({ offset: true }),
   })
   .strict()
 
@@ -100,67 +100,78 @@ export class PublicShareRequestError extends Error {
 export async function getPublicShareMetadata(
   request: PublicShareRequest
 ): Promise<PublicShareMetadataDTO> {
-  const response = await publicShareFetch(request, '')
-  return parsePublicDetail(response, publicShareMetadataSchema)
+  return publicShareRequest(request, '', (response) =>
+    parsePublicDetail(response, publicShareMetadataSchema)
+  )
 }
 
 export async function unlockPublicShare(
   request: PublicShareRequest & { readonly password: string }
 ): Promise<PublicShareUnlockDTO> {
-  const response = await publicShareFetch(request, '/unlock', {
-    method: 'POST',
-    body: JSON.stringify({ password: request.password }),
-  })
-  return parsePublicDetail(response, publicShareUnlockSchema)
+  return publicShareRequest(
+    request,
+    '/unlock',
+    (response) => parsePublicDetail(response, publicShareUnlockSchema),
+    {
+      method: 'POST',
+      body: JSON.stringify({ password: request.password }),
+    }
+  )
 }
 
 export async function listPublicShareVersions(
   request: PublicShareRequest
 ): Promise<readonly PublicVersionDTO[]> {
-  const response = await publicShareFetch(request, '/versions')
-  return parsePublicDetail(response, z.array(publicVersionSchema))
+  return publicShareRequest(request, '/versions', (response) =>
+    parsePublicDetail(response, z.array(publicVersionSchema))
+  )
 }
 
 export async function getPublicShareContent(
   request: PublicShareVersionRequest
 ): Promise<PublicShareContentDTO> {
-  const response = await publicShareFetch(
+  return publicShareRequest(
     request,
-    `/versions/${request.versionId}/content`
+    `/versions/${request.versionId}/content`,
+    (response) => parsePublicDetail(response, publicShareContentSchema)
   )
-  return parsePublicDetail(response, publicShareContentSchema)
 }
 
 export async function downloadPublicShareVersion(
   request: PublicShareVersionRequest
 ): Promise<PublicShareDownload> {
-  const response = await publicShareFetch(
+  return publicShareRequest(
     request,
-    `/versions/${request.versionId}/download`
-  )
-  const disposition = response.headers.get('Content-Disposition')
-  if (response.status !== 200 || !isAttachmentContentDisposition(disposition)) {
-    await parsePublicEnvelope(response)
-    throw new PublicShareRequestError(undefined, undefined)
-  }
+    `/versions/${request.versionId}/download`,
+    async (response) => {
+      const disposition = response.headers.get('Content-Disposition')
+      if (
+        response.status !== 200 ||
+        !isAttachmentContentDisposition(disposition)
+      ) {
+        await parsePublicEnvelope(response)
+        throw new PublicShareRequestError(undefined, undefined)
+      }
 
-  const mimeType = response.headers.get('Content-Type') ?? ''
-  if (declaredBodyExceedsLimit(response, PUBLIC_SHARE_DOWNLOAD_MAX_BYTES)) {
-    try {
-      await response.body?.cancel()
-    } catch {
-      // The sanitized size error below is authoritative.
+      const mimeType = response.headers.get('Content-Type') ?? ''
+      if (declaredBodyExceedsLimit(response, PUBLIC_SHARE_DOWNLOAD_MAX_BYTES)) {
+        try {
+          await response.body?.cancel()
+        } catch {
+          // The sanitized size error below is authoritative.
+        }
+        throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
+      }
+      const blob = await response.blob()
+      if (blob.size > PUBLIC_SHARE_DOWNLOAD_MAX_BYTES)
+        throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
+      return {
+        blob,
+        filename: filenameFromContentDisposition(disposition, mimeType),
+        mimeType,
+      }
     }
-    throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
-  }
-  const blob = await response.blob()
-  if (blob.size > PUBLIC_SHARE_DOWNLOAD_MAX_BYTES)
-    throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
-  return {
-    blob,
-    filename: filenameFromContentDisposition(disposition, mimeType),
-    mimeType,
-  }
+  )
 }
 
 function declaredBodyExceedsLimit(response: Response, limit: number): boolean {
@@ -191,11 +202,12 @@ export function savePublicShareDownload(download: PublicShareDownload): void {
   }
 }
 
-async function publicShareFetch(
+async function publicShareRequest<T>(
   request: PublicShareRequest,
   suffix: string,
+  consume: (response: Response) => Promise<T>,
   init?: Pick<RequestInit, 'method' | 'body'>
-): Promise<Response> {
+): Promise<T> {
   const origin =
     request.baseUrl === undefined
       ? resolvePublicShareApiBaseUrl()
@@ -215,7 +227,7 @@ async function publicShareFetch(
     }, PUBLIC_SHARE_REQUEST_TIMEOUT_MS)
   })
   try {
-    const response = fetch(
+    const operation = fetch(
       `${origin}/api/v1/open/document-shares/${request.shareId}${suffix}`,
       {
         method: init?.method ?? 'GET',
@@ -230,8 +242,8 @@ async function publicShareFetch(
         },
         signal: controller.signal,
       }
-    )
-    return await Promise.race([response, timeout])
+    ).then(consume)
+    return await Promise.race([operation, timeout])
   } catch (error) {
     if (error instanceof PublicShareRequestError) throw error
     if (timedOut) throw timeoutError

@@ -2880,13 +2880,7 @@ export function DraftsPage() {
   const reviewConfirmation = pendingReviewAction
     ? draftReviewConfirmation(pendingReviewAction, t)
     : undefined
-  const selectedDraftContent =
-    contentQuery.data?.content ??
-    selectedDraftInlineContent(
-      draftsQuery.data?.items,
-      draftId,
-      activeDraftContentKind
-    )
+  const selectedDraftContent = contentQuery.data?.content
   return (
     <PageChrome page='drafts'>
       <SelectorGrid>
@@ -3489,18 +3483,6 @@ function activeContentKind(contentKind: string, options: SelectOption[]) {
     : 'raw'
 }
 
-function selectedDraftInlineContent(
-  drafts: DraftDTO[] | undefined,
-  draftId: string,
-  contentKind: string
-) {
-  const draft = drafts?.find((value) => value.id === draftId)
-  if (!draft) return undefined
-  return contentKind === 'raw'
-    ? (draft.raw_content ?? draft.raw_schema)
-    : (draft.normalized_content ?? draft.normalized_schema)
-}
-
 function DraftsTable({
   drafts,
   selected,
@@ -3698,13 +3680,7 @@ export function VersionsPage() {
     clearEndpointSelection()
     setVersionId(value)
   }
-  const selectedVersionContent =
-    contentQuery.data?.content ??
-    selectedVersionInlineContent(
-      versionsQuery.data?.items,
-      versionId,
-      activeVersionContentKind
-    )
+  const selectedVersionContent = contentQuery.data?.content
   const selectedProject = projectsQuery.data?.items.find(
     (project) => project.id === projectId
   )
@@ -3881,18 +3857,6 @@ export function VersionsPage() {
       />
     </PageChrome>
   )
-}
-
-function selectedVersionInlineContent(
-  versions: VersionDTO[] | undefined,
-  versionId: string,
-  contentKind: string
-) {
-  const version = versions?.find((value) => value.id === versionId)
-  if (!version) return undefined
-  return contentKind === 'raw'
-    ? (version.raw_content ?? version.raw_schema)
-    : (version.normalized_content ?? version.normalized_schema)
 }
 
 function VersionsTable({

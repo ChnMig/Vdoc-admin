@@ -414,7 +414,7 @@ test('public share erases the fragment, unlocks, and switches history', async ({
       await fulfillError(
         route,
         401,
-        'SHARE_PASSWORD_REQUIRED',
+        'PASSWORD_REQUIRED',
         'A share password is required.'
       )
       return

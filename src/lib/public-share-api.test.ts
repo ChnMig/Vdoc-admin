@@ -346,6 +346,98 @@ describe('public share API', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the timeout active while JSON and download bodies are consumed', async () => {
+    vi.useFakeTimers()
+    const jsonResponseWithPendingBody = jsonResponse()
+    const downloadResponseWithPendingBody = new Response('', {
+      status: 200,
+      headers: {
+        'Content-Disposition': 'attachment; filename="payload.md"',
+        'Content-Type': 'text/markdown',
+      },
+    })
+    vi.spyOn(jsonResponseWithPendingBody, 'json').mockReturnValue(
+      new Promise<never>(() => undefined)
+    )
+    vi.spyOn(downloadResponseWithPendingBody, 'blob').mockReturnValue(
+      new Promise<Blob>(() => undefined)
+    )
+    const requestSignals: AbortSignal[] = []
+    const responses = [
+      jsonResponseWithPendingBody,
+      downloadResponseWithPendingBody,
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.signal instanceof AbortSignal)
+            requestSignals.push(init.signal)
+          return Promise.resolve(responses.shift() as Response)
+        })
+    )
+
+    const metadataRequest = getPublicShareMetadata({
+      baseUrl,
+      shareId,
+      secret,
+      signal: new AbortController().signal,
+    })
+    const metadataRejection = expect(metadataRequest).rejects.toMatchObject({
+      code: 408,
+      status: 'REQUEST_TIMEOUT',
+    })
+    await vi.advanceTimersByTimeAsync(PUBLIC_SHARE_REQUEST_TIMEOUT_MS)
+    await metadataRejection
+
+    const downloadRequest = downloadPublicShareVersion({
+      baseUrl,
+      shareId,
+      versionId,
+      secret,
+      signal: new AbortController().signal,
+    })
+    const downloadRejection = expect(downloadRequest).rejects.toMatchObject({
+      code: 408,
+      status: 'REQUEST_TIMEOUT',
+    })
+    await vi.advanceTimersByTimeAsync(PUBLIC_SHARE_REQUEST_TIMEOUT_MS)
+    await downloadRejection
+
+    expect(requestSignals).toHaveLength(2)
+    expect(requestSignals.every((signal) => signal.aborted)).toBe(true)
+  })
+
+  it('rejects unknown document and version-scope codes as invalid responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          detail: {
+            document_name: 'Payments API',
+            document_type: 99,
+            version_scope: 99,
+            current_version: {
+              id: versionId,
+              version_name: 'v1',
+              published_at: '2026-07-20T00:00:00Z',
+            },
+          },
+        })
+      )
+    )
+
+    await expect(
+      getPublicShareMetadata({
+        baseUrl,
+        shareId,
+        secret,
+        signal: new AbortController().signal,
+      })
+    ).rejects.toMatchObject({ code: 200, status: 'INVALID_RESPONSE' })
+  })
+
   it('sanitizes non-abort transport errors', async () => {
     const fetchMock = vi
       .fn()
