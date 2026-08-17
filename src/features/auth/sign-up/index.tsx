@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { getAuthConfig } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -28,14 +30,22 @@ export function SignUp() {
       <Card className='max-w-sm gap-4'>
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>
-            {registrationEnabled
-              ? t('auth.signUp.title')
-              : t('auth.registrationDisabledTitle')}
+            {authConfigQuery.isLoading
+              ? t('auth.registrationCheckingTitle')
+              : authConfigQuery.isError
+                ? t('auth.registrationUnavailableTitle')
+                : registrationEnabled
+                  ? t('auth.signUp.title')
+                  : t('auth.registrationDisabledTitle')}
           </CardTitle>
           <CardDescription>
-            {registrationEnabled
-              ? t('auth.signUp.description')
-              : t('auth.registrationDisabledDescription')}{' '}
+            {authConfigQuery.isLoading
+              ? t('auth.registrationChecking')
+              : authConfigQuery.isError
+                ? t('auth.registrationUnavailableDescription')
+                : registrationEnabled
+                  ? t('auth.signUp.description')
+                  : t('auth.registrationDisabledDescription')}{' '}
             <br />
             {t('auth.signUp.haveAccount')}{' '}
             <Link
@@ -51,6 +61,22 @@ export function SignUp() {
             <p className='text-sm text-muted-foreground'>
               {t('auth.registrationChecking')}
             </p>
+          ) : authConfigQuery.isError ? (
+            <Alert variant='destructive' aria-live='polite'>
+              <AlertTitle>{t('auth.registrationUnavailableTitle')}</AlertTitle>
+              <AlertDescription className='grid gap-3'>
+                <p>{t('auth.registrationUnavailableRecovery')}</p>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  className='w-fit'
+                  onClick={() => void authConfigQuery.refetch()}
+                >
+                  {t('auth.retryRegistrationCheck')}
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : registrationEnabled ? (
             <SignUpForm />
           ) : (

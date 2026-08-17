@@ -1,5 +1,7 @@
 ---
 target: 当前 Vdoc Admin 的闭环与产品逻辑
+status: superseded
+superseded_by: 2026-08-17T06-29-31Z__vdoc-admin-real-closure-audit.md
 total_score: 18
 max_score: 40
 na_heuristics: 
@@ -8,6 +10,8 @@ p1_count: 4
 timestamp: 2026-08-10T03-57-02Z
 slug: vdoc-admin-src-features-vdoc-admin-pages-tsx
 ---
+> 历史审计快照：本文件保留 2026-08-10 当时的问题与评分，不代表当前开放问题。P0/P1/P2 的当前状态与验证证据以 [2026-08-17 真实闭环审计](./2026-08-17T06-29-31Z__vdoc-admin-real-closure-audit.md) 为准。
+
 Method: dual-agent (A: /root/assessment_a · B: /root/assessment_b)
 
 结论：严格说，Vdoc 已有后端能力链路，但还没有完成可信的产品闭环。当前可以手工走通 Team → Project → Document → Draft → Approve → Version → Diff → Token；但 Admin 会过早宣告完成，且没有把正确角色、当前对象、有效状态和 Agent 实际连通绑定成一个可验证结果。

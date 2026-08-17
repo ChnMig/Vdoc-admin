@@ -62,13 +62,16 @@ describe('useAuthStore', () => {
 
   it('reset clears user and access token and drops persistence', async () => {
     const useAuthStore = await importAuthStore()
+    const { useVdocContextStore } = await import('./vdoc-context-store')
     useAuthStore.getState().auth.setAccessToken('will-be-cleared')
     useAuthStore.getState().auth.setUser({ ...sampleUser })
+    useVdocContextStore.getState().setProjectId('project-1')
 
     useAuthStore.getState().auth.reset()
 
     expect(useAuthStore.getState().auth.user).toBeNull()
     expect(useAuthStore.getState().auth.accessToken).toBe('')
+    expect(useVdocContextStore.getState().projectId).toBe('')
 
     vi.resetModules()
     const useAuthStoreAfterReload = await importAuthStore()

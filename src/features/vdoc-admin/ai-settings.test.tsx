@@ -179,6 +179,25 @@ describe('AISettingsPanel project boundaries', () => {
     expect(apiMocks.updateProjectAIPrompt).not.toHaveBeenCalled()
   })
 
+  it('does not select an archived project implicitly when no active project exists', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [archivedProject],
+      total: 1,
+    })
+
+    const screen = renderSettings(superAdmin)
+    const projectSelect = await screen.findByLabelText('Project provider scope')
+
+    expect(projectSelect).toHaveValue('')
+    expect(
+      await within(projectSelect).findByRole('option', {
+        name: 'Archived project — Archived',
+      })
+    ).toBeInTheDocument()
+    expect(apiMocks.getProjectAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.listProjectAIPrompts).not.toHaveBeenCalled()
+  })
+
   it('does not load or expose project configuration to readers', async () => {
     apiMocks.listProjects.mockResolvedValue({
       items: [activeProject],
@@ -213,6 +232,35 @@ describe('AISettingsPanel project boundaries', () => {
     expect(apiMocks.listProjectAIPrompts).not.toHaveBeenCalled()
     expect(apiMocks.getSystemAIProvider).not.toHaveBeenCalled()
     expect(apiMocks.listSystemAIPrompts).not.toHaveBeenCalled()
+  })
+
+  it('does not grant project AI management through a disabled admin membership', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [activeProject],
+      total: 1,
+    })
+    apiMocks.listProjectMembers.mockResolvedValue({
+      items: [
+        {
+          project_id: activeProject.id,
+          user_id: reader.id,
+          role: 3,
+          status: 2,
+          added_by: 'super-admin',
+          created_at: timestamp,
+          updated_at: timestamp,
+        },
+      ],
+      total: 1,
+    })
+
+    const screen = renderSettings(reader)
+
+    expect(
+      await screen.findByText('Project AI configuration is restricted')
+    ).toBeInTheDocument()
+    expect(apiMocks.getProjectAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.listProjectAIPrompts).not.toHaveBeenCalled()
   })
 
   it('never displays the previous project provider while the next one loads', async () => {

@@ -171,6 +171,11 @@ export type AuditLogQuery = {
   limit?: number
 }
 
+export type MCPUsageQuery = {
+  token_id?: string
+  limit?: number
+}
+
 export type DraftDTO = {
   id: string
   project_id: string
@@ -1116,6 +1121,12 @@ function aiSummaryPath(target: AISummaryTarget) {
 export function listMCPTokens() {
   return unwrapListEnvelope<MCPTokenDTO>(
     vdocApi.get('/api/v1/private/mcp-tokens')
+  )
+}
+
+export function listMCPUsage(query: MCPUsageQuery = {}) {
+  return unwrapListEnvelope<AuditLogDTO>(
+    vdocApi.get('/api/v1/private/mcp-usage', { params: query })
   )
 }
 

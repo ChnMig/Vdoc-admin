@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearch } from '@tanstack/react-router'
 import { getAuthConfig } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -33,7 +35,11 @@ export function SignIn() {
           </CardTitle>
           <CardDescription>
             {t('auth.signIn.description')} <br className='max-sm:hidden' />
-            {registrationEnabled ? (
+            {authConfigQuery.isLoading ? (
+              t('auth.registrationChecking')
+            ) : authConfigQuery.isError ? (
+              t('auth.registrationUnavailableShort')
+            ) : registrationEnabled ? (
               <>
                 {t('auth.signIn.noAccount')}{' '}
                 <Link
@@ -48,7 +54,24 @@ export function SignIn() {
             )}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='grid gap-4'>
+          {authConfigQuery.isError && (
+            <Alert variant='destructive' aria-live='polite'>
+              <AlertTitle>{t('auth.registrationUnavailableTitle')}</AlertTitle>
+              <AlertDescription className='grid gap-3'>
+                <p>{t('auth.registrationUnavailableDescription')}</p>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant='outline'
+                  className='w-fit'
+                  onClick={() => void authConfigQuery.refetch()}
+                >
+                  {t('auth.retryRegistrationCheck')}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>

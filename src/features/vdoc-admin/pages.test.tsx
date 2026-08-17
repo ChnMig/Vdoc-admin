@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
+import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import {
   compareDiff,
   createAIChatSession,
@@ -60,8 +61,10 @@ const apiMocks = vi.hoisted(() => ({
   listBranches: vi.fn(),
   listAIChatSessions: vi.fn(),
   listDocuments: vi.fn(),
+  listDiffs: vi.fn(),
   listDrafts: vi.fn(),
   listEndpoints: vi.fn(),
+  listMCPUsage: vi.fn(),
   listMCPTokens: vi.fn(),
   listProjectMembers: vi.fn(),
   listProjectMemberCandidates: vi.fn(),
@@ -71,6 +74,7 @@ const apiMocks = vi.hoisted(() => ({
   listSystemAIPrompts: vi.fn(),
   listUsers: vi.fn(),
   listVersions: vi.fn(),
+  patchProjectMemberRole: vi.fn(),
   patchUser: vi.fn(),
   promoteDraft: vi.fn(),
   rejectDraft: vi.fn(),
@@ -82,6 +86,7 @@ const apiMocks = vi.hoisted(() => ({
   testSystemAIProvider: vi.fn(),
   updateProjectAIProvider: vi.fn(),
   updateProjectAIPrompt: vi.fn(),
+  updateProject: vi.fn(),
   updateSystemAIProvider: vi.fn(),
   updateSystemAIPrompt: vi.fn(),
   updateDraft: vi.fn(),
@@ -114,8 +119,10 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     listBranches: apiMocks.listBranches,
     listAIChatSessions: apiMocks.listAIChatSessions,
     listDocuments: apiMocks.listDocuments,
+    listDiffs: apiMocks.listDiffs,
     listDrafts: apiMocks.listDrafts,
     listEndpoints: apiMocks.listEndpoints,
+    listMCPUsage: apiMocks.listMCPUsage,
     listMCPTokens: apiMocks.listMCPTokens,
     listProjectMembers: apiMocks.listProjectMembers,
     listProjectMemberCandidates: apiMocks.listProjectMemberCandidates,
@@ -125,6 +132,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     listSystemAIPrompts: apiMocks.listSystemAIPrompts,
     listUsers: apiMocks.listUsers,
     listVersions: apiMocks.listVersions,
+    patchProjectMemberRole: apiMocks.patchProjectMemberRole,
     patchUser: apiMocks.patchUser,
     promoteDraft: apiMocks.promoteDraft,
     rejectDraft: apiMocks.rejectDraft,
@@ -136,6 +144,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     testSystemAIProvider: apiMocks.testSystemAIProvider,
     updateProjectAIProvider: apiMocks.updateProjectAIProvider,
     updateProjectAIPrompt: apiMocks.updateProjectAIPrompt,
+    updateProject: apiMocks.updateProject,
     updateSystemAIProvider: apiMocks.updateSystemAIProvider,
     updateSystemAIPrompt: apiMocks.updateSystemAIPrompt,
     updateDraft: apiMocks.updateDraft,
@@ -197,6 +206,7 @@ function setAuthUser(user: typeof identityFixture | null) {
 }
 
 beforeEach(() => {
+  useVdocContextStore.getState().reset()
   setAuthUser(identityFixture)
 })
 
@@ -240,6 +250,8 @@ describe('DashboardPage role boundaries', () => {
       total: 1,
     })
     apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listVersions.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listMCPUsage.mockResolvedValue({ items: [], total: 0 })
     apiMocks.listMCPTokens.mockResolvedValue({ items: [], total: 0 })
   })
 
@@ -249,6 +261,239 @@ describe('DashboardPage role boundaries', () => {
     expect(await screen.findByText('Writer workspace')).toBeInTheDocument()
     expect(apiMocks.listTeams).not.toHaveBeenCalled()
     expect(screen.queryByText('Create a team')).not.toBeInTheDocument()
+  })
+
+  it('selects active context and labels archived alternatives', async () => {
+    const archivedProject = {
+      ...projectFixture,
+      id: 'project-archived',
+      name: 'Archived project',
+      status: 2,
+    }
+    const archivedDocument = {
+      ...markdownDocumentFixture,
+      id: 'document-archived',
+      name: 'Archived document',
+      status: 2,
+    }
+    apiMocks.listProjects.mockResolvedValue({
+      items: [archivedProject, projectFixture],
+      total: 2,
+    })
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [archivedDocument, markdownDocumentFixture],
+      total: 2,
+    })
+
+    const screen = renderDashboardPage()
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Project')).toHaveValue('project-1')
+    )
+    expect(
+      screen.getByRole('option', { name: 'Archived project — Archived' })
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+    )
+    expect(
+      screen.getByRole('option', { name: 'Archived document — Archived' })
+    ).toBeInTheDocument()
+  })
+
+  it('keeps an explicit project selection across page remounts', async () => {
+    const secondProject = {
+      ...projectFixture,
+      id: 'project-2',
+      name: 'Second project',
+    }
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture, secondProject],
+      total: 2,
+    })
+    const user = userEvent.setup()
+    const firstRender = renderDashboardPage()
+
+    await firstRender.findByRole('option', { name: secondProject.name })
+    await user.selectOptions(
+      firstRender.getByLabelText('Project'),
+      secondProject.id
+    )
+    expect(firstRender.getByLabelText('Project')).toHaveValue(secondProject.id)
+    firstRender.unmount()
+
+    const secondRender = renderDashboardPage()
+    await waitFor(() =>
+      expect(secondRender.getByLabelText('Project')).toHaveValue(
+        secondProject.id
+      )
+    )
+  })
+
+  it('does not infer Reader or mark lifecycle evidence done from mere object existence', async () => {
+    apiMocks.listProjectMembers.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [
+        {
+          id: 'token-revoked',
+          user_id: 'user-1',
+          name: 'Old token',
+          scopes: [1],
+          status: 2,
+          created_at: projectFixture.created_at,
+          updated_at: projectFixture.updated_at,
+        },
+      ],
+      total: 1,
+    })
+    const screen = renderDashboardPage()
+
+    expect(
+      await screen.findByText('No active project role')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Reader workspace')).not.toBeInTheDocument()
+    for (const title of [
+      'Submit a draft',
+      'Publish an immutable version',
+      'Issue an active read token',
+      'Verify the Agent connection',
+    ]) {
+      const stepTitle = screen.getByText(title)
+      const stepCard = stepTitle.parentElement
+      if (!stepCard) throw new Error(`missing step card for ${title}`)
+      expect(within(stepCard).queryByText('Done')).not.toBeInTheDocument()
+    }
+  })
+
+  it('does not accept disabled membership or historical archived-branch artifacts as active readiness', async () => {
+    apiMocks.listProjectMembers.mockResolvedValue({
+      items: [
+        {
+          project_id: 'project-1',
+          user_id: 'user-1',
+          role: 3,
+          status: 2,
+          added_by: 'user-2',
+          created_at: projectFixture.created_at,
+          updated_at: projectFixture.updated_at,
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.listBranches.mockResolvedValue({
+      items: [{ ...branchFixture, status: 2 }],
+      total: 1,
+    })
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 2 }],
+      total: 1,
+    })
+    apiMocks.listVersions.mockResolvedValue({
+      items: [markdownVersionFixture],
+      total: 1,
+    })
+
+    const screen = renderDashboardPage()
+
+    expect(
+      await screen.findByText('No active project role')
+    ).toBeInTheDocument()
+    for (const title of [
+      'Confirm an active branch',
+      'Submit a draft',
+      'Publish an immutable version',
+    ]) {
+      const stepTitle = screen.getByText(title)
+      const stepCard = stepTitle.parentElement
+      if (!stepCard) throw new Error(`missing step card for ${title}`)
+      expect(within(stepCard).queryByText('Done')).not.toBeInTheDocument()
+    }
+  })
+
+  it('points the page guidance at the first incomplete lifecycle step', async () => {
+    const screen = renderDashboardPage()
+
+    const guidance = screen.getByRole('complementary')
+    expect(
+      await within(guidance).findByText(
+        'Continue with “Submit a draft”, the first incomplete check for this context.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(guidance).getByRole('link', { name: 'Continue this step' })
+    ).toHaveAttribute(
+      'href',
+      '/drafts?project_id=project-1&document_id=document-1'
+    )
+  })
+
+  it('replaces next-step guidance with a completed state when all checks pass', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 2 }],
+      total: 1,
+    })
+    apiMocks.listVersions.mockResolvedValue({
+      items: [markdownVersionFixture],
+      total: 1,
+    })
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [
+        {
+          id: 'token-connected',
+          user_id: 'user-1',
+          name: 'Connected Markdown reader',
+          scopes: [3],
+          status: 1,
+          last_used_at: '2026-01-01T01:00:00Z',
+          created_at: projectFixture.created_at,
+          updated_at: projectFixture.updated_at,
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.listMCPUsage.mockResolvedValue({
+      items: [
+        {
+          id: 'usage-connected',
+          actor_type: 2,
+          actor_token_id: 'token-connected',
+          action: 'mcp.tool_call',
+          resource_type: 'mcp_tool',
+          resource_id: markdownVersionFixture.id,
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          metadata: {
+            adapter: 'stdio',
+            evidence_kind: 'published_content_read',
+            result: 'success',
+            tool_name: 'get_latest_doc',
+            token_id: 'token-connected',
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            version_id: markdownVersionFixture.id,
+          },
+          created_at: '2026-01-01T01:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+
+    const screen = renderDashboardPage()
+    const guidance = screen.getByRole('complementary')
+
+    expect(
+      await within(guidance).findByText('Lifecycle complete')
+    ).toBeInTheDocument()
+    expect(
+      within(guidance).getByText(
+        'Every readiness check is complete for the selected project and document. Open any step below to inspect its evidence.'
+      )
+    ).toBeInTheDocument()
+    expect(within(guidance).queryByRole('link')).not.toBeInTheDocument()
   })
 })
 
@@ -329,6 +574,35 @@ describe('UsersPage password boundaries', () => {
 
     await waitFor(() =>
       expect(apiMocks.patchUser).toHaveBeenCalledWith('user-1', { status: 2 })
+    )
+  })
+
+  it('confirms the exact user before enabling access', async () => {
+    apiMocks.listUsers.mockResolvedValue({
+      items: [{ ...identityFixture, status: 2 }],
+      total: 1,
+    })
+    apiMocks.patchUser.mockResolvedValue({
+      ...identityFixture,
+      status: 1,
+    })
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Enable user' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Enable admin@example.com?',
+      })
+    ).toBeInTheDocument()
+    expect(apiMocks.patchUser).not.toHaveBeenCalled()
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Enable user' })
+    )
+    await waitFor(() =>
+      expect(apiMocks.patchUser).toHaveBeenCalledWith('user-1', { status: 1 })
     )
   })
 
@@ -440,6 +714,16 @@ describe('ProjectsPage lifecycle boundaries', () => {
       ...projectFixture,
       status: 2,
     })
+    apiMocks.patchProjectMemberRole.mockResolvedValue({
+      project_id: 'project-1',
+      user_id: existingAdmin().id,
+      role: 2,
+      status: 1,
+      added_by: identityFixture.id,
+      created_at: projectFixture.created_at,
+      updated_at: projectFixture.updated_at,
+    })
+    apiMocks.updateProject.mockResolvedValue(projectFixture)
   })
 
   it('automatically selects the first active project instead of an archived one', async () => {
@@ -469,7 +753,12 @@ describe('ProjectsPage lifecycle boundaries', () => {
     const createProjectCard = createProjectTitle.closest('[data-slot="card"]')
     if (!(createProjectCard instanceof HTMLElement))
       throw new Error('missing create-project card')
-    const adminSelect = within(createProjectCard).getByLabelText('User')
+    const adminSelect = within(createProjectCard).getByLabelText(
+      'Initial Project Admin'
+    )
+    expect(adminSelect).toHaveAccessibleDescription(
+      /Leave this blank to make the current signed-in actor/i
+    )
 
     await waitFor(() =>
       expect(
@@ -508,7 +797,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
     )
   })
 
-  it('keeps an archived project and its membership controls read-only', async () => {
+  it('keeps archived projects reachable without selecting one implicitly', async () => {
     apiMocks.listProjects.mockResolvedValue({
       items: [archivedProject()],
       total: 1,
@@ -517,8 +806,13 @@ describe('ProjectsPage lifecycle boundaries', () => {
     const screen = renderProjectsPage()
 
     await waitFor(() =>
-      expect(screen.getByLabelText('Project')).toHaveValue('project-archived')
+      expect(screen.getByLabelText('Project')).toHaveValue('')
     )
+    expect(
+      await screen.findByRole('option', {
+        name: 'Archived project — Archived',
+      })
+    ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Update' })
     ).not.toBeInTheDocument()
@@ -529,6 +823,98 @@ describe('ProjectsPage lifecycle boundaries', () => {
       screen.queryByRole('button', { name: 'Remove' })
     ).not.toBeInTheDocument()
     expect(apiMocks.listProjectMemberCandidates).not.toHaveBeenCalled()
+    expect(apiMocks.listProjectMembers).not.toHaveBeenCalled()
+  })
+
+  it('confirms role changes and preserves the selected role when the request fails', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture],
+      total: 1,
+    })
+    apiMocks.patchProjectMemberRole
+      .mockRejectedValueOnce(new Error('The last admin cannot be demoted'))
+      .mockResolvedValueOnce({
+        project_id: 'project-1',
+        user_id: existingAdmin().id,
+        role: 2,
+        status: 1,
+        added_by: identityFixture.id,
+        created_at: projectFixture.created_at,
+        updated_at: projectFixture.updated_at,
+      })
+    const user = userEvent.setup()
+    const screen = renderProjectsPage()
+    const roleSelect = await screen.findByLabelText(
+      'Role: existing@example.com'
+    )
+
+    await user.selectOptions(roleSelect, String(2))
+    expect(apiMocks.patchProjectMemberRole).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(
+      within(dialog).getByRole('heading', {
+        name: 'Change existing@example.com from Admin to Writer?',
+      })
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(
+      await within(dialog).findByText('The last admin cannot be demoted')
+    ).toBeInTheDocument()
+    expect(roleSelect).toHaveValue('2')
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(apiMocks.patchProjectMemberRole).toHaveBeenCalledTimes(2)
+    )
+    expect(apiMocks.patchProjectMemberRole).toHaveBeenNthCalledWith(
+      1,
+      'project-1',
+      'user-existing',
+      { role: 2 }
+    )
+    expect(apiMocks.patchProjectMemberRole).toHaveBeenNthCalledWith(
+      2,
+      'project-1',
+      'user-existing',
+      { role: 2 }
+    )
+  })
+
+  it('shows an inline update error without discarding edited project input', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture],
+      total: 1,
+    })
+    apiMocks.updateProject.mockRejectedValueOnce(
+      new Error('Project update was rejected')
+    )
+    const user = userEvent.setup()
+    const screen = renderProjectsPage()
+    const nameInput = (await screen.findAllByDisplayValue('Docs project')).find(
+      (element): element is HTMLInputElement =>
+        element instanceof HTMLInputElement
+    )
+    if (!nameInput) throw new Error('missing project name input')
+    const form = nameInput.closest('form')
+    if (!(form instanceof HTMLFormElement))
+      throw new Error('missing project update form')
+
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Unsaved project name')
+    await user.click(within(form).getByRole('button', { name: 'Update' }))
+
+    expect(
+      await within(form).findByText('Project update was rejected')
+    ).toBeInTheDocument()
+    expect(nameInput).toHaveValue('Unsaved project name')
+    expect(apiMocks.updateProject).toHaveBeenCalledWith('project-1', {
+      name: 'Unsaved project name',
+      description: '',
+    })
   })
 
   it('confirms the named project before archiving it', async () => {
@@ -569,6 +955,7 @@ describe('MCPTokensPage secret lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.listMCPTokens.mockResolvedValue({ items: [token], total: 1 })
+    apiMocks.listMCPUsage.mockResolvedValue({ items: [], total: 0 })
     apiMocks.getMCPToken.mockResolvedValue({
       ...token,
       token: `vdoc_${'a'.repeat(48)}`,
@@ -607,6 +994,68 @@ describe('MCPTokensPage secret lifecycle', () => {
     )
     expect(getMCPToken).toHaveBeenCalledWith('token-1')
     expect(listMCPTokens).toHaveBeenCalled()
+  })
+
+  it('distinguishes expired tokens and requires published-read connection evidence', async () => {
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [
+        {
+          ...token,
+          last_used_at: '2026-08-17T08:00:00Z',
+        },
+        {
+          ...token,
+          id: 'token-expired',
+          name: 'Expired token',
+          status: 3,
+          expires_at: '2026-08-01T00:00:00Z',
+        },
+      ],
+      total: 2,
+    })
+    apiMocks.listMCPUsage.mockResolvedValue({
+      items: [
+        {
+          id: 'usage-1',
+          actor_type: 2,
+          actor_token_id: 'token-1',
+          action: 'mcp.tool_call',
+          resource_type: 'mcp_tool',
+          resource_id: 'version-1',
+          project_id: 'project-1',
+          document_id: 'document-1',
+          metadata: {
+            adapter: 'stdio',
+            evidence_kind: 'published_content_read',
+            result: 'success',
+            tool_name: 'get_latest_schema',
+            token_id: 'token-1',
+            project_id: 'project-1',
+            document_id: 'document-1',
+            version_id: 'version-1',
+          },
+          created_at: '2026-08-17T08:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+
+    const screen = renderMCPTokensPage()
+
+    expect(
+      await screen.findByText('Agent connection evidence found')
+    ).toBeInTheDocument()
+    const expiredName = screen.getByText('Expired token')
+    const expiredRow = expiredName.closest('tr')
+    if (!(expiredRow instanceof HTMLElement))
+      throw new Error('missing expired token row')
+    expect(within(expiredRow).getByText('Expired')).toBeInTheDocument()
+    expect(
+      within(expiredRow).getByRole('button', { name: 'View' })
+    ).toBeDisabled()
+    expect(
+      within(expiredRow).getByRole('button', { name: 'Revoke' })
+    ).toBeDisabled()
   })
 
   it('does not let an older reveal overwrite a newly created token', async () => {
@@ -688,6 +1137,178 @@ describe('MCPTokensPage secret lifecycle', () => {
 
     expect(screen.queryAllByText(/vdoc_b{48}/)).toHaveLength(0)
     expect(screen.getAllByText(/vdoc_c{48}/).length).toBeGreaterThan(0)
+  })
+
+  it('loads sanitized usage for an exact token deep link without revealing its secret', async () => {
+    apiMocks.listMCPUsage.mockResolvedValue({
+      items: [
+        {
+          id: 'usage-linked-token',
+          actor_type: 2,
+          actor_token_id: token.id,
+          action: 'mcp.tool_call',
+          resource_type: 'mcp_tool',
+          resource_id: 'version-1',
+          project_id: 'project-1',
+          document_id: 'document-1',
+          metadata: {
+            adapter: 'stdio',
+            evidence_kind: 'published_content_read',
+            result: 'success',
+            tool_name: 'get_latest_schema',
+            token_id: token.id,
+            project_id: 'project-1',
+            document_id: 'document-1',
+            version_id: 'version-1',
+          },
+          created_at: '2026-08-17T08:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+    const screen = renderPage(<MCPTokensPage search={{ token_id: token.id }} />)
+
+    expect(
+      await screen.findByText('Agent connection evidence found')
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/version_id=version-1/).length).toBeGreaterThan(
+      0
+    )
+    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith({
+      token_id: token.id,
+      limit: 200,
+    })
+    expect(getMCPToken).not.toHaveBeenCalled()
+    expect(screen.queryByText(/vdoc_[a-z0-9]{48}/)).not.toBeInTheDocument()
+  })
+
+  it('clears a revealed secret across URL selection changes and does not restore it on back navigation', async () => {
+    const secondToken = { ...token, id: 'token-2', name: 'Second token' }
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [token, secondToken],
+      total: 2,
+    })
+    function TokenRouteHarness() {
+      const [tokenId, setTokenId] = useState(token.id)
+      return (
+        <>
+          <button type='button' onClick={() => setTokenId(secondToken.id)}>
+            Navigate to second token
+          </button>
+          <button type='button' onClick={() => setTokenId(token.id)}>
+            Navigate back to first token
+          </button>
+          <MCPTokensPage
+            search={{ token_id: tokenId }}
+            onSearchChange={(patch) => setTokenId(patch.token_id ?? '')}
+          />
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    const screen = renderPage(<TokenRouteHarness />)
+    const firstTokenRow = (await screen.findByText(token.name)).closest('tr')
+    if (!(firstTokenRow instanceof HTMLElement)) {
+      throw new Error('missing first token row')
+    }
+
+    await user.click(
+      within(firstTokenRow).getByRole('button', { name: 'View' })
+    )
+    expect((await screen.findAllByText(/vdoc_a{48}/)).length).toBeGreaterThan(0)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Navigate to second token' })
+    )
+    await waitFor(() =>
+      expect(screen.queryByText(/vdoc_a{48}/)).not.toBeInTheDocument()
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Navigate back to first token' })
+    )
+    expect(screen.queryByText(/vdoc_a{48}/)).not.toBeInTheDocument()
+    expect(getMCPToken).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports an unavailable token deep link without selecting another token', async () => {
+    const screen = renderPage(
+      <MCPTokensPage search={{ token_id: 'token-out-of-scope' }} />
+    )
+
+    expect(
+      await screen.findByText('Linked entity is unavailable')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Token: token-out-of-scope/)).toBeInTheDocument()
+    expect(getMCPToken).not.toHaveBeenCalled()
+    expect(apiMocks.listMCPUsage).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse all-token activity after navigation to an unavailable token', async () => {
+    apiMocks.listMCPUsage.mockResolvedValue({
+      items: [
+        {
+          id: 'usage-before-invalid-link',
+          actor_type: 2,
+          actor_token_id: token.id,
+          action: 'mcp.tool_call',
+          resource_type: 'mcp_tool',
+          resource_id: 'version-before-invalid-link',
+          project_id: 'project-1',
+          document_id: 'document-1',
+          metadata: {
+            adapter: 'stdio',
+            evidence_kind: 'published_content_read',
+            result: 'success',
+            tool_name: 'get_latest_schema',
+            token_id: token.id,
+            project_id: 'project-1',
+            document_id: 'document-1',
+            version_id: 'version-before-invalid-link',
+          },
+          created_at: '2026-08-17T08:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+    function TokenRouteHarness() {
+      const [tokenId, setTokenId] = useState<string>()
+      return (
+        <>
+          <button
+            type='button'
+            onClick={() => setTokenId('token-out-of-scope')}
+          >
+            Navigate to unavailable token
+          </button>
+          <MCPTokensPage
+            search={tokenId ? { token_id: tokenId } : {}}
+            onSearchChange={(patch) => setTokenId(patch.token_id)}
+          />
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    const screen = renderPage(<TokenRouteHarness />)
+
+    expect(
+      await screen.findByText('Agent connection evidence found')
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('get_latest_schema').length).toBeGreaterThan(0)
+    await user.click(
+      screen.getByRole('button', { name: 'Navigate to unavailable token' })
+    )
+
+    expect(
+      await screen.findByText('Linked entity is unavailable')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByText('get_latest_schema')).not.toBeInTheDocument()
+    )
+    expect(apiMocks.listMCPUsage).toHaveBeenCalledTimes(1)
+    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith({
+      token_id: undefined,
+      limit: 200,
+    })
   })
 
   it('coalesces rapid token creation submissions', async () => {
@@ -955,6 +1576,95 @@ describe('VersionsPage', () => {
       'What changed?'
     )
   })
+
+  it('opens an exact version deep link and does not fall back to the first version', async () => {
+    const linkedVersion = {
+      ...markdownVersionFixture,
+      id: 'version-linked',
+      draft_id: 'draft-linked',
+      version_name: 'linked v2',
+    }
+    apiMocks.listVersions.mockResolvedValue({
+      items: [markdownVersionFixture, linkedVersion],
+      total: 2,
+    })
+    const onSearchChange = vi.fn()
+    const screen = renderPage(
+      <VersionsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          branch_id: branchFixture.id,
+          version_id: linkedVersion.id,
+        }}
+        onSearchChange={onSearchChange}
+      />
+    )
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Version')).toHaveValue(linkedVersion.id)
+    )
+    expect(listVersions).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      branchFixture.id
+    )
+    expect(getVersionContent).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      linkedVersion.id,
+      'raw'
+    )
+    expect(
+      screen.queryByText('Linked entity is unavailable')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps an unavailable project deep link empty instead of switching context', async () => {
+    const screen = renderPage(
+      <VersionsPage search={{ project_id: 'project-out-of-scope' }} />
+    )
+
+    expect(
+      await screen.findByText('Linked entity is unavailable')
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Project')).toHaveValue('')
+    expect(
+      screen.getByText(/Project: project-out-of-scope/)
+    ).toBeInTheDocument()
+    expect(listDocuments).not.toHaveBeenCalled()
+  })
+
+  it('labels archived branches in the historical version filter', async () => {
+    apiMocks.listBranches.mockResolvedValue({
+      items: [
+        branchFixture,
+        {
+          ...branchFixture,
+          id: 'branch-archived',
+          name: 'legacy',
+          status: 2,
+          is_default: false,
+        },
+      ],
+      total: 2,
+    })
+
+    const screen = renderVersionsPage()
+
+    expect(
+      await screen.findByRole('option', { name: 'legacy — Archived' })
+    ).toBeInTheDocument()
+  })
+
+  it('renders the content-kind placeholder label only once', async () => {
+    const screen = renderVersionsPage()
+    const contentKind = await screen.findByLabelText('Content kind')
+
+    expect(
+      within(contentKind).getAllByRole('option', { name: 'Raw' })
+    ).toHaveLength(1)
+  })
 })
 
 describe('SettingsPage AI settings', () => {
@@ -1006,6 +1716,9 @@ describe('SettingsPage AI settings', () => {
     if (!systemProviderEnabled) {
       throw new Error('missing system provider enabled select')
     }
+    expect(
+      within(systemProviderEnabled).getAllByRole('option', { name: 'Enabled' })
+    ).toHaveLength(1)
     await user.selectOptions(systemProviderEnabled, 'false')
     const systemProviderApiMode = screen.getAllByLabelText('API mode')[0]
     if (!systemProviderApiMode) {
@@ -1360,8 +2073,68 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       items: [fromVersionFixture, markdownVersionFixture],
       total: 2,
     })
+    apiMocks.listDiffs.mockResolvedValue({ items: [], total: 0 })
     apiMocks.compareDiff.mockResolvedValue(diffFixture)
     apiMocks.getDiffSummary.mockResolvedValue(diffFixture.summary)
+  })
+
+  it('opens an exact branch and draft deep link', async () => {
+    mockAIQueries('draft', draftFixture.id)
+    const screen = renderPage(
+      <DraftsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          branch_id: branchFixture.id,
+          draft_id: draftFixture.id,
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Branch')).toHaveValue(branchFixture.id)
+      expect(screen.getByLabelText('Draft')).toHaveValue(draftFixture.id)
+    })
+    expect(apiMocks.listDrafts).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      branchFixture.id
+    )
+    expect(apiMocks.getDraftContent).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      draftFixture.id,
+      'raw'
+    )
+  })
+
+  it('resolves an exact diff ID into its immutable version pair', async () => {
+    apiMocks.listDiffs.mockResolvedValue({ items: [diffFixture], total: 1 })
+    mockAIQueries('diff', diffFixture.id)
+    const onSearchChange = vi.fn()
+    const screen = renderPage(
+      <DiffsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          diff_id: diffFixture.id,
+        }}
+        onSearchChange={onSearchChange}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('From version')).toHaveValue('version-0')
+      expect(screen.getByLabelText('To version')).toHaveValue('version-1')
+    })
+    expect(onSearchChange).toHaveBeenCalledWith({
+      from_version_id: 'version-0',
+      to_version_id: 'version-1',
+    })
+    expect(compareDiff).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText('Linked entity is unavailable')
+    ).not.toBeInTheDocument()
   })
 
   it('scopes DraftsPage AI panel to the selected draft', async () => {
@@ -1408,6 +2181,20 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       ownerType: 'diff',
       ownerId: 'diff-1',
     })
+  })
+
+  it('labels stored diffs by version name and renders one filter option per label', async () => {
+    apiMocks.listDiffs.mockResolvedValue({ items: [diffFixture], total: 1 })
+    const screen = renderDiffsPage()
+
+    expect(await screen.findByText('v0 → v1')).toHaveClass('font-medium')
+    expect(
+      screen.getByText('Version IDs version-0 → version-1 · Diff ID diff-1')
+    ).toBeInTheDocument()
+    const reviewFilter = screen.getByLabelText('Review filter')
+    expect(
+      within(reviewFilter).getAllByRole('option', { name: 'All changes' })
+    ).toHaveLength(1)
   })
 })
 
@@ -1507,6 +2294,34 @@ describe('DraftsPage lifecycle boundaries', () => {
         { comment: 'Reviewed the selected draft' }
       )
     )
+  })
+
+  it('places machine and content evidence before review controls', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, diff_preview: diffFixture }],
+      total: 1,
+    })
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    const diffTitle = await screen.findByText('Draft diff preview')
+    const contentTitle = screen.getByText('Content viewer', {
+      selector: '[data-slot="card-title"]',
+    })
+    const reviewTitle = screen.getByText('Review note', {
+      selector: '[data-slot="card-title"]',
+    })
+
+    expect(
+      diffTitle.compareDocumentPosition(reviewTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      contentTitle.compareDocumentPosition(reviewTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it('keeps a failed review confirmation open and retries its captured request', async () => {
@@ -1717,7 +2532,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const screen = renderDraftsPage()
 
     const promoteTitle = await screen.findByText(
-      'Promote published branch to draft'
+      'Create a promotion draft from a published branch'
     )
     const promoteCard = promoteTitle.closest('[data-slot="card"]')
     if (!(promoteCard instanceof HTMLElement))
@@ -1764,10 +2579,10 @@ describe('DraftsPage lifecycle boundaries', () => {
     const screen = renderDraftsPage()
 
     expect(
-      await screen.findByText('Promotion is not available yet')
+      await screen.findByText('A promotion draft is not available yet')
     ).toBeInTheDocument()
     expect(
-      screen.queryByText('Promote published branch to draft')
+      screen.queryByText('Create a promotion draft from a published branch')
     ).not.toBeInTheDocument()
   })
 })

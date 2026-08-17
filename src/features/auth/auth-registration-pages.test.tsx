@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '@/context/language-provider'
 import { SignIn } from './sign-in'
@@ -69,7 +69,13 @@ describe('registration configuration on auth pages', () => {
     expect(
       signIn.queryByRole('link', { name: 'Sign Up' })
     ).not.toBeInTheDocument()
-    expect(signIn.getByText(/Registration is disabled/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        signIn.container.querySelector('[data-slot="card-description"]')
+      ).toHaveTextContent(
+        'Registration is disabled. Ask a system administrator for an account.'
+      )
+    )
     signIn.unmount()
 
     const signUp = renderPage(<SignUp />)
@@ -82,5 +88,48 @@ describe('registration configuration on auth pages', () => {
         /use an account created by a system administrator/i
       )
     ).toBeInTheDocument()
+  })
+
+  it('does not report registration as disabled while configuration is loading', () => {
+    mocks.getAuthConfig.mockReturnValue(new Promise(() => undefined))
+
+    const signIn = renderPage(<SignIn />)
+
+    expect(
+      signIn.container.querySelector('[data-slot="card-description"]')
+    ).toHaveTextContent('Checking registration availability…')
+    expect(
+      signIn.queryByText(
+        'Registration is disabled. Ask a system administrator for an account.',
+        { exact: false }
+      )
+    ).not.toBeInTheDocument()
+    expect(signIn.getByLabelText('sign-in-form')).toBeInTheDocument()
+  })
+
+  it('separates a failed configuration request from a disabled setting', async () => {
+    mocks.getAuthConfig.mockRejectedValue(new Error('config unavailable'))
+
+    const signIn = renderPage(<SignIn />)
+    expect(
+      await signIn.findByText('Registration check unavailable')
+    ).toBeInTheDocument()
+    expect(
+      signIn.getByRole('button', { name: 'Retry registration check' })
+    ).toBeInTheDocument()
+    expect(
+      signIn.queryByText(
+        'Registration is disabled. Ask a system administrator for an account.',
+        { exact: false }
+      )
+    ).not.toBeInTheDocument()
+    expect(signIn.getByLabelText('sign-in-form')).toBeInTheDocument()
+    signIn.unmount()
+
+    const signUp = renderPage(<SignUp />)
+    expect(
+      (await signUp.findAllByText('Registration check unavailable')).length
+    ).toBeGreaterThan(0)
+    expect(signUp.queryByLabelText('sign-up-form')).not.toBeInTheDocument()
   })
 })

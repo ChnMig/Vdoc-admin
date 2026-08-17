@@ -9,10 +9,10 @@ import {
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { isUnauthenticatedError } from '@/lib/auth-errors'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getStoredLanguage, translate } from '@/lib/i18n'
 import { shouldRetryQuery } from '@/lib/query-retry'
-import { VdocApiError } from '@/lib/vdoc-api'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { LanguageProvider } from './context/language-provider'
@@ -46,20 +46,12 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
-      if (error instanceof VdocApiError && error.code === 401) {
+      if (isUnauthenticatedError(error)) {
         toast.error(toastMessage('toasts.sessionExpired'))
         useAuthStore.getState().auth.reset()
         const redirect = `${router.history.location.href}`
         router.navigate({ to: '/sign-in', search: { redirect } })
-      }
-
-      if (error instanceof AxiosError) {
-        if (error.response?.status === 401) {
-          toast.error(toastMessage('toasts.sessionExpired'))
-          useAuthStore.getState().auth.reset()
-          const redirect = `${router.history.location.href}`
-          router.navigate({ to: '/sign-in', search: { redirect } })
-        }
+      } else if (error instanceof AxiosError) {
         if (error.response?.status === 500) {
           toast.error(toastMessage('toasts.internalServerError'))
           // Only navigate to error page in production to avoid disrupting HMR in development

@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -11,6 +11,7 @@ import {
   GitCompareArrows,
   KeyRound,
   Layers3,
+  RefreshCw,
   Route,
   SearchIcon,
   Server,
@@ -18,6 +19,11 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { useVdocContextStore } from '@/stores/vdoc-context-store'
+import {
+  type NativeSelectOption,
+  withNativeSelectPlaceholder,
+} from '@/lib/native-select-options'
 import { userPasswordError } from '@/lib/user-password'
 import {
   addProjectMember,
@@ -48,6 +54,7 @@ import {
   listDocuments,
   listDrafts,
   listEndpoints,
+  listMCPUsage,
   listMCPTokens,
   listProjectMembers,
   listProjectMemberCandidates,
@@ -82,11 +89,13 @@ import {
   type EndpointDTO,
   type EndpointSummaryDTO,
   type MCPTokenDTO,
+  type ProjectMemberDTO,
   type ProjectDTO,
   type TeamDTO,
   type UserDTO,
   type VersionDTO,
 } from '@/lib/vdoc-api'
+import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
 import { useTheme } from '@/context/theme-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -123,6 +132,21 @@ import { AISettingsPanel } from './ai-settings'
 import { DocumentSharePanel } from './document-share-panel'
 import { MarkdownFactsCard } from './markdown-facts-card'
 
+const vdocMcpSource =
+  'github:ChnMig/Vdoc-mcp#7d641fadb8cc28fabfebe2fd229a22f63acd5113'
+const vdocSkillCommit = '73a203c4bd0d7d96997fab8e1fa478a859f32e91'
+const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
+VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
+VDOC_SKILL_COMMIT=${vdocSkillCommit}
+test ! -e "$VDOC_SKILL_DIR"
+mkdir -p "$(dirname -- "$VDOC_SKILL_DIR")"
+git init "$VDOC_SKILL_DIR"
+git -C "$VDOC_SKILL_DIR" remote add origin https://github.com/ChnMig/Vdoc-skill.git
+git -C "$VDOC_SKILL_DIR" fetch --depth 1 origin "$VDOC_SKILL_COMMIT"
+git -C "$VDOC_SKILL_DIR" checkout --detach FETCH_HEAD
+test "$(git -C "$VDOC_SKILL_DIR" rev-parse HEAD)" = "$VDOC_SKILL_COMMIT"
+test -f "$VDOC_SKILL_DIR/SKILL.md"`
+
 const ACTIVE_STATUS = 1
 const ARCHIVED_OR_DISABLED_STATUS = 2
 const DOCUMENT_TYPE_OPENAPI = 1
@@ -136,6 +160,10 @@ const DRAFT_STATUS_SUBMITTED = 2
 const DRAFT_STATUS_CHANGES_REQUESTED = 3
 const DRAFT_STATUS_REJECTED = 4
 const DRAFT_STATUS_PUBLISHED = 5
+const MCP_TOKEN_STATUS_REVOKED = 2
+const MCP_TOKEN_STATUS_EXPIRED = 3
+const SCOPE_API_READ = 1
+const SCOPE_DOC_READ = 3
 
 type PageKey =
   | 'dashboard'
@@ -157,9 +185,15 @@ type QueryState = {
   error: Error | null
 }
 
-type SelectOption = {
-  value: string
-  label: string
+type SelectOption = NativeSelectOption
+
+type PageGuidance = {
+  title: string
+  description: string
+  action?: {
+    href: string
+    label: string
+  }
 }
 
 type EmptyStatePreset =
@@ -189,7 +223,29 @@ type DraftActionRequest = {
 }
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 type WorkbenchStepKey =
-  'team' | 'project' | 'document' | 'branch' | 'draft' | 'token'
+  | 'team'
+  | 'project'
+  | 'document'
+  | 'branch'
+  | 'draft'
+  | 'version'
+  | 'token'
+  | 'connection'
+
+const pageNextRoute: Record<PageKey, string> = {
+  dashboard: '/projects',
+  users: '/teams',
+  teams: '/projects',
+  projects: '/documents',
+  documents: '/drafts',
+  drafts: '/versions',
+  versions: '/diffs',
+  diffs: '/mcp-tokens',
+  audit: '/settings',
+  mcpTokens: '/skill',
+  skill: '/mcp-tokens',
+  settings: '/',
+}
 
 function useInvalidateAll() {
   const queryClient = useQueryClient()
@@ -215,6 +271,79 @@ function formatDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function activeFirstId(items: Array<{ id: string; status: number }>) {
+  return items.find((item) => item.status === ACTIVE_STATUS)?.id ?? ''
+}
+
+function contextualHref(href: string, projectId?: string, documentId?: string) {
+  const params = new URLSearchParams()
+  if (projectId) params.set('project_id', projectId)
+  if (documentId) params.set('document_id', documentId)
+  const query = params.toString()
+  return query ? `${href}?${query}` : href
+}
+
+function entityOptionLabel(
+  name: string,
+  status: number,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  return status === ACTIVE_STATUS
+    ? name
+    : `${name} — ${t('admin.statuses.archived')}`
+}
+
+function tokenIsActive(token: MCPTokenDTO, now = Date.now()) {
+  if (token.status !== ACTIVE_STATUS) return false
+  if (!token.expires_at) return true
+  const expiresAt = Date.parse(token.expires_at)
+  return Number.isFinite(expiresAt) && expiresAt > now
+}
+
+function tokenHasReadScope(token: MCPTokenDTO, documentType?: number) {
+  if (documentType === DOCUMENT_TYPE_MARKDOWN) {
+    return token.scopes.includes(SCOPE_DOC_READ)
+  }
+  if (documentType === DOCUMENT_TYPE_OPENAPI) {
+    return token.scopes.includes(SCOPE_API_READ)
+  }
+  return false
+}
+
+function tokenHasAnyReadScope(token: MCPTokenDTO) {
+  return (
+    token.scopes.includes(SCOPE_API_READ) ||
+    token.scopes.includes(SCOPE_DOC_READ)
+  )
+}
+
+function tokenStatusLabel(
+  token: MCPTokenDTO,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (tokenIsActive(token)) return t('admin.statuses.active')
+  if (
+    token.status === MCP_TOKEN_STATUS_EXPIRED ||
+    (token.expires_at && Date.parse(token.expires_at) <= Date.now())
+  ) {
+    return t('admin.statuses.expired')
+  }
+  if (token.status === MCP_TOKEN_STATUS_REVOKED) {
+    return t('admin.statuses.revoked')
+  }
+  return `${t('admin.common.unknown')} ${token.status}`
+}
+
+function activeProjectRole(
+  members: readonly ProjectMemberDTO[] | undefined,
+  userId: string | undefined
+) {
+  if (!userId) return undefined
+  return members?.find(
+    (member) => member.user_id === userId && member.status === ACTIVE_STATUS
+  )?.role
 }
 
 function stringify(value: unknown) {
@@ -311,11 +440,25 @@ function changeTypeLabel(
 function PageChrome({
   page,
   children,
+  guidance,
 }: {
   page: PageKey
   children: React.ReactNode
+  guidance?: PageGuidance
 }) {
   const { t } = useLanguage()
+  const projectId = useVdocContextStore((state) => state.projectId)
+  const documentId = useVdocContextStore((state) => state.documentId)
+  const resolvedGuidance =
+    guidance ??
+    ({
+      title: t('admin.common.nextAction'),
+      description: t(`admin.pages.${page}.next`),
+      action: {
+        href: pageNextRoute[page],
+        label: t('admin.common.openNextAction'),
+      },
+    } satisfies PageGuidance)
   return (
     <>
       <Header>
@@ -352,11 +495,25 @@ function PageChrome({
           </div>
           <aside className='grid content-start gap-3 rounded-md border bg-[var(--surface-control)] p-4 text-sm shadow-[var(--shadow-panel)]'>
             <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
-              {t('admin.common.nextAction')}
+              {resolvedGuidance.title}
             </p>
             <p className='leading-6 text-muted-foreground'>
-              {t(`admin.pages.${page}.next`)}
+              {resolvedGuidance.description}
             </p>
+            {resolvedGuidance.action && (
+              <Button asChild size='sm' variant='outline' className='w-fit'>
+                <a
+                  href={contextualHref(
+                    resolvedGuidance.action.href,
+                    projectId,
+                    documentId
+                  )}
+                >
+                  {resolvedGuidance.action.label}
+                  <ArrowRight />
+                </a>
+              </Button>
+            )}
           </aside>
         </section>
         <div className='grid gap-5'>{children}</div>
@@ -395,6 +552,22 @@ function LoadingErrorState({ state }: { state: QueryState }) {
     )
   }
   return null
+}
+
+function DeepLinkAlert({ targets }: { targets: string[] }) {
+  const { t } = useLanguage()
+  if (targets.length === 0) return null
+  return (
+    <Alert variant='destructive' aria-live='polite'>
+      <AlertCircle />
+      <AlertTitle>{t('admin.deepLink.invalidTitle')}</AlertTitle>
+      <AlertDescription>
+        {t('admin.deepLink.invalidDescription', {
+          targets: targets.join(', '),
+        })}
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 function AccessDeniedPage({ page }: { page: PageKey }) {
@@ -453,6 +626,7 @@ function NativeSelect({
   onChange,
   name,
   defaultValue,
+  hint,
   disabled = false,
   required = false,
 }: {
@@ -464,11 +638,13 @@ function NativeSelect({
   onChange?: (value: string) => void
   name?: string
   defaultValue?: string
+  hint?: string
   disabled?: boolean
   required?: boolean
 }) {
   const generatedId = useId()
   const controlId = id ?? generatedId
+  const selectOptions = withNativeSelectPlaceholder(options, placeholder)
   return (
     <div className='grid gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
@@ -479,16 +655,25 @@ function NativeSelect({
         defaultValue={value === undefined ? defaultValue : undefined}
         disabled={disabled}
         required={required}
+        aria-describedby={hint ? `${controlId}-hint` : undefined}
         onChange={(event) => onChange?.(event.currentTarget.value)}
         className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
       >
-        <option value=''>{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
+        {selectOptions.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            disabled={required && option.value === ''}
+          >
             {option.label}
           </option>
         ))}
       </select>
+      {hint && (
+        <p id={`${controlId}-hint`} className='text-sm text-muted-foreground'>
+          {hint}
+        </p>
+      )}
     </div>
   )
 }
@@ -850,21 +1035,36 @@ function InlineNameDescriptionForm({
   pending,
 }: {
   item: { id: string; name: string; description?: string }
-  onUpdate: (id: string, name: string, description: string) => void
+  onUpdate: (id: string, name: string, description: string) => Promise<unknown>
   pending: boolean
 }) {
   const { t } = useLanguage()
+  const [error, setError] = useState<Error>()
+  const submitLockedRef = useRef(false)
   return (
     <form
       className='grid gap-2 sm:grid-cols-[1fr_1fr_auto]'
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault()
+        if (submitLockedRef.current) return
+        submitLockedRef.current = true
         const formData = new FormData(event.currentTarget)
-        onUpdate(
-          item.id,
-          fieldValue(formData, 'name'),
-          fieldValue(formData, 'description')
-        )
+        setError(undefined)
+        try {
+          await onUpdate(
+            item.id,
+            fieldValue(formData, 'name'),
+            fieldValue(formData, 'description')
+          )
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause
+              : new Error(t('toasts.somethingWrong'))
+          )
+        } finally {
+          submitLockedRef.current = false
+        }
       }}
     >
       <Input
@@ -880,6 +1080,17 @@ function InlineNameDescriptionForm({
       <Button type='submit' variant='outline' size='sm' disabled={pending}>
         {t('admin.common.update')}
       </Button>
+      {error && (
+        <Alert
+          className='sm:col-span-full'
+          variant='destructive'
+          aria-live='polite'
+        >
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
     </form>
   )
 }
@@ -928,34 +1139,86 @@ function ContentViewer({
   )
 }
 
-function useProjectsAndSelection() {
+function useRouteControlledString(
+  routeValue: string | undefined,
+  routeControlled: boolean
+) {
+  const [localValue, setLocalValue] = useState(routeValue ?? '')
+  return [
+    routeControlled ? (routeValue ?? '') : localValue,
+    setLocalValue,
+  ] as const
+}
+
+function useProjectsAndSelection(
+  preferredProjectId?: string,
+  onProjectChange?: (projectId: string) => void
+) {
+  const { t } = useLanguage()
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
   })
-  const [projectId, setProjectId] = useState('')
+  const projectId = useVdocContextStore((state) => state.projectId)
+  const setProjectId = useVdocContextStore((state) => state.setProjectId)
   const projectOptions = useMemo(
     () =>
       projectsQuery.data?.items.map((project) => ({
         value: project.id,
-        label: project.name,
+        label: entityOptionLabel(project.name, project.status, t),
       })) ?? [],
-    [projectsQuery.data]
+    [projectsQuery.data, t]
   )
-  const selectedProjectId = projectOptions.some(
-    (project) => project.value === projectId
+  const hasPreferredProject = preferredProjectId !== undefined
+  const preferredProjectExists = projectOptions.some(
+    (project) => project.value === preferredProjectId
   )
-    ? projectId
-    : (projectOptions[0]?.value ?? '')
+  const selectedProjectId = hasPreferredProject
+    ? preferredProjectExists
+      ? preferredProjectId
+      : ''
+    : projectOptions.some((project) => project.value === projectId)
+      ? projectId
+      : activeFirstId(projectsQuery.data?.items ?? [])
+  const onProjectChangeRef = useRef(onProjectChange)
+  useEffect(() => {
+    onProjectChangeRef.current = onProjectChange
+  }, [onProjectChange])
+  useEffect(() => {
+    if (!projectsQuery.data) return
+    if (selectedProjectId !== projectId) setProjectId(selectedProjectId)
+    if (!hasPreferredProject && selectedProjectId) {
+      onProjectChangeRef.current?.(selectedProjectId)
+    }
+  }, [
+    hasPreferredProject,
+    projectId,
+    projectsQuery.data,
+    selectedProjectId,
+    setProjectId,
+  ])
+  const selectProjectId = (value: string) => {
+    setProjectId(value)
+    onProjectChangeRef.current?.(value)
+  }
   return {
     projectsQuery,
     projectId: selectedProjectId,
-    setProjectId,
+    setProjectId: selectProjectId,
     projectOptions,
+    invalidProjectDeepLink: Boolean(
+      projectsQuery.data && hasPreferredProject && !preferredProjectExists
+    ),
   }
 }
 
-function useDocumentsAndSelection(projectId: string, documentType?: number) {
+function useDocumentsAndSelection(
+  projectId: string,
+  documentType?: number,
+  preferredDocumentId?: string,
+  onDocumentChange?: (documentId: string) => void
+) {
+  const { t } = useLanguage()
   const documentsQuery = useQuery({
     queryKey: ['documents', projectId, documentType ?? 'all'],
     queryFn: () =>
@@ -964,20 +1227,48 @@ function useDocumentsAndSelection(projectId: string, documentType?: number) {
         : listDocuments(projectId, documentType),
     enabled: projectId.length > 0,
   })
-  const [documentId, setDocumentId] = useState('')
+  const documentId = useVdocContextStore((state) => state.documentId)
+  const setDocumentId = useVdocContextStore((state) => state.setDocumentId)
   const documentOptions = useMemo(
     () =>
       documentsQuery.data?.items.map((document) => ({
         value: document.id,
-        label: document.name,
+        label: entityOptionLabel(document.name, document.status, t),
       })) ?? [],
-    [documentsQuery.data]
+    [documentsQuery.data, t]
   )
-  const selectedDocumentId = documentOptions.some(
-    (document) => document.value === documentId
+  const hasPreferredDocument = preferredDocumentId !== undefined
+  const preferredDocumentExists = documentOptions.some(
+    (document) => document.value === preferredDocumentId
   )
-    ? documentId
-    : (documentOptions[0]?.value ?? '')
+  const selectedDocumentId = hasPreferredDocument
+    ? preferredDocumentExists
+      ? preferredDocumentId
+      : ''
+    : documentOptions.some((document) => document.value === documentId)
+      ? documentId
+      : activeFirstId(documentsQuery.data?.items ?? [])
+  const onDocumentChangeRef = useRef(onDocumentChange)
+  useEffect(() => {
+    onDocumentChangeRef.current = onDocumentChange
+  }, [onDocumentChange])
+  useEffect(() => {
+    if (!documentsQuery.data) return
+    if (selectedDocumentId !== documentId) setDocumentId(selectedDocumentId)
+    if (!hasPreferredDocument && selectedDocumentId) {
+      onDocumentChangeRef.current?.(selectedDocumentId)
+    }
+  }, [
+    documentId,
+    documentsQuery.data,
+    hasPreferredDocument,
+    selectedDocumentId,
+    setDocumentId,
+  ])
+  const selectDocumentId = (value: string) => {
+    setDocumentId(value)
+    onDocumentChangeRef.current?.(value)
+  }
   const selectedDocument = documentsQuery.data?.items.find(
     (document) => document.id === selectedDocumentId
   )
@@ -985,15 +1276,20 @@ function useDocumentsAndSelection(projectId: string, documentType?: number) {
     documentsQuery,
     documentId: selectedDocumentId,
     selectedDocument,
-    setDocumentId,
+    setDocumentId: selectDocumentId,
     documentOptions,
+    invalidDocumentDeepLink: Boolean(
+      documentsQuery.data && hasPreferredDocument && !preferredDocumentExists
+    ),
   }
 }
 
 function useVersionsAndSelection(
   projectId: string,
   documentId: string,
-  branchId?: string
+  branchId?: string,
+  preferredVersionId?: string,
+  onVersionChange?: (versionId: string) => void
 ) {
   const versionsQuery = useQuery({
     queryKey: ['versions', projectId, documentId, branchId ?? 'all'],
@@ -1003,7 +1299,8 @@ function useVersionsAndSelection(
         : listVersions(projectId, documentId, branchId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
-  const [versionId, setVersionId] = useState('')
+  const versionId = useVdocContextStore((state) => state.versionId)
+  const setVersionId = useVdocContextStore((state) => state.setVersionId)
   const versionOptions = useMemo(
     () =>
       versionsQuery.data?.items.map((version) => ({
@@ -1012,16 +1309,46 @@ function useVersionsAndSelection(
       })) ?? [],
     [versionsQuery.data]
   )
-  const selectedVersionId = versionOptions.some(
-    (version) => version.value === versionId
+  const hasPreferredVersion = preferredVersionId !== undefined
+  const preferredVersionExists = versionOptions.some(
+    (version) => version.value === preferredVersionId
   )
-    ? versionId
-    : (versionOptions[0]?.value ?? '')
+  const selectedVersionId = hasPreferredVersion
+    ? preferredVersionExists
+      ? preferredVersionId
+      : ''
+    : versionOptions.some((version) => version.value === versionId)
+      ? versionId
+      : (versionOptions[0]?.value ?? '')
+  const onVersionChangeRef = useRef(onVersionChange)
+  useEffect(() => {
+    onVersionChangeRef.current = onVersionChange
+  }, [onVersionChange])
+  useEffect(() => {
+    if (!versionsQuery.data) return
+    if (selectedVersionId !== versionId) setVersionId(selectedVersionId)
+    if (!hasPreferredVersion && selectedVersionId) {
+      onVersionChangeRef.current?.(selectedVersionId)
+    }
+  }, [
+    hasPreferredVersion,
+    selectedVersionId,
+    setVersionId,
+    versionId,
+    versionsQuery.data,
+  ])
+  const selectVersionId = (value: string) => {
+    setVersionId(value)
+    onVersionChangeRef.current?.(value)
+  }
   return {
     versionsQuery,
     versionId: selectedVersionId,
-    setVersionId,
+    setVersionId: selectVersionId,
     versionOptions,
+    invalidVersionDeepLink: Boolean(
+      versionsQuery.data && hasPreferredVersion && !preferredVersionExists
+    ),
   }
 }
 
@@ -1043,53 +1370,65 @@ export function DashboardPage() {
     queryFn: listTeams,
     enabled: isSuperAdmin,
   })
-  const projectsQuery = useQuery({
-    queryKey: ['projects'],
-    queryFn: listProjects,
-  })
-  const firstProjectId = projectsQuery.data?.items[0]?.id ?? ''
+  const { projectsQuery, projectId, setProjectId, projectOptions } =
+    useProjectsAndSelection()
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
   const membersQuery = useQuery({
-    queryKey: ['project-members', firstProjectId],
-    queryFn: () => listProjectMembers(firstProjectId),
-    enabled: firstProjectId.length > 0 && !isSuperAdmin,
+    queryKey: ['project-members', projectId],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: projectId.length > 0 && !isSuperAdmin,
   })
   const currentUserId = identityQuery.data?.id ?? ''
-  const projectRole = membersQuery.data?.items.find(
-    (member) => member.user_id === currentUserId
-  )?.role
+  const projectRole = activeProjectRole(membersQuery.data?.items, currentUserId)
   const roleLabel = isSuperAdmin
     ? t('admin.workbench.superAdminRole')
     : projectRole === ROLE_ADMIN
       ? t('admin.workbench.adminRole')
       : projectRole === ROLE_WRITER
         ? t('admin.workbench.writerRole')
-        : t('admin.workbench.readerRole')
+        : projectRole === ROLE_READER
+          ? t('admin.workbench.readerRole')
+          : t('admin.workbench.noProjectRole')
   const roleGuidance = isSuperAdmin
     ? t('admin.workbench.superAdminGuidance')
     : projectRole === ROLE_ADMIN
       ? t('admin.workbench.adminGuidance')
       : projectRole === ROLE_WRITER
         ? t('admin.workbench.writerGuidance')
-        : t('admin.workbench.readerGuidance')
-  const documentsQuery = useQuery({
-    queryKey: ['documents', firstProjectId],
-    queryFn: () => listDocuments(firstProjectId),
-    enabled: firstProjectId.length > 0,
-  })
-  const firstDocumentId = documentsQuery.data?.items[0]?.id ?? ''
+        : projectRole === ROLE_READER
+          ? t('admin.workbench.readerGuidance')
+          : t('admin.workbench.noProjectGuidance')
+  const {
+    documentsQuery,
+    documentId,
+    selectedDocument,
+    setDocumentId,
+    documentOptions,
+  } = useDocumentsAndSelection(projectId)
   const branchesQuery = useQuery({
-    queryKey: ['branches', firstProjectId, firstDocumentId],
-    queryFn: () => listBranches(firstProjectId, firstDocumentId),
-    enabled: firstProjectId.length > 0 && firstDocumentId.length > 0,
+    queryKey: ['branches', projectId, documentId],
+    queryFn: () => listBranches(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
   })
   const draftsQuery = useQuery({
-    queryKey: ['drafts', firstProjectId, firstDocumentId],
-    queryFn: () => listDrafts(firstProjectId, firstDocumentId),
-    enabled: firstProjectId.length > 0 && firstDocumentId.length > 0,
+    queryKey: ['drafts', projectId, documentId],
+    queryFn: () => listDrafts(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
+  })
+  const versionsQuery = useQuery({
+    queryKey: ['versions', projectId, documentId, 'dashboard-readiness'],
+    queryFn: () => listVersions(projectId, documentId),
+    enabled: projectId.length > 0 && documentId.length > 0,
   })
   const tokensQuery = useQuery({
     queryKey: ['mcp-tokens'],
     queryFn: listMCPTokens,
+  })
+  const mcpUsageQuery = useQuery({
+    queryKey: ['mcp-usage', 'dashboard'],
+    queryFn: () => listMCPUsage({ limit: 200 }),
   })
   const queryState = {
     isLoading:
@@ -1101,7 +1440,9 @@ export function DashboardPage() {
       documentsQuery.isLoading ||
       branchesQuery.isLoading ||
       draftsQuery.isLoading ||
-      tokensQuery.isLoading,
+      versionsQuery.isLoading ||
+      tokensQuery.isLoading ||
+      mcpUsageQuery.isLoading,
     isError:
       healthQuery.isError ||
       identityQuery.isError ||
@@ -1111,7 +1452,9 @@ export function DashboardPage() {
       documentsQuery.isError ||
       branchesQuery.isError ||
       draftsQuery.isError ||
-      tokensQuery.isError,
+      versionsQuery.isError ||
+      tokensQuery.isError ||
+      mcpUsageQuery.isError,
     error: (healthQuery.error ??
       identityQuery.error ??
       (isSuperAdmin ? usersQuery.error : null) ??
@@ -1120,13 +1463,42 @@ export function DashboardPage() {
       documentsQuery.error ??
       branchesQuery.error ??
       draftsQuery.error ??
-      tokensQuery.error) as Error | null,
+      versionsQuery.error ??
+      tokensQuery.error ??
+      mcpUsageQuery.error) as Error | null,
   }
   const dependencyEntries = Object.entries(healthQuery.data?.dependencies ?? {})
+  const activeDocumentContext = Boolean(
+    selectedProject?.status === ACTIVE_STATUS &&
+    selectedDocument?.status === ACTIVE_STATUS
+  )
+  const activeBranchIds = new Set(
+    (branchesQuery.data?.items ?? [])
+      .filter((branch) => branch.status === ACTIVE_STATUS)
+      .map((branch) => branch.id)
+  )
+  const activeReadableTokens = (tokensQuery.data?.items ?? []).filter(
+    (token) =>
+      activeDocumentContext &&
+      tokenIsActive(token) &&
+      tokenHasReadScope(token, selectedDocument?.document_type)
+  )
+  const activeReadableTokenIds = new Set(
+    activeReadableTokens.map((token) => token.id)
+  )
+  const hasPublishedReadEvidence = (mcpUsageQuery.data?.items ?? []).some(
+    (usage) =>
+      activeReadableTokenIds.has(usage.actor_token_id ?? '') &&
+      usage.metadata.evidence_kind === 'published_content_read' &&
+      usage.metadata.result === 'success' &&
+      (usage.project_id ?? usage.metadata.project_id) === projectId &&
+      (usage.document_id ?? usage.metadata.document_id) === documentId
+  )
   const onboardingSteps: Array<{
     key: WorkbenchStepKey
     icon: typeof UsersRound
     done: boolean
+    href: string
   }> = [
     ...(isSuperAdmin
       ? [
@@ -1134,39 +1506,104 @@ export function DashboardPage() {
             key: 'team' as const,
             icon: UsersRound,
             done: Boolean((teamsQuery.data?.total ?? 0) > 0),
+            href: '/teams',
           },
         ]
       : []),
     {
       key: 'project',
       icon: Layers3,
-      done: Boolean((projectsQuery.data?.total ?? 0) > 0),
+      done: selectedProject?.status === ACTIVE_STATUS,
+      href: '/projects',
     },
     {
       key: 'document',
       icon: FileText,
-      done: Boolean((documentsQuery.data?.total ?? 0) > 0),
+      done: selectedDocument?.status === ACTIVE_STATUS,
+      href: '/documents',
     },
     {
       key: 'branch',
       icon: Route,
-      done: Boolean((branchesQuery.data?.total ?? 0) > 0),
+      done: activeDocumentContext && activeBranchIds.size > 0,
+      href: '/documents',
     },
     {
       key: 'draft',
       icon: BookOpenText,
-      done: Boolean((draftsQuery.data?.total ?? 0) > 0),
+      done: Boolean(
+        draftsQuery.data?.items.some(
+          (draft) =>
+            activeDocumentContext &&
+            activeBranchIds.has(draft.branch_id) &&
+            (draft.status === DRAFT_STATUS_SUBMITTED ||
+              draft.status === DRAFT_STATUS_PUBLISHED)
+        )
+      ),
+      href: '/drafts',
+    },
+    {
+      key: 'version',
+      icon: GitCompareArrows,
+      done: Boolean(
+        versionsQuery.data?.items.some(
+          (version) =>
+            activeDocumentContext &&
+            activeBranchIds.has(version.branch_id) &&
+            version.status === ACTIVE_STATUS
+        )
+      ),
+      href: '/versions',
     },
     {
       key: 'token',
       icon: KeyRound,
-      done: Boolean((tokensQuery.data?.total ?? 0) > 0),
+      done: activeReadableTokens.length > 0,
+      href: '/mcp-tokens',
+    },
+    {
+      key: 'connection',
+      icon: ShieldCheck,
+      done: hasPublishedReadEvidence,
+      href: '/mcp-tokens',
     },
   ]
+  const firstIncompleteStep = onboardingSteps.find((step) => !step.done)
+  const dashboardGuidance: PageGuidance = firstIncompleteStep
+    ? {
+        title: t('admin.common.nextAction'),
+        description: t('admin.workbench.nextIncompleteStep', {
+          step: t(`admin.workbench.steps.${firstIncompleteStep.key}.title`),
+        }),
+        action: {
+          href: firstIncompleteStep.href,
+          label: t('admin.workbench.continueStep'),
+        },
+      }
+    : {
+        title: t('admin.workbench.lifecycleCompleteTitle'),
+        description: t('admin.workbench.lifecycleCompleteDescription'),
+      }
 
   return (
-    <PageChrome page='dashboard'>
+    <PageChrome page='dashboard' guidance={dashboardGuidance}>
       <LoadingErrorState state={queryState} />
+      <SelectorGrid>
+        <NativeSelect
+          label={t('admin.fields.project')}
+          value={projectId}
+          onChange={setProjectId}
+          placeholder={t('admin.placeholders.selectProject')}
+          options={projectOptions}
+        />
+        <NativeSelect
+          label={t('admin.fields.document')}
+          value={documentId}
+          onChange={setDocumentId}
+          placeholder={t('admin.placeholders.selectDocument')}
+          options={documentOptions}
+        />
+      </SelectorGrid>
       <Card className='overflow-hidden'>
         <CardContent className='grid gap-5 p-5 lg:grid-cols-[1.25fr_0.75fr]'>
           <div className='grid gap-4'>
@@ -1200,6 +1637,11 @@ export function DashboardPage() {
               <StatusBadge>{roleLabel}</StatusBadge>
             </div>
             <p className='text-sm text-muted-foreground'>{roleGuidance}</p>
+            {selectedProject && (
+              <p className='font-mono text-xs text-muted-foreground'>
+                {selectedProject.name} · {selectedProject.id}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1255,6 +1697,21 @@ export function DashboardPage() {
                   <p className='mt-2 text-sm text-muted-foreground'>
                     {t(`admin.workbench.steps.${step.key}.description`)}
                   </p>
+                  <Button
+                    asChild
+                    variant='link'
+                    size='sm'
+                    className='mt-3 h-auto p-0'
+                  >
+                    <a href={contextualHref(step.href, projectId, documentId)}>
+                      {t(
+                        step.done
+                          ? 'admin.workbench.inspectStep'
+                          : 'admin.workbench.continueStep'
+                      )}
+                      <ArrowRight />
+                    </a>
+                  </Button>
                 </div>
               )
             })}
@@ -1460,19 +1917,21 @@ export function UsersPage() {
                           }
                         />
                       ) : (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          disabled={patchMutation.isPending}
-                          onClick={() =>
-                            patchMutation.mutate({
+                        <ConfirmActionButton
+                          label={t('admin.actions.enableUser')}
+                          title={t('admin.confirm.enableUserTitle', {
+                            email: user.email,
+                          })}
+                          description={t('admin.confirm.enableUserDescription')}
+                          destructive={false}
+                          pending={patchMutation.isPending}
+                          onConfirm={() =>
+                            patchMutation.mutateAsync({
                               id: user.id,
                               status: ACTIVE_STATUS,
                             })
                           }
-                        >
-                          {t('admin.actions.enableUser')}
-                        </Button>
+                        />
                       )}
                       <ConfirmActionButton
                         label={t(
@@ -1580,7 +2039,7 @@ export function TeamsPage() {
         emptyPreset='teams'
         items={teamsQuery.data?.items ?? []}
         onUpdate={(id, name, description) =>
-          updateMutation.mutate({ id, name, description })
+          updateMutation.mutateAsync({ id, name, description })
         }
         onArchive={(id) => archiveMutation.mutateAsync(id)}
         pending={updateMutation.isPending || archiveMutation.isPending}
@@ -1634,7 +2093,7 @@ function NameDescriptionTable({
   canEdit,
 }: {
   items: Array<TeamDTO | ProjectDTO>
-  onUpdate: (id: string, name: string, description: string) => void
+  onUpdate: (id: string, name: string, description: string) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   pending: boolean
   emptyPreset: EmptyStatePreset
@@ -1726,10 +2185,8 @@ export function ProjectsPage() {
   const authUser = useAuthStore((state) => state.auth.user)
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
   const invalidate = useInvalidateAll()
-  const projectsQuery = useQuery({
-    queryKey: ['projects'],
-    queryFn: listProjects,
-  })
+  const { projectsQuery, projectId, setProjectId, projectOptions } =
+    useProjectsAndSelection()
   const teamsQuery = useQuery({
     queryKey: ['teams'],
     queryFn: listTeams,
@@ -1740,27 +2197,6 @@ export function ProjectsPage() {
     queryFn: listUsers,
     enabled: isSuperAdmin,
   })
-  const [requestedProjectId, setProjectId] = useState('')
-  const projectOptions = useMemo(
-    () =>
-      projectsQuery.data?.items.map((project) => ({
-        value: project.id,
-        label: project.name,
-      })) ?? [],
-    [projectsQuery.data]
-  )
-  const projectId = projectOptions.some(
-    (project) => project.value === requestedProjectId
-  )
-    ? requestedProjectId
-    : (projectOptions.find((project) => {
-        const item = projectsQuery.data?.items.find(
-          (candidate) => candidate.id === project.value
-        )
-        return item?.status === ACTIVE_STATUS
-      })?.value ??
-      projectOptions[0]?.value ??
-      '')
   const selectedProject = projectsQuery.data?.items.find(
     (project) => project.id === projectId
   )
@@ -1769,9 +2205,7 @@ export function ProjectsPage() {
     queryFn: () => listProjectMembers(projectId),
     enabled: projectId.length > 0,
   })
-  const selectedRole = membersQuery.data?.items.find(
-    (member) => member.user_id === authUser?.id
-  )?.role
+  const selectedRole = activeProjectRole(membersQuery.data?.items, authUser?.id)
   const canManageSelectedProject = Boolean(
     selectedProject?.status === ACTIVE_STATUS &&
     (isSuperAdmin || selectedRole === ROLE_ADMIN)
@@ -1844,7 +2278,8 @@ export function ProjectsPage() {
               user.status === ACTIVE_STATUS &&
               !user.is_super_admin &&
               !membersQuery.data?.items.some(
-                (member) => member.user_id === user.id
+                (member) =>
+                  member.user_id === user.id && member.status === ACTIVE_STATUS
               )
           )
         : memberCandidatesQuery.data?.items
@@ -1879,14 +2314,16 @@ export function ProjectsPage() {
             <NativeSelect
               name='team_id'
               label={t('admin.fields.team')}
-              placeholder={t('admin.placeholders.selectProject')}
+              placeholder={t('admin.placeholders.selectTeam')}
               options={teamOptions}
+              required
             />
             <NativeSelect
               name='admin_user_id'
-              label={t('admin.fields.user')}
-              placeholder={t('admin.placeholders.selectUser')}
+              label={t('admin.fields.initialAdmin')}
+              placeholder={t('admin.placeholders.useCurrentUser')}
               options={projectAdminOptions}
+              hint={t('admin.projects.initialAdminHint')}
             />
             <TextField label={t('admin.fields.name')} name='name' required />
             <TextField
@@ -1905,7 +2342,7 @@ export function ProjectsPage() {
           (isSuperAdmin || (id === projectId && canManageSelectedProject))
         }
         onUpdate={(id, name, description) =>
-          updateMutation.mutate({ id, name, description })
+          updateMutation.mutateAsync({ id, name, description })
         }
         onArchive={(id) => archiveMutation.mutateAsync(id)}
         pending={updateMutation.isPending || archiveMutation.isPending}
@@ -1952,12 +2389,14 @@ export function ProjectsPage() {
                   label={t('admin.fields.user')}
                   placeholder={t('admin.placeholders.selectUser')}
                   options={memberCandidateOptions}
+                  required
                 />
                 <NativeSelect
                   name='role'
                   label={t('admin.fields.role')}
                   placeholder={t('admin.roles.reader')}
                   options={roleOptions(t)}
+                  defaultValue={String(ROLE_READER)}
                 />
                 <Button
                   type='submit'
@@ -1970,6 +2409,19 @@ export function ProjectsPage() {
                 >
                   {t('admin.common.add')}
                 </Button>
+                {addMemberMutation.isError && (
+                  <Alert
+                    className='md:col-span-3'
+                    variant='destructive'
+                    aria-live='polite'
+                  >
+                    <AlertCircle />
+                    <AlertTitle>{t('admin.common.error')}</AlertTitle>
+                    <AlertDescription>
+                      {addMemberMutation.error.message}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </form>
             ) : (
               !memberCandidatesLoading && (
@@ -1986,7 +2438,7 @@ export function ProjectsPage() {
             ...(usersQuery.data?.items ?? []),
             ...(memberCandidatesQuery.data?.items ?? []),
           ]}
-          onRole={(userId, role) => roleMutation.mutate({ userId, role })}
+          onRole={(userId, role) => roleMutation.mutateAsync({ userId, role })}
           onRemove={(userId) => removeMutation.mutateAsync(userId)}
           pending={roleMutation.isPending || removeMutation.isPending}
           readOnly={!canManageSelectedProject}
@@ -2004,6 +2456,60 @@ function roleOptions(t: ReturnType<typeof useLanguage>['t']) {
   ]
 }
 
+function MemberRoleControl({
+  userLabel,
+  role,
+  pending,
+  onRole,
+}: {
+  userLabel: string
+  role: number
+  pending: boolean
+  onRole: (role: number) => Promise<unknown>
+}) {
+  const { t } = useLanguage()
+  const [nextRole, setNextRole] = useState(role)
+  const currentRoleLabel =
+    roleOptions(t).find((option) => option.value === String(role))?.label ??
+    `${t('admin.common.unknown')} ${role}`
+  const nextRoleLabel =
+    roleOptions(t).find((option) => option.value === String(nextRole))?.label ??
+    `${t('admin.common.unknown')} ${nextRole}`
+  const changed = nextRole !== role
+
+  return (
+    <div className='flex min-w-56 flex-wrap items-center gap-2'>
+      <select
+        className='h-9 rounded-md border border-input bg-background px-3 text-sm'
+        value={String(nextRole)}
+        aria-label={`${t('admin.fields.role')}: ${userLabel}`}
+        disabled={pending}
+        onChange={(event) => setNextRole(Number(event.currentTarget.value))}
+      >
+        {roleOptions(t).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {changed && (
+        <ConfirmActionButton
+          label={t('admin.common.save')}
+          title={t('admin.confirm.changeMemberRoleTitle', {
+            user: userLabel,
+            from: currentRoleLabel,
+            to: nextRoleLabel,
+          })}
+          description={t('admin.confirm.changeMemberRoleDescription')}
+          destructive={role === ROLE_ADMIN && nextRole !== ROLE_ADMIN}
+          pending={pending}
+          onConfirm={() => onRole(nextRole)}
+        />
+      )}
+    </div>
+  )
+}
+
 function MembersTable({
   members,
   users,
@@ -2014,7 +2520,7 @@ function MembersTable({
 }: {
   members: Awaited<ReturnType<typeof listProjectMembers>>['items']
   users: UserDTO[]
-  onRole: (userId: string, role: number) => void
+  onRole: (userId: string, role: number) => Promise<unknown>
   onRemove: (userId: string) => Promise<unknown>
   pending?: boolean
   readOnly?: boolean
@@ -2033,65 +2539,58 @@ function MembersTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {members.map((member) => (
-          <TableRow key={member.user_id}>
-            <TableCell>
-              <div className='grid gap-1'>
-                <span className='font-medium'>
-                  {member.user_email ??
-                    userEmail(member.user_id) ??
-                    member.user_id}
-                </span>
-                {member.user_name && (
-                  <span className='text-xs text-muted-foreground'>
-                    {member.user_name}
-                  </span>
-                )}
-              </div>
-            </TableCell>
-            <TableCell>
-              {readOnly ? (
-                roleOptions(t).find(
-                  (option) => option.value === String(member.role)
-                )?.label
-              ) : (
-                <select
-                  className='h-9 rounded-md border border-input bg-background px-3 text-sm'
-                  value={String(member.role)}
-                  disabled={pending}
-                  onChange={(event) =>
-                    onRole(member.user_id, Number(event.currentTarget.value))
-                  }
-                >
-                  {roleOptions(t).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </TableCell>
-            <TableCell>
-              <StatusBadge>{statusLabel(member.status, t)}</StatusBadge>
-            </TableCell>
-            {!readOnly && (
+        {members.map((member) => {
+          const memberUserLabel =
+            member.user_email ?? userEmail(member.user_id) ?? member.user_id
+          const memberReadOnly = readOnly || member.status !== ACTIVE_STATUS
+          return (
+            <TableRow key={member.user_id}>
               <TableCell>
-                <ConfirmActionButton
-                  label={t('admin.actions.removeMember')}
-                  title={t('admin.confirm.removeMemberTitle', {
-                    user:
-                      member.user_email ??
-                      userEmail(member.user_id) ??
-                      member.user_id,
-                  })}
-                  description={t('admin.confirm.removeMemberDescription')}
-                  pending={pending}
-                  onConfirm={() => onRemove(member.user_id)}
-                />
+                <div className='grid gap-1'>
+                  <span className='font-medium'>{memberUserLabel}</span>
+                  {member.user_name && (
+                    <span className='text-xs text-muted-foreground'>
+                      {member.user_name}
+                    </span>
+                  )}
+                </div>
               </TableCell>
-            )}
-          </TableRow>
-        ))}
+              <TableCell>
+                {memberReadOnly ? (
+                  roleOptions(t).find(
+                    (option) => option.value === String(member.role)
+                  )?.label
+                ) : (
+                  <MemberRoleControl
+                    key={`${member.user_id}:${member.role}`}
+                    userLabel={memberUserLabel}
+                    role={member.role}
+                    pending={pending}
+                    onRole={(role) => onRole(member.user_id, role)}
+                  />
+                )}
+              </TableCell>
+              <TableCell>
+                <StatusBadge>{statusLabel(member.status, t)}</StatusBadge>
+              </TableCell>
+              {!readOnly && (
+                <TableCell>
+                  {!memberReadOnly && (
+                    <ConfirmActionButton
+                      label={t('admin.actions.removeMember')}
+                      title={t('admin.confirm.removeMemberTitle', {
+                        user: memberUserLabel,
+                      })}
+                      description={t('admin.confirm.removeMemberDescription')}
+                      pending={pending}
+                      onConfirm={() => onRemove(member.user_id)}
+                    />
+                  )}
+                </TableCell>
+              )}
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   ) : (
@@ -2099,18 +2598,55 @@ function MembersTable({
   )
 }
 
-export function DocumentsPage() {
+export function DocumentsPage({
+  search,
+  onSearchChange,
+}: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
   const invalidate = useInvalidateAll()
   const authUser = useAuthStore((state) => state.auth.user)
   const [documentTypeFilter, setDocumentTypeFilter] = useState(0)
-  const { projectsQuery, projectId, setProjectId, projectOptions } =
-    useProjectsAndSelection()
-  const { documentsQuery, documentId, setDocumentId, documentOptions } =
-    useDocumentsAndSelection(
-      projectId,
-      documentTypeFilter > 0 ? documentTypeFilter : undefined
-    )
+  const {
+    projectsQuery,
+    projectId,
+    setProjectId,
+    projectOptions,
+    invalidProjectDeepLink,
+  } = useProjectsAndSelection(search?.project_id, (value) =>
+    onSearchChange?.({
+      project_id: value || undefined,
+      document_id: undefined,
+      branch_id: undefined,
+      draft_id: undefined,
+      version_id: undefined,
+      endpoint_id: undefined,
+      from_version_id: undefined,
+      to_version_id: undefined,
+      diff_id: undefined,
+    })
+  )
+  const {
+    documentsQuery,
+    documentId,
+    setDocumentId,
+    documentOptions,
+    invalidDocumentDeepLink,
+  } = useDocumentsAndSelection(
+    projectId,
+    documentTypeFilter > 0 ? documentTypeFilter : undefined,
+    search?.document_id,
+    (value) =>
+      onSearchChange?.({
+        document_id: value || undefined,
+        branch_id: undefined,
+        draft_id: undefined,
+        version_id: undefined,
+        endpoint_id: undefined,
+        from_version_id: undefined,
+        to_version_id: undefined,
+        diff_id: undefined,
+      })
+  )
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId, documentId],
     queryFn: () => listBranches(projectId, documentId),
@@ -2123,9 +2659,7 @@ export function DocumentsPage() {
   })
   const canManageShares = Boolean(
     authUser?.is_super_admin ||
-    membersQuery.data?.items.some(
-      (member) => member.user_id === authUser?.id && member.role === 3
-    )
+    activeProjectRole(membersQuery.data?.items, authUser?.id) === ROLE_ADMIN
   )
   const canManageDocuments = canManageShares
   const selectedProject = projectsQuery.data?.items.find(
@@ -2229,6 +2763,16 @@ export function DocumentsPage() {
           error: projectsQuery.error ?? documentsQuery.error,
         }}
       />
+      <DeepLinkAlert
+        targets={[
+          ...(invalidProjectDeepLink
+            ? [`${t('admin.fields.project')}: ${search?.project_id}`]
+            : []),
+          ...(!invalidProjectDeepLink && invalidDocumentDeepLink
+            ? [`${t('admin.fields.document')}: ${search?.document_id}`]
+            : []),
+        ]}
+      />
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
@@ -2247,7 +2791,10 @@ export function DocumentsPage() {
         <NativeSelect
           label={t('admin.fields.type')}
           value={String(documentTypeFilter)}
-          onChange={(value) => setDocumentTypeFilter(Number(value))}
+          onChange={(value) => {
+            setDocumentTypeFilter(Number(value))
+            setDocumentId('')
+          }}
           placeholder={t('admin.common.all')}
           options={[
             { value: '0', label: t('admin.common.all') },
@@ -2299,7 +2846,7 @@ export function DocumentsPage() {
           updateDocumentMutation.isPending || archiveDocumentMutation.isPending
         }
         onUpdate={(document) =>
-          updateDocumentMutation.mutate({
+          updateDocumentMutation.mutateAsync({
             id: document.id,
             payload: {
               name: document.name,
@@ -2377,7 +2924,7 @@ export function DocumentsPage() {
           updateBranchMutation.isPending || archiveBranchMutation.isPending
         }
         onUpdate={(branch) =>
-          updateBranchMutation.mutate({
+          updateBranchMutation.mutateAsync({
             id: branch.id,
             payload: {
               name: branch.name,
@@ -2394,6 +2941,7 @@ export function DocumentsPage() {
         key={`${projectId}:${documentId}`}
         projectId={projectId}
         documentId={documentId}
+        documentName={selectedDocument?.name ?? ''}
         branches={branchesQuery.data?.items ?? []}
         versions={documentVersionsQuery.data?.items ?? []}
         canManage={canManageShares}
@@ -2418,7 +2966,7 @@ function DocumentsTable({
   readOnly = false,
 }: {
   documents: DocumentDTO[]
-  onUpdate: (document: DocumentDTO) => void
+  onUpdate: (document: DocumentDTO) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
@@ -2496,21 +3044,36 @@ function DocumentEditForm({
 }: {
   document: DocumentDTO
   pending: boolean
-  onUpdate: (document: DocumentDTO) => void
+  onUpdate: (document: DocumentDTO) => Promise<unknown>
 }) {
   const { t } = useLanguage()
+  const [error, setError] = useState<Error>()
+  const submitLockedRef = useRef(false)
   return (
     <form
       className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.2fr_auto]'
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault()
+        if (submitLockedRef.current) return
+        submitLockedRef.current = true
         const formData = new FormData(event.currentTarget)
-        onUpdate({
-          ...document,
-          name: fieldValue(formData, 'name'),
-          description: fieldValue(formData, 'description'),
-          relative_path: fieldValue(formData, 'relative_path'),
-        })
+        setError(undefined)
+        try {
+          await onUpdate({
+            ...document,
+            name: fieldValue(formData, 'name'),
+            description: fieldValue(formData, 'description'),
+            relative_path: fieldValue(formData, 'relative_path'),
+          })
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause
+              : new Error(t('toasts.somethingWrong'))
+          )
+        } finally {
+          submitLockedRef.current = false
+        }
       }}
     >
       <Input
@@ -2533,6 +3096,17 @@ function DocumentEditForm({
       <Button type='submit' variant='outline' size='sm' disabled={pending}>
         {t('admin.common.save')}
       </Button>
+      {error && (
+        <Alert
+          className='md:col-span-2 xl:col-span-4'
+          variant='destructive'
+          aria-live='polite'
+        >
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
     </form>
   )
 }
@@ -2545,7 +3119,7 @@ function BranchesTable({
   readOnly = false,
 }: {
   branches: BranchDTO[]
-  onUpdate: (branch: BranchDTO) => void
+  onUpdate: (branch: BranchDTO) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
@@ -2623,22 +3197,38 @@ function BranchEditForm({
 }: {
   branch: BranchDTO
   pending: boolean
-  onUpdate: (branch: BranchDTO) => void
+  onUpdate: (branch: BranchDTO) => Promise<unknown>
 }) {
   const { t } = useLanguage()
+  const [error, setError] = useState<Error>()
+  const submitLockedRef = useRef(false)
   return (
     <form
       className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.2fr_auto]'
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault()
+        if (submitLockedRef.current) return
+        submitLockedRef.current = true
         const formData = new FormData(event.currentTarget)
-        onUpdate({
-          ...branch,
-          name: fieldValue(formData, 'name'),
-          description: fieldValue(formData, 'description'),
-          is_default: branch.is_default || formData.get('is_default') === 'on',
-          is_protected: formData.get('is_protected') === 'on',
-        })
+        setError(undefined)
+        try {
+          await onUpdate({
+            ...branch,
+            name: fieldValue(formData, 'name'),
+            description: fieldValue(formData, 'description'),
+            is_default:
+              branch.is_default || formData.get('is_default') === 'on',
+            is_protected: formData.get('is_protected') === 'on',
+          })
+        } catch (cause) {
+          setError(
+            cause instanceof Error
+              ? cause
+              : new Error(t('toasts.somethingWrong'))
+          )
+        } finally {
+          submitLockedRef.current = false
+        }
       }}
     >
       <Input
@@ -2674,24 +3264,78 @@ function BranchEditForm({
           {t('admin.common.save')}
         </Button>
       </div>
+      {error && (
+        <Alert
+          className='md:col-span-2 xl:col-span-3'
+          variant='destructive'
+          aria-live='polite'
+        >
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
     </form>
   )
 }
 
-export function DraftsPage() {
+export function DraftsPage({
+  search,
+  onSearchChange,
+}: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
   const invalidate = useInvalidateAll()
   const authUser = useAuthStore((state) => state.auth.user)
-  const { projectsQuery, projectId, setProjectId, projectOptions } =
-    useProjectsAndSelection()
-  const { documentId, selectedDocument, setDocumentId, documentOptions } =
-    useDocumentsAndSelection(projectId)
+  const {
+    projectsQuery,
+    projectId,
+    setProjectId,
+    projectOptions,
+    invalidProjectDeepLink,
+  } = useProjectsAndSelection(search?.project_id, (value) =>
+    onSearchChange?.({
+      project_id: value || undefined,
+      document_id: undefined,
+      branch_id: undefined,
+      draft_id: undefined,
+      version_id: undefined,
+      endpoint_id: undefined,
+      from_version_id: undefined,
+      to_version_id: undefined,
+      diff_id: undefined,
+    })
+  )
+  const {
+    documentId,
+    selectedDocument,
+    setDocumentId,
+    documentOptions,
+    invalidDocumentDeepLink,
+  } = useDocumentsAndSelection(
+    projectId,
+    undefined,
+    search?.document_id,
+    (value) =>
+      onSearchChange?.({
+        document_id: value || undefined,
+        branch_id: undefined,
+        draft_id: undefined,
+        version_id: undefined,
+        endpoint_id: undefined,
+        from_version_id: undefined,
+        to_version_id: undefined,
+        diff_id: undefined,
+      })
+  )
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId, documentId],
     queryFn: () => listBranches(projectId, documentId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
-  const [branchFilter, setBranchFilter] = useState('')
+  const [branchFilter, setBranchFilter] = useRouteControlledString(
+    search?.branch_id,
+    onSearchChange !== undefined
+  )
   const membersQuery = useQuery({
     queryKey: ['project-members', projectId],
     queryFn: () => listProjectMembers(projectId),
@@ -2699,15 +3343,12 @@ export function DraftsPage() {
   })
   const canPublishForRole = Boolean(
     authUser?.is_super_admin ||
-    membersQuery.data?.items.some(
-      (member) => member.user_id === authUser?.id && member.role === 3
-    )
+    activeProjectRole(membersQuery.data?.items, authUser?.id) === ROLE_ADMIN
   )
   const canDraftForRole = Boolean(
     authUser?.is_super_admin ||
-    membersQuery.data?.items.some(
-      (member) => member.user_id === authUser?.id && member.role >= ROLE_WRITER
-    )
+    (activeProjectRole(membersQuery.data?.items, authUser?.id) ?? 0) >=
+      ROLE_WRITER
   )
   const draftsQuery = useQuery({
     queryKey: ['drafts', projectId, documentId, branchFilter || 'all'],
@@ -2717,7 +3358,10 @@ export function DraftsPage() {
         : listDrafts(projectId, documentId),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
-  const [draftId, setDraftId] = useState('')
+  const [draftId, setDraftId] = useRouteControlledString(
+    search?.draft_id,
+    onSearchChange !== undefined
+  )
   const [contentKind, setContentKind] = useState('raw')
   const [reviewNote, setReviewNote] = useState('')
   const [pendingReviewAction, setPendingReviewAction] = useState<{
@@ -2744,6 +3388,17 @@ export function DraftsPage() {
     (branch) => branch.status === ACTIVE_STATUS
   )
   const activeBranchIds = new Set(activeBranches.map((branch) => branch.id))
+  const invalidBranchDeepLink = Boolean(
+    branchesQuery.data &&
+    search?.branch_id &&
+    !branchesQuery.data.items.some((branch) => branch.id === search.branch_id)
+  )
+  const invalidDraftDeepLink = Boolean(
+    !invalidBranchDeepLink &&
+    draftsQuery.data &&
+    search?.draft_id &&
+    !draftsQuery.data.items.some((draft) => draft.id === search.draft_id)
+  )
   const activeDocumentContext = Boolean(
     selectedProject?.status === ACTIVE_STATUS &&
     selectedDocument?.status === ACTIVE_STATUS
@@ -2876,6 +3531,14 @@ export function DraftsPage() {
     setDraftId(value)
     setReviewNote('')
     setPendingReviewAction(undefined)
+    const draft = draftsQuery.data?.items.find((item) => item.id === value)
+    if (draft && branchFilter !== draft.branch_id) {
+      setBranchFilter(draft.branch_id)
+    }
+    onSearchChange?.({
+      branch_id: draft?.branch_id || branchFilter || undefined,
+      draft_id: value || undefined,
+    })
   }
   const reviewConfirmation = pendingReviewAction
     ? draftReviewConfirmation(pendingReviewAction, t)
@@ -2883,6 +3546,26 @@ export function DraftsPage() {
   const selectedDraftContent = contentQuery.data?.content
   return (
     <PageChrome page='drafts'>
+      <DeepLinkAlert
+        targets={[
+          ...(invalidProjectDeepLink
+            ? [`${t('admin.fields.project')}: ${search?.project_id}`]
+            : []),
+          ...(!invalidProjectDeepLink && invalidDocumentDeepLink
+            ? [`${t('admin.fields.document')}: ${search?.document_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidBranchDeepLink
+            ? [`${t('admin.fields.branch')}: ${search?.branch_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidDraftDeepLink
+            ? [`${t('admin.fields.draft')}: ${search?.draft_id}`]
+            : []),
+        ]}
+      />
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
@@ -2906,13 +3589,17 @@ export function DraftsPage() {
             setReviewNote('')
             setPendingReviewAction(undefined)
             setBranchFilter(value)
+            onSearchChange?.({
+              branch_id: value || undefined,
+              draft_id: undefined,
+            })
           }}
           placeholder={t('admin.common.all')}
           options={[
             { value: '', label: t('admin.common.all') },
             ...(branchesQuery.data?.items.map((branch) => ({
               value: branch.id,
-              label: branch.name,
+              label: entityOptionLabel(branch.name, branch.status, t),
             })) ?? []),
           ]}
         />
@@ -2953,7 +3640,7 @@ export function DraftsPage() {
           {promotionAvailable ? (
             <FormCard
               title={t('admin.sections.promoteDraft')}
-              submitLabel={t('admin.common.promote')}
+              submitLabel={t('admin.common.createPromotionDraft')}
               pending={promoteMutation.isPending}
               onSubmit={async (formData) => {
                 await promoteMutation.mutateAsync({
@@ -3029,6 +3716,62 @@ export function DraftsPage() {
         pending={actionMutation.isPending}
         activeBranchIds={activeBranchIds}
       />
+      {actionMutation.isError &&
+        actionMutation.variables?.action === 'submit' && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertDescription>{actionMutation.error.message}</AlertDescription>
+          </Alert>
+        )}
+      {selectedDraft?.review_comment && (
+        <Alert>
+          <BookOpenText />
+          <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
+          <AlertDescription>{selectedDraft.review_comment}</AlertDescription>
+        </Alert>
+      )}
+      {selectedDraft?.diff_preview && (
+        <CollectionCard
+          title={t('admin.sections.diffPreview')}
+          count={selectedDraft.diff_preview.items.length}
+        >
+          <DiffSummaryCards
+            summary={selectedDraft.diff_preview.summary}
+            isMarkdown={
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
+          <DiffReviewList
+            items={selectedDraft.diff_preview.items}
+            isMarkdown={
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+            }
+          />
+        </CollectionCard>
+      )}
+      <SelectorGrid>
+        <NativeSelect
+          label={t('admin.fields.contentKind')}
+          value={activeDraftContentKind}
+          onChange={setContentKind}
+          placeholder={t('admin.types.raw')}
+          options={draftContentKindOptions}
+        />
+      </SelectorGrid>
+      <ContentViewer
+        title={t('admin.sections.contentViewer')}
+        content={selectedDraftContent}
+      />
+      {selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN &&
+        selectedDraftContent && (
+          <MarkdownDocumentViewer content={selectedDraftContent} />
+        )}
+      <AIContextPanel
+        target={selectedDraftAITarget}
+        interactive={selectedDraftAIInteractive}
+        canRegenerate={canPublishForRole && selectedDraftAIInteractive}
+      />
       {canPublish && (
         <ReviewNotePanel
           selectedDraftName={selectedDraft?.version_name}
@@ -3087,54 +3830,6 @@ export function DraftsPage() {
           </Alert>
         )}
       </ConfirmDialog>
-      {selectedDraft?.review_comment && (
-        <Alert>
-          <BookOpenText />
-          <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
-          <AlertDescription>{selectedDraft.review_comment}</AlertDescription>
-        </Alert>
-      )}
-      {selectedDraft?.diff_preview && (
-        <CollectionCard
-          title={t('admin.sections.diffPreview')}
-          count={selectedDraft.diff_preview.items.length}
-        >
-          <DiffSummaryCards
-            summary={selectedDraft.diff_preview.summary}
-            isMarkdown={
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-            }
-          />
-          <DiffReviewList
-            items={selectedDraft.diff_preview.items}
-            isMarkdown={
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-            }
-          />
-        </CollectionCard>
-      )}
-      <SelectorGrid>
-        <NativeSelect
-          label={t('admin.fields.contentKind')}
-          value={activeDraftContentKind}
-          onChange={setContentKind}
-          placeholder={t('admin.types.raw')}
-          options={draftContentKindOptions}
-        />
-      </SelectorGrid>
-      <ContentViewer
-        title={t('admin.sections.contentViewer')}
-        content={selectedDraftContent}
-      />
-      {selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN &&
-        selectedDraftContent && (
-          <MarkdownDocumentViewer content={selectedDraftContent} />
-        )}
-      <AIContextPanel
-        target={selectedDraftAITarget}
-        interactive={selectedDraftAIInteractive}
-        canRegenerate={canPublishForRole && selectedDraftAIInteractive}
-      />
     </PageChrome>
   )
 }
@@ -3574,13 +4269,53 @@ function DraftsTable({
   )
 }
 
-export function VersionsPage() {
+export function VersionsPage({
+  search,
+  onSearchChange,
+}: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
-  const { projectsQuery, projectId, setProjectId, projectOptions } =
-    useProjectsAndSelection()
-  const { documentId, selectedDocument, setDocumentId, documentOptions } =
-    useDocumentsAndSelection(projectId)
+  const {
+    projectsQuery,
+    projectId,
+    setProjectId,
+    projectOptions,
+    invalidProjectDeepLink,
+  } = useProjectsAndSelection(search?.project_id, (value) =>
+    onSearchChange?.({
+      project_id: value || undefined,
+      document_id: undefined,
+      branch_id: undefined,
+      draft_id: undefined,
+      version_id: undefined,
+      endpoint_id: undefined,
+      from_version_id: undefined,
+      to_version_id: undefined,
+      diff_id: undefined,
+    })
+  )
+  const {
+    documentId,
+    selectedDocument,
+    setDocumentId,
+    documentOptions,
+    invalidDocumentDeepLink,
+  } = useDocumentsAndSelection(
+    projectId,
+    undefined,
+    search?.document_id,
+    (value) =>
+      onSearchChange?.({
+        document_id: value || undefined,
+        branch_id: undefined,
+        draft_id: undefined,
+        version_id: undefined,
+        endpoint_id: undefined,
+        from_version_id: undefined,
+        to_version_id: undefined,
+        diff_id: undefined,
+      })
+  )
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId, documentId],
     queryFn: () => listBranches(projectId, documentId),
@@ -3591,9 +4326,27 @@ export function VersionsPage() {
     queryFn: () => listProjectMembers(projectId),
     enabled: projectId.length > 0 && !authUser?.is_super_admin,
   })
-  const [branchFilter, setBranchFilter] = useState('')
-  const { versionsQuery, versionId, setVersionId, versionOptions } =
-    useVersionsAndSelection(projectId, documentId, branchFilter || undefined)
+  const [branchFilter, setBranchFilter] = useRouteControlledString(
+    search?.branch_id,
+    onSearchChange !== undefined
+  )
+  const {
+    versionsQuery,
+    versionId,
+    setVersionId,
+    versionOptions,
+    invalidVersionDeepLink,
+  } = useVersionsAndSelection(
+    projectId,
+    documentId,
+    branchFilter || undefined,
+    search?.version_id,
+    (value) =>
+      onSearchChange?.({
+        version_id: value || undefined,
+        endpoint_id: undefined,
+      })
+  )
   const [contentKind, setContentKind] = useState('raw')
   const isMarkdownDocument =
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
@@ -3603,7 +4356,10 @@ export function VersionsPage() {
     versionContentKindOptions
   )
   const [endpointSearchQuery, setEndpointSearchQuery] = useState('')
-  const [endpointId, setEndpointId] = useState('')
+  const [endpointId, setEndpointId] = useRouteControlledString(
+    search?.endpoint_id,
+    onSearchChange !== undefined
+  )
   const [endpointGroupMode, setEndpointGroupMode] =
     useState<EndpointGroupMode>('tag')
   const contentQuery = useQuery({
@@ -3653,6 +4409,19 @@ export function VersionsPage() {
       endpointExistsInVersion &&
       !isMarkdownDocument,
   })
+  const invalidBranchDeepLink = Boolean(
+    branchesQuery.data &&
+    search?.branch_id &&
+    !branchesQuery.data.items.some((branch) => branch.id === search.branch_id)
+  )
+  const invalidEndpointDeepLink = Boolean(
+    !invalidVersionDeepLink &&
+    endpointsQuery.data &&
+    search?.endpoint_id &&
+    !endpointsQuery.data.items.some(
+      (endpoint) => endpoint.id === search.endpoint_id
+    )
+  )
   const methodCount = new Set(
     visibleEndpoints.map((endpoint) => endpoint.method)
   ).size
@@ -3669,10 +4438,12 @@ export function VersionsPage() {
   }
   const handleProjectChange = (value: string) => {
     clearEndpointSelection()
+    setBranchFilter('')
     setProjectId(value)
   }
   const handleDocumentChange = (value: string) => {
     clearEndpointSelection()
+    setBranchFilter('')
     setContentKind('raw')
     setDocumentId(value)
   }
@@ -3704,10 +4475,7 @@ export function VersionsPage() {
   const canRegenerateVersionSummary = Boolean(
     selectedVersionAIInteractive &&
     (authUser?.is_super_admin ||
-      membersQuery.data?.items.some(
-        (member) =>
-          member.user_id === authUser?.id && member.role === ROLE_ADMIN
-      ))
+      activeProjectRole(membersQuery.data?.items, authUser?.id) === ROLE_ADMIN)
   )
   const selectedVersionAITarget: AISummaryTarget | undefined = versionId
     ? {
@@ -3719,6 +4487,34 @@ export function VersionsPage() {
     : undefined
   return (
     <PageChrome page='versions'>
+      <DeepLinkAlert
+        targets={[
+          ...(invalidProjectDeepLink
+            ? [`${t('admin.fields.project')}: ${search?.project_id}`]
+            : []),
+          ...(!invalidProjectDeepLink && invalidDocumentDeepLink
+            ? [`${t('admin.fields.document')}: ${search?.document_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidBranchDeepLink
+            ? [`${t('admin.fields.branch')}: ${search?.branch_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          !invalidBranchDeepLink &&
+          invalidVersionDeepLink
+            ? [`${t('admin.fields.version')}: ${search?.version_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          !invalidBranchDeepLink &&
+          !invalidVersionDeepLink &&
+          invalidEndpointDeepLink
+            ? [`${t('admin.common.endpoint')}: ${search?.endpoint_id}`]
+            : []),
+        ]}
+      />
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
@@ -3739,14 +4535,20 @@ export function VersionsPage() {
           value={branchFilter}
           onChange={(value) => {
             setVersionId('')
+            clearEndpointSelection()
             setBranchFilter(value)
+            onSearchChange?.({
+              branch_id: value || undefined,
+              version_id: undefined,
+              endpoint_id: undefined,
+            })
           }}
           placeholder={t('admin.common.all')}
           options={[
             { value: '', label: t('admin.common.all') },
             ...(branchesQuery.data?.items.map((branch) => ({
               value: branch.id,
-              label: branch.name,
+              label: entityOptionLabel(branch.name, branch.status, t),
             })) ?? []),
           ]}
         />
@@ -3844,7 +4646,10 @@ export function VersionsPage() {
         <EndpointsCard
           endpoints={visibleEndpoints}
           selected={endpointId}
-          onSelect={setEndpointId}
+          onSelect={(value) => {
+            setEndpointId(value)
+            onSearchChange?.({ endpoint_id: value || undefined })
+          }}
           detail={selectedEndpointVisible ? endpointQuery.data : undefined}
           groupMode={endpointGroupMode}
           untaggedLabel={untaggedLabel}
@@ -4115,13 +4920,53 @@ function EndpointJsonSection({
   )
 }
 
-export function DiffsPage() {
+export function DiffsPage({
+  search,
+  onSearchChange,
+}: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
-  const { projectsQuery, projectId, setProjectId, projectOptions } =
-    useProjectsAndSelection()
-  const { documentId, selectedDocument, setDocumentId, documentOptions } =
-    useDocumentsAndSelection(projectId)
+  const {
+    projectsQuery,
+    projectId,
+    setProjectId,
+    projectOptions,
+    invalidProjectDeepLink,
+  } = useProjectsAndSelection(search?.project_id, (value) =>
+    onSearchChange?.({
+      project_id: value || undefined,
+      document_id: undefined,
+      branch_id: undefined,
+      draft_id: undefined,
+      version_id: undefined,
+      endpoint_id: undefined,
+      from_version_id: undefined,
+      to_version_id: undefined,
+      diff_id: undefined,
+    })
+  )
+  const {
+    documentId,
+    selectedDocument,
+    setDocumentId,
+    documentOptions,
+    invalidDocumentDeepLink,
+  } = useDocumentsAndSelection(
+    projectId,
+    undefined,
+    search?.document_id,
+    (value) =>
+      onSearchChange?.({
+        document_id: value || undefined,
+        branch_id: undefined,
+        draft_id: undefined,
+        version_id: undefined,
+        endpoint_id: undefined,
+        from_version_id: undefined,
+        to_version_id: undefined,
+        diff_id: undefined,
+      })
+  )
   const branchesQuery = useQuery({
     queryKey: ['branches', projectId, documentId],
     queryFn: () => listBranches(projectId, documentId),
@@ -4137,37 +4982,57 @@ export function DiffsPage() {
     documentId
   )
   const [diff, setDiff] = useState<DiffDTO | null>(null)
-  const [fromVersionId, setFromVersionId] = useState('')
-  const [toVersionId, setToVersionId] = useState('')
+  const [fromVersionId, setFromVersionId] = useRouteControlledString(
+    search?.from_version_id,
+    onSearchChange !== undefined
+  )
+  const [toVersionId, setToVersionId] = useRouteControlledString(
+    search?.to_version_id,
+    onSearchChange !== undefined
+  )
   const [diffSearch, setDiffSearch] = useState('')
   const [diffFilterValue, setDiffFilterValue] = useState<DiffFilter>('all')
   const validVersionIds = useMemo(
     () => new Set(versionOptions.map((option) => option.value)),
     [versionOptions]
   )
-  const selectedFromVersionId = validVersionIds.has(fromVersionId)
+  const versionLabelById = useMemo(
+    () => new Map(versionOptions.map((option) => [option.value, option.label])),
+    [versionOptions]
+  )
+  const requestedFromVersionId = validVersionIds.has(fromVersionId)
     ? fromVersionId
     : ''
-  const selectedToVersionId = validVersionIds.has(toVersionId)
+  const requestedToVersionId = validVersionIds.has(toVersionId)
     ? toVersionId
     : ''
+  const resolveDiffById = Boolean(search?.diff_id)
   const diffHistoryQuery = useQuery({
     queryKey: [
       'diffs',
       projectId,
       documentId,
-      selectedFromVersionId,
-      selectedToVersionId,
+      resolveDiffById ? 'resolve-id' : requestedFromVersionId,
+      resolveDiffById ? search?.diff_id : requestedToVersionId,
     ],
     queryFn: () =>
       listDiffs(
         projectId,
         documentId,
-        selectedFromVersionId || undefined,
-        selectedToVersionId || undefined
+        resolveDiffById ? undefined : requestedFromVersionId || undefined,
+        resolveDiffById ? undefined : requestedToVersionId || undefined
       ),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
+  const requestedDiff = search?.diff_id
+    ? diffHistoryQuery.data?.items.find((item) => item.id === search.diff_id)
+    : undefined
+  const selectedFromVersionId = requestedDiff?.from_version_id
+    ? requestedDiff.from_version_id
+    : requestedFromVersionId
+  const selectedToVersionId = requestedDiff?.to_version_id
+    ? requestedDiff.to_version_id
+    : requestedToVersionId
   const persistedDiff =
     selectedFromVersionId && selectedToVersionId
       ? diffHistoryQuery.data?.items.find(
@@ -4176,12 +5041,51 @@ export function DiffsPage() {
             item.to_version_id === selectedToVersionId
         )
       : undefined
+  useEffect(() => {
+    if (!requestedDiff) return
+    const requestedFromVersionId = requestedDiff.from_version_id ?? ''
+    const requestedToVersionId = requestedDiff.to_version_id ?? ''
+    if (
+      search?.from_version_id !== requestedFromVersionId ||
+      search?.to_version_id !== requestedToVersionId
+    ) {
+      onSearchChange?.({
+        from_version_id: requestedFromVersionId || undefined,
+        to_version_id: requestedToVersionId || undefined,
+      })
+    }
+  }, [
+    onSearchChange,
+    requestedDiff,
+    search?.from_version_id,
+    search?.to_version_id,
+  ])
+  useEffect(() => {
+    if (!search?.diff_id && persistedDiff) {
+      onSearchChange?.({ diff_id: persistedDiff.id })
+    }
+  }, [onSearchChange, persistedDiff, search?.diff_id])
   const activeDiff =
-    diff?.document_id === documentId &&
-    diff.from_version_id === selectedFromVersionId &&
-    diff.to_version_id === selectedToVersionId
-      ? diff
-      : (persistedDiff ?? null)
+    search?.diff_id !== undefined
+      ? (requestedDiff ?? null)
+      : diff?.document_id === documentId &&
+          diff.from_version_id === selectedFromVersionId &&
+          diff.to_version_id === selectedToVersionId
+        ? diff
+        : (persistedDiff ?? null)
+  const invalidFromVersionDeepLink = Boolean(
+    versionsQuery.data &&
+    search?.from_version_id &&
+    !validVersionIds.has(search.from_version_id)
+  )
+  const invalidToVersionDeepLink = Boolean(
+    versionsQuery.data &&
+    search?.to_version_id &&
+    !validVersionIds.has(search.to_version_id)
+  )
+  const invalidDiffDeepLink = Boolean(
+    diffHistoryQuery.data && search?.diff_id && !requestedDiff
+  )
   const activeDiffAITarget: AISummaryTarget | undefined = activeDiff
     ? {
         projectId,
@@ -4214,10 +5118,7 @@ export function DiffsPage() {
   const canRegenerateDiffSummary = Boolean(
     activeDiffAIInteractive &&
     (authUser?.is_super_admin ||
-      membersQuery.data?.items.some(
-        (member) =>
-          member.user_id === authUser?.id && member.role === ROLE_ADMIN
-      ))
+      activeProjectRole(membersQuery.data?.items, authUser?.id) === ROLE_ADMIN)
   )
   const diffMutation = useMutation({
     mutationFn: () =>
@@ -4227,6 +5128,11 @@ export function DiffsPage() {
       }),
     onSuccess: (result) => {
       setDiff(result)
+      onSearchChange?.({
+        from_version_id: result.from_version_id || undefined,
+        to_version_id: result.to_version_id || undefined,
+        diff_id: result.id,
+      })
       void diffHistoryQuery.refetch()
     },
   })
@@ -4262,32 +5168,81 @@ export function DiffsPage() {
 
   return (
     <PageChrome page='diffs'>
+      <DeepLinkAlert
+        targets={[
+          ...(invalidProjectDeepLink
+            ? [`${t('admin.fields.project')}: ${search?.project_id}`]
+            : []),
+          ...(!invalidProjectDeepLink && invalidDocumentDeepLink
+            ? [`${t('admin.fields.document')}: ${search?.document_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidFromVersionDeepLink
+            ? [`${t('admin.fields.fromVersion')}: ${search?.from_version_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidToVersionDeepLink
+            ? [`${t('admin.fields.toVersion')}: ${search?.to_version_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidDiffDeepLink
+            ? [`${t('admin.sections.diffResult')}: ${search?.diff_id}`]
+            : []),
+        ]}
+      />
       <SelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
-          onChange={setProjectId}
+          onChange={(value) => {
+            setDiff(null)
+            setFromVersionId('')
+            setToVersionId('')
+            setProjectId(value)
+          }}
           placeholder={t('admin.placeholders.selectProject')}
           options={projectOptions}
         />
         <NativeSelect
           label={t('admin.fields.document')}
           value={documentId}
-          onChange={setDocumentId}
+          onChange={(value) => {
+            setDiff(null)
+            setFromVersionId('')
+            setToVersionId('')
+            setDocumentId(value)
+          }}
           placeholder={t('admin.placeholders.selectDocument')}
           options={documentOptions}
         />
         <NativeSelect
           label={t('admin.fields.fromVersion')}
           value={selectedFromVersionId}
-          onChange={setFromVersionId}
+          onChange={(value) => {
+            setDiff(null)
+            setFromVersionId(value)
+            onSearchChange?.({
+              from_version_id: value || undefined,
+              diff_id: undefined,
+            })
+          }}
           placeholder={t('admin.placeholders.selectVersion')}
           options={versionOptions}
         />
         <NativeSelect
           label={t('admin.fields.toVersion')}
           value={selectedToVersionId}
-          onChange={setToVersionId}
+          onChange={(value) => {
+            setDiff(null)
+            setToVersionId(value)
+            onSearchChange?.({
+              to_version_id: value || undefined,
+              diff_id: undefined,
+            })
+          }}
           placeholder={t('admin.placeholders.selectVersion')}
           options={versionOptions}
         />
@@ -4321,6 +5276,13 @@ export function DiffsPage() {
           error: diffHistoryQuery.error,
         }}
       />
+      {diffMutation.isError && (
+        <Alert variant='destructive' aria-live='polite'>
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{diffMutation.error.message}</AlertDescription>
+        </Alert>
+      )}
       <CollectionCard
         title={t('admin.diff.historyTitle')}
         description={t('admin.diff.historyDescription')}
@@ -4328,24 +5290,47 @@ export function DiffsPage() {
       >
         {diffHistoryQuery.data?.items.length ? (
           <div className='grid gap-2'>
-            {diffHistoryQuery.data.items.map((item) => (
-              <button
-                key={item.id}
-                type='button'
-                className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
-                onClick={() => {
-                  setFromVersionId(item.from_version_id ?? '')
-                  setToVersionId(item.to_version_id ?? '')
-                  setDiff(item)
-                }}
-              >
-                <span className='truncate font-mono text-xs'>{item.id}</span>
-                <span className='text-sm text-muted-foreground'>
-                  {item.from_version_id} → {item.to_version_id} ·{' '}
-                  {formatDate(item.created_at)}
-                </span>
-              </button>
-            ))}
+            {diffHistoryQuery.data.items.map((item) => {
+              const fromVersionLabel =
+                versionLabelById.get(item.from_version_id ?? '') ??
+                item.from_version_id ??
+                '-'
+              const toVersionLabel =
+                versionLabelById.get(item.to_version_id ?? '') ??
+                item.to_version_id ??
+                '-'
+              return (
+                <button
+                  key={item.id}
+                  type='button'
+                  className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
+                  onClick={() => {
+                    setFromVersionId(item.from_version_id ?? '')
+                    setToVersionId(item.to_version_id ?? '')
+                    setDiff(item)
+                    onSearchChange?.({
+                      from_version_id: item.from_version_id || undefined,
+                      to_version_id: item.to_version_id || undefined,
+                      diff_id: item.id,
+                    })
+                  }}
+                >
+                  <span className='text-sm font-medium'>
+                    {fromVersionLabel} → {toVersionLabel}
+                  </span>
+                  <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
+                    {t('admin.diff.historyIdentifiers', {
+                      from: item.from_version_id ?? '-',
+                      to: item.to_version_id ?? '-',
+                      diff: item.id,
+                    })}
+                  </span>
+                  <span className='text-xs text-muted-foreground'>
+                    {formatDate(item.created_at)}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         ) : (
           <EmptyState preset='diffs' />
@@ -4427,9 +5412,7 @@ export function AuditPage() {
     enabled: projectId.length > 0 && !isSuperAdmin,
   })
   const isProjectAdmin = Boolean(
-    membersQuery.data?.items.some(
-      (member) => member.user_id === authUser?.id && member.role === ROLE_ADMIN
-    )
+    activeProjectRole(membersQuery.data?.items, authUser?.id) === ROLE_ADMIN
   )
   const [action, setAction] = useState('')
   const [resourceType, setResourceType] = useState('')
@@ -4764,43 +5747,129 @@ function DiffReviewList({
   )
 }
 
-export function MCPTokensPage() {
+export function MCPTokensPage({
+  search,
+  onSearchChange,
+}: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
   const invalidate = useInvalidateAll()
   const tokensQuery = useQuery({
     queryKey: ['mcp-tokens'],
     queryFn: listMCPTokens,
   })
-  const [visibleToken, setVisibleToken] = useState('')
-  const [selectedToken, setSelectedToken] = useState<MCPTokenDTO | null>(null)
-  const [copyStatus, setCopyStatus] = useState<'success' | 'failure'>()
+  const selectedTokenId = search?.token_id ?? ''
+  const selectedTokenExists = Boolean(
+    selectedTokenId &&
+    tokensQuery.data?.items.some((token) => token.id === selectedTokenId)
+  )
+  const canLoadUsage = Boolean(
+    tokensQuery.data && (!selectedTokenId || selectedTokenExists)
+  )
+  const usageQuery = useQuery({
+    queryKey: ['mcp-usage', selectedTokenId || 'all-owned'],
+    queryFn: () =>
+      listMCPUsage({
+        token_id: selectedTokenId || undefined,
+        limit: 200,
+      }),
+    enabled: canLoadUsage,
+  })
+  const [tokenSelection, setTokenSelection] = useState<{
+    routeTokenId: string
+    token: MCPTokenDTO | null
+    copyStatus?: 'success' | 'failure'
+  }>(() => ({ routeTokenId: selectedTokenId, token: null }))
+  if (tokenSelection.routeTokenId !== selectedTokenId) {
+    setTokenSelection({
+      routeTokenId: selectedTokenId,
+      token:
+        tokenSelection.token?.id === selectedTokenId
+          ? tokenSelection.token
+          : null,
+      copyStatus: undefined,
+    })
+  }
+  const listedSelectedToken = tokensQuery.data?.items.find(
+    (item) => item.id === selectedTokenId
+  )
+  const interactionToken =
+    tokenSelection.token &&
+    (onSearchChange === undefined ||
+      tokenSelection.token.id === selectedTokenId)
+      ? tokenSelection.token
+      : null
+  const selectedToken = interactionToken ?? listedSelectedToken ?? null
+  const visibleToken = interactionToken?.token ?? ''
+  const copyStatus = tokenSelection.copyStatus
   const latestTokenOperationRequestId = useRef(0)
   const [activeTokenOperationRequestId, setActiveTokenOperationRequestId] =
     useState(0)
   const latestTokenCopyRequestId = useRef(0)
+  const activeTokenSelectionRef = useRef(selectedTokenId)
+  useEffect(() => {
+    activeTokenSelectionRef.current = selectedTokenId
+  }, [selectedTokenId])
+  const invalidTokenDeepLink = Boolean(
+    tokensQuery.data && selectedTokenId && !selectedTokenExists
+  )
+  const publishedReadEvidence = usageQuery.data?.items.find((usage) => {
+    const token = tokensQuery.data?.items.find(
+      (item) => item.id === usage.actor_token_id
+    )
+    return (
+      token !== undefined &&
+      tokenIsActive(token) &&
+      tokenHasAnyReadScope(token) &&
+      usage.metadata.evidence_kind === 'published_content_read' &&
+      usage.metadata.result === 'success'
+    )
+  })
+  const connectedToken = tokensQuery.data?.items.find(
+    (token) => token.id === publishedReadEvidence?.actor_token_id
+  )
   function beginTokenOperation() {
     const requestId = latestTokenOperationRequestId.current + 1
     latestTokenOperationRequestId.current = requestId
     setActiveTokenOperationRequestId(requestId)
     return requestId
   }
+  function clearTokenInteraction() {
+    setTokenSelection((current) => ({
+      ...current,
+      token: null,
+      copyStatus: undefined,
+    }))
+  }
   const getMutation = useMutation({
     mutationFn: ({ tokenId }: { tokenId: string; requestId: number }) =>
       getMCPToken(tokenId),
     onSuccess: (token, variables) => {
-      if (variables.requestId !== latestTokenOperationRequestId.current) return
-      setSelectedToken(token)
-      setVisibleToken(token.token ?? '')
+      if (
+        variables.requestId !== latestTokenOperationRequestId.current ||
+        activeTokenSelectionRef.current !== variables.tokenId
+      )
+        return
+      setTokenSelection((current) => ({
+        ...current,
+        token,
+        copyStatus: undefined,
+      }))
       latestTokenCopyRequestId.current += 1
-      setCopyStatus(undefined)
     },
   })
   const revokeMutation = useMutation({
     mutationFn: ({ tokenId }: { tokenId: string; requestId: number }) =>
       revokeMCPToken(tokenId),
     onSuccess: (token, variables) => {
-      if (variables.requestId === latestTokenOperationRequestId.current) {
-        setSelectedToken(token)
+      if (
+        variables.requestId === latestTokenOperationRequestId.current &&
+        activeTokenSelectionRef.current === variables.tokenId
+      ) {
+        setTokenSelection((current) => ({
+          ...current,
+          token,
+          copyStatus: undefined,
+        }))
       }
       invalidate()
     },
@@ -4814,16 +5883,19 @@ export function MCPTokensPage() {
     }) => createMCPToken(payload),
     onMutate: () => {
       latestTokenCopyRequestId.current += 1
-      setVisibleToken('')
-      setSelectedToken(null)
-      setCopyStatus(undefined)
+      clearTokenInteraction()
       getMutation.reset()
       revokeMutation.reset()
     },
     onSuccess: (token, variables) => {
       if (variables.requestId === latestTokenOperationRequestId.current) {
-        setVisibleToken(token.token ?? '')
-        setSelectedToken(token)
+        activeTokenSelectionRef.current = token.id
+        setTokenSelection((current) => ({
+          ...current,
+          token,
+          copyStatus: undefined,
+        }))
+        onSearchChange?.({ token_id: token.id })
       }
       invalidate()
     },
@@ -4832,15 +5904,31 @@ export function MCPTokensPage() {
     if (!visibleToken) return
     const requestId = latestTokenCopyRequestId.current + 1
     latestTokenCopyRequestId.current = requestId
-    setCopyStatus(undefined)
+    const tokenId = interactionToken?.id ?? ''
+    setTokenSelection((current) => ({
+      ...current,
+      copyStatus: undefined,
+    }))
     try {
       await navigator.clipboard.writeText(visibleToken)
-      if (requestId === latestTokenCopyRequestId.current) {
-        setCopyStatus('success')
+      if (
+        requestId === latestTokenCopyRequestId.current &&
+        activeTokenSelectionRef.current === tokenId
+      ) {
+        setTokenSelection((current) => ({
+          ...current,
+          copyStatus: 'success',
+        }))
       }
     } catch {
-      if (requestId === latestTokenCopyRequestId.current) {
-        setCopyStatus('failure')
+      if (
+        requestId === latestTokenCopyRequestId.current &&
+        activeTokenSelectionRef.current === tokenId
+      ) {
+        setTokenSelection((current) => ({
+          ...current,
+          copyStatus: 'failure',
+        }))
       }
     }
   }
@@ -4848,10 +5936,17 @@ export function MCPTokensPage() {
     <PageChrome page='mcpTokens'>
       <LoadingErrorState
         state={{
-          isLoading: tokensQuery.isLoading,
-          isError: tokensQuery.isError,
-          error: tokensQuery.error,
+          isLoading: tokensQuery.isLoading || usageQuery.isLoading,
+          isError: tokensQuery.isError || usageQuery.isError,
+          error: (tokensQuery.error ?? usageQuery.error) as Error | null,
         }}
+      />
+      <DeepLinkAlert
+        targets={
+          invalidTokenDeepLink
+            ? [`${t('admin.fields.token')}: ${selectedTokenId}`]
+            : []
+        }
       />
       <FormCard
         title={t('admin.sections.createToken')}
@@ -4941,7 +6036,9 @@ export function MCPTokensPage() {
         </Alert>
       )}
       {getMutation.isError &&
-        getMutation.variables.requestId === activeTokenOperationRequestId && (
+        getMutation.variables.requestId === activeTokenOperationRequestId &&
+        (onSearchChange === undefined ||
+          getMutation.variables.tokenId === selectedTokenId) && (
           <Alert variant='destructive' aria-live='polite'>
             <AlertCircle />
             <AlertTitle>{t('admin.token.revealErrorTitle')}</AlertTitle>
@@ -4949,8 +6046,9 @@ export function MCPTokensPage() {
           </Alert>
         )}
       {revokeMutation.isError &&
-        revokeMutation.variables.requestId ===
-          activeTokenOperationRequestId && (
+        revokeMutation.variables.requestId === activeTokenOperationRequestId &&
+        (onSearchChange === undefined ||
+          revokeMutation.variables.tokenId === selectedTokenId) && (
           <Alert variant='destructive' aria-live='polite'>
             <AlertCircle />
             <AlertTitle>{t('admin.token.revokeErrorTitle')}</AlertTitle>
@@ -4959,28 +6057,80 @@ export function MCPTokensPage() {
         )}
       <TokenTable
         tokens={tokensQuery.data?.items ?? []}
+        selected={selectedTokenId}
         pending={revokeMutation.isPending}
         onView={(tokenId) => {
+          activeTokenSelectionRef.current = tokenId
+          onSearchChange?.({ token_id: tokenId })
           latestTokenCopyRequestId.current += 1
-          setVisibleToken('')
-          setSelectedToken(null)
-          setCopyStatus(undefined)
+          clearTokenInteraction()
           revokeMutation.reset()
           getMutation.reset()
           const requestId = beginTokenOperation()
           getMutation.mutate({ tokenId, requestId })
         }}
         onRevoke={async (tokenId) => {
+          activeTokenSelectionRef.current = tokenId
+          onSearchChange?.({ token_id: tokenId })
           const requestId = beginTokenOperation()
           latestTokenCopyRequestId.current += 1
-          setVisibleToken('')
-          setSelectedToken(null)
-          setCopyStatus(undefined)
+          clearTokenInteraction()
           getMutation.reset()
           revokeMutation.reset()
           await revokeMutation.mutateAsync({ tokenId, requestId })
         }}
       />
+      <Alert>
+        <ShieldCheck />
+        <AlertTitle>
+          {t(
+            connectedToken
+              ? 'admin.token.connectionVerifiedTitle'
+              : 'admin.token.connectionPendingTitle'
+          )}
+        </AlertTitle>
+        <AlertDescription className='grid gap-3'>
+          <p>
+            {connectedToken
+              ? t('admin.token.connectionVerifiedDescription', {
+                  name: connectedToken.name,
+                  time: formatDate(publishedReadEvidence?.created_at),
+                  tool:
+                    publishedReadEvidence?.metadata.tool_name ??
+                    t('admin.common.unknown'),
+                  target: mcpUsageTarget(publishedReadEvidence),
+                })
+              : t('admin.token.connectionPendingDescription')}
+          </p>
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='w-fit'
+            disabled={
+              tokensQuery.isFetching || (canLoadUsage && usageQuery.isFetching)
+            }
+            onClick={() => {
+              void tokensQuery.refetch()
+              if (canLoadUsage) void usageQuery.refetch()
+            }}
+          >
+            <RefreshCw />
+            {t('admin.token.refreshConnectionEvidence')}
+          </Button>
+        </AlertDescription>
+      </Alert>
+      <CollectionCard
+        title={t('admin.token.activityTitle')}
+        description={t('admin.token.activityDescription')}
+        count={usageQuery.data?.total ?? 0}
+      >
+        {usageQuery.data?.items.length ? (
+          <MCPUsageTable logs={usageQuery.data.items} />
+        ) : (
+          <EmptyState />
+        )}
+      </CollectionCard>
       {selectedToken && (
         <ContentViewer
           title={t('admin.sections.tokenDetails')}
@@ -4996,7 +6146,7 @@ export function MCPTokensPage() {
             mcpServers: {
               vdoc: {
                 command: 'npx',
-                args: ['--yes', 'github:ChnMig/Vdoc-mcp'],
+                args: ['--yes', vdocMcpSource],
                 env: {
                   VDOC_BASE_URL: apiBaseUrl,
                   VDOC_MCP_TOKEN: visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>',
@@ -5036,7 +6186,7 @@ export function SkillPage() {
           ))}
         </ol>
         <pre className='overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
-          {`# Codex personal Skill (available to all workspaces)\ngit clone --depth 1 https://github.com/ChnMig/Vdoc-skill.git "$HOME/.agents/skills/vdoc"\n\n# Or install only for the current repository\ngit clone --depth 1 https://github.com/ChnMig/Vdoc-skill.git .agents/skills/vdoc\n\n# Verify\ntest -f "$HOME/.agents/skills/vdoc/SKILL.md"`}
+          {vdocSkillInstallSnippet}
         </pre>
       </CollectionCard>
       <Alert>
@@ -5055,7 +6205,7 @@ export function SkillPage() {
             mcpServers: {
               vdoc: {
                 command: 'npx',
-                args: ['--yes', 'github:ChnMig/Vdoc-mcp'],
+                args: ['--yes', vdocMcpSource],
                 env: {
                   VDOC_BASE_URL: apiBaseUrl,
                   VDOC_MCP_TOKEN: '<YOUR_ACTIVE_VDOC_TOKEN>',
@@ -5086,8 +6236,94 @@ function tokenDetails(token: MCPTokenDTO) {
   }
 }
 
+function mcpUsageTarget(log?: AuditLogDTO) {
+  if (!log) return '-'
+  const fields = [
+    'project_id',
+    'document_id',
+    'branch_id',
+    'draft_id',
+    'version_id',
+    'endpoint_id',
+    'from_version_id',
+    'to_version_id',
+    'diff_id',
+  ] as const
+  const values = fields.flatMap((key) => {
+    const value =
+      key === 'project_id'
+        ? (log.project_id ?? log.metadata[key])
+        : key === 'document_id'
+          ? (log.document_id ?? log.metadata[key])
+          : log.metadata[key]
+    return value ? [`${key}=${value}`] : []
+  })
+  return values.join(' · ') || log.resource_id || '-'
+}
+
+function MCPUsageTable({ logs }: { logs: AuditLogDTO[] }) {
+  const { t } = useLanguage()
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('admin.audit.time')}</TableHead>
+          <TableHead>{t('admin.fields.token')}</TableHead>
+          <TableHead>{t('admin.token.activityTool')}</TableHead>
+          <TableHead>{t('admin.token.activityTarget')}</TableHead>
+          <TableHead>{t('admin.token.activityAdapter')}</TableHead>
+          <TableHead>{t('admin.token.activityEvidence')}</TableHead>
+          <TableHead>{t('admin.audit.result')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {logs.map((log) => (
+          <TableRow key={log.id}>
+            <TableCell className='text-xs whitespace-nowrap'>
+              {formatDate(log.created_at)}
+            </TableCell>
+            <TableCell className='max-w-40 truncate font-mono text-xs'>
+              {log.actor_token_id ?? log.metadata.token_id ?? '-'}
+            </TableCell>
+            <TableCell className='font-mono text-xs'>
+              {log.metadata.tool_name ?? '-'}
+            </TableCell>
+            <TableCell className='max-w-96 font-mono text-xs break-all'>
+              {mcpUsageTarget(log)}
+            </TableCell>
+            <TableCell>
+              <StatusBadge muted={log.metadata.adapter !== 'stdio'}>
+                {log.metadata.adapter ?? 'direct'}
+              </StatusBadge>
+            </TableCell>
+            <TableCell>
+              <StatusBadge
+                muted={log.metadata.evidence_kind !== 'published_content_read'}
+              >
+                {t(
+                  log.metadata.evidence_kind === 'published_content_read'
+                    ? 'admin.token.evidencePublishedRead'
+                    : log.metadata.evidence_kind === 'capability_list'
+                      ? 'admin.token.evidenceCapabilityList'
+                      : 'admin.token.evidenceToolCall'
+                )}
+              </StatusBadge>
+            </TableCell>
+            <TableCell>
+              <StatusBadge muted={log.metadata.result !== 'success'}>
+                {log.metadata.result ?? t('admin.common.unknown')}
+              </StatusBadge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
 function TokenTable({
   tokens,
+  selected,
   onView,
   onRevoke,
   title,
@@ -5096,6 +6332,7 @@ function TokenTable({
   pending = false,
 }: {
   tokens: MCPTokenDTO[]
+  selected?: string
   onView?: (tokenId: string) => void
   onRevoke: (tokenId: string) => Promise<unknown>
   title?: string
@@ -5117,12 +6354,16 @@ function TokenTable({
               <TableHead>{t('admin.fields.name')}</TableHead>
               <TableHead>{t('admin.fields.status')}</TableHead>
               <TableHead>{t('admin.fields.expiresAt')}</TableHead>
+              <TableHead>{t('admin.fields.lastUsedAt')}</TableHead>
               <TableHead>{t('admin.fields.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tokens.map((token) => (
-              <TableRow key={token.id}>
+              <TableRow
+                key={token.id}
+                data-state={selected === token.id ? 'selected' : undefined}
+              >
                 <TableCell>
                   <div className='font-medium'>{token.name}</div>
                   <div className='text-xs text-muted-foreground'>
@@ -5130,20 +6371,19 @@ function TokenTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge>
-                    {token.status === ACTIVE_STATUS
-                      ? t('admin.common.active')
-                      : t('admin.common.revoked')}
+                  <StatusBadge muted={!tokenIsActive(token)}>
+                    {tokenStatusLabel(token, t)}
                   </StatusBadge>
                 </TableCell>
                 <TableCell>{formatDate(token.expires_at)}</TableCell>
+                <TableCell>{formatDate(token.last_used_at)}</TableCell>
                 <TableCell>
                   <div className='flex gap-2'>
                     {onView && (
                       <Button
                         variant='outline'
                         size='sm'
-                        disabled={pending || token.status !== ACTIVE_STATUS}
+                        disabled={pending || !tokenIsActive(token)}
                         onClick={() => onView(token.id)}
                       >
                         {t('admin.common.view')}
@@ -5155,7 +6395,7 @@ function TokenTable({
                         name: token.name,
                       })}
                       description={t('admin.confirm.revokeTokenDescription')}
-                      disabled={token.status !== ACTIVE_STATUS}
+                      disabled={!tokenIsActive(token)}
                       pending={pending}
                       onConfirm={() => onRevoke(token.id)}
                     />

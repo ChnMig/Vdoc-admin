@@ -1,4 +1,5 @@
 import type { ChangeEvent } from 'react'
+import { withNativeSelectPlaceholder } from '@/lib/native-select-options'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -127,6 +128,7 @@ export function AINativeSelect({
   readonly required?: boolean
 }) {
   const controlId = id ?? name ?? label
+  const selectOptions = withNativeSelectPlaceholder(options, placeholder)
   const selectionProps = onChange
     ? {
         value,
@@ -145,9 +147,12 @@ export function AINativeSelect({
         className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/25'
         {...selectionProps}
       >
-        <option value=''>{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
+        {selectOptions.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            disabled={required && option.value === ''}
+          >
             {option.label}
           </option>
         ))}

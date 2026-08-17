@@ -57,7 +57,8 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
     (project) => project.value === projectId
   )
     ? projectId
-    : (projectOptions[0]?.value ?? '')
+    : (projects.find((project) => project.status === ACTIVE_PROJECT_STATUS)
+        ?.id ?? '')
   const selectedProject = projects.find(
     (project) => project.id === selectedProjectId
   )
@@ -70,7 +71,10 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
   const canManageProject = Boolean(
     isSuperAdmin ||
     projectMembersQuery.data?.items.some(
-      (member) => member.user_id === authUser?.id && member.role === 3
+      (member) =>
+        member.user_id === authUser?.id &&
+        member.status === ACTIVE_PROJECT_STATUS &&
+        member.role === 3
     )
   )
   const projectPermissionResolved =

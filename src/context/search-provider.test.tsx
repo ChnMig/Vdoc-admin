@@ -106,7 +106,10 @@ describe('SearchProvider and CommandMenu', () => {
 
     await userEvent.click(screen.getByText('Projects'))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/projects' })
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/projects',
+      search: true,
+    })
     await waitFor(() =>
       expect(
         screen.queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
@@ -122,7 +125,10 @@ describe('SearchProvider and CommandMenu', () => {
 
     await userEvent.click(getByRole('option', { name: 'MCP Tokens' }))
 
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/mcp-tokens' })
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/mcp-tokens',
+      search: true,
+    })
     await waitFor(() =>
       expect(
         queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)

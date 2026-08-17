@@ -1,7 +1,7 @@
 import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 
-export function MaintenanceError() {
+export function MaintenanceError({ onRetry }: { onRetry?: () => void }) {
   const { t } = useLanguage()
 
   return (
@@ -13,7 +13,12 @@ export function MaintenanceError() {
           {t('errors.maintenanceDescription')}
         </p>
         <div className='mt-6 flex gap-4'>
-          <Button variant='outline'>{t('errors.learnMore')}</Button>
+          <Button
+            variant='outline'
+            onClick={onRetry ?? (() => window.location.reload())}
+          >
+            {t('errors.retry')}
+          </Button>
         </div>
       </div>
     </div>

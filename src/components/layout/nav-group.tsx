@@ -98,7 +98,7 @@ function SidebarMenuLink({
         isActive={checkIsActive(href, item)}
         tooltip={label}
       >
-        <Link to={item.url} onClick={() => setOpenMobile(false)}>
+        <Link to={item.url} search={true} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
           <span>{label}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
@@ -146,7 +146,11 @@ function SidebarMenuCollapsible({
                     asChild
                     isActive={checkIsActive(href, subItem)}
                   >
-                    <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
+                    <Link
+                      to={subItem.url}
+                      search={true}
+                      onClick={() => setOpenMobile(false)}
+                    >
                       {subItem.icon && <subItem.icon />}
                       <span>{subItemLabel}</span>
                       {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
@@ -199,6 +203,7 @@ function SidebarMenuCollapsedDropdown({
               <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
                 <Link
                   to={sub.url}
+                  search={true}
                   className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}
                 >
                   {sub.icon && <sub.icon />}

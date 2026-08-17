@@ -97,6 +97,7 @@ function panel(
       key={`${projectId}:${documentId}`}
       projectId={projectId}
       documentId={documentId}
+      documentName='Document 1'
       branches={options.branches ?? [branch]}
       versions={options.versions ?? [version]}
       canManage
@@ -320,15 +321,21 @@ describe('DocumentSharePanel', () => {
     const screen = render(wrap(panel()))
 
     const revokeButton = await screen.findByRole('button', { name: 'Revoke' })
+    expect(screen.getByText('Document 1')).toBeInTheDocument()
+    expect(screen.getByText('Branch: main')).toBeInTheDocument()
+    expect(screen.getByText('aaaaaaaa…aaaa')).toHaveAttribute(
+      'title',
+      activeShare.id
+    )
     await user.click(revokeButton)
     let dialog = screen.getByRole('alertdialog')
     expect(
       within(dialog).getByRole('heading', {
-        name: `Revoke public link ${activeShare.id}?`,
+        name: 'Revoke Document 1 / main public link?',
       })
     ).toBeInTheDocument()
     expect(
-      within(dialog).getByText('This action is irreversible.', {
+      within(dialog).getByText('This action is irreversible', {
         exact: false,
       })
     ).toBeInTheDocument()

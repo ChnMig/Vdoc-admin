@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { removeCookie } from '@/lib/cookies'
+import { useVdocContextStore } from './vdoc-context-store'
 
 const VDOC_ACCESS_TOKEN = 'vdoc_admin_access_token'
 
@@ -73,11 +74,13 @@ export const useAuthStore = create<AuthState>()((set) => {
       resetAccessToken: () =>
         set((state) => {
           clearAccessToken()
+          useVdocContextStore.getState().reset()
           return { ...state, auth: { ...state.auth, accessToken: '' } }
         }),
       reset: () =>
         set((state) => {
           clearAccessToken()
+          useVdocContextStore.getState().reset()
           return {
             ...state,
             auth: { ...state.auth, user: null, accessToken: '' },

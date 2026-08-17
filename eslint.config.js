@@ -61,5 +61,17 @@ export default defineConfig(
     languageOptions: {
       globals: globals.node,
     },
+  },
+  {
+    files: [
+      'src/routes/_authenticated/documents/index.tsx',
+      'src/routes/_authenticated/drafts/index.tsx',
+      'src/routes/_authenticated/versions/index.tsx',
+      'src/routes/_authenticated/diffs/index.tsx',
+      'src/routes/_authenticated/mcp-tokens/index.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   }
 )

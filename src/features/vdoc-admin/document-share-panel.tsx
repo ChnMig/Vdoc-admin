@@ -1,6 +1,14 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Eye, Link2, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
+import {
+  AlertCircle,
+  Copy,
+  Eye,
+  Link2,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+} from 'lucide-react'
 import {
   createDocumentShare,
   DOCUMENT_SHARE_EXPIRY_PRESETS,
@@ -43,6 +51,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 export function DocumentSharePanel({
   projectId,
   documentId,
+  documentName,
   branches,
   versions,
   canManage,
@@ -50,6 +59,7 @@ export function DocumentSharePanel({
 }: {
   readonly projectId: string
   readonly documentId: string
+  readonly documentName: string
   readonly branches: readonly BranchDTO[]
   readonly versions: readonly VersionDTO[]
   readonly canManage: boolean
@@ -62,6 +72,7 @@ export function DocumentSharePanel({
       key={stateKey}
       projectId={projectId}
       documentId={documentId}
+      documentName={documentName}
       branches={branches}
       versions={versions}
       canManage={canManage}
@@ -73,6 +84,7 @@ export function DocumentSharePanel({
 function DocumentSharePanelContent({
   projectId,
   documentId,
+  documentName,
   branches,
   versions,
   canManage,
@@ -80,6 +92,7 @@ function DocumentSharePanelContent({
 }: {
   readonly projectId: string
   readonly documentId: string
+  readonly documentName: string
   readonly branches: readonly BranchDTO[]
   readonly versions: readonly VersionDTO[]
   readonly canManage: boolean
@@ -93,6 +106,7 @@ function DocumentSharePanelContent({
     readonly targetProjectId: string
     readonly targetDocumentId: string
     readonly shareId: string
+    readonly branchName: string
   }>()
   const [copyStatus, setCopyStatus] = useState<'success' | 'failure'>()
   const createLockedRef = useRef(false)
@@ -221,8 +235,7 @@ function DocumentSharePanelContent({
     },
   })
 
-  const mutationFailed =
-    createMutation.isError || revealMutation.isError || revokeMutation.isError
+  const mutationError = createMutation.error ?? revealMutation.error
 
   async function copyActiveLink() {
     if (!activeLink) return
@@ -376,9 +389,14 @@ function DocumentSharePanelContent({
           </Alert>
         )}
 
-        {mutationFailed && (
-          <Alert variant='destructive'>
-            <AlertTitle>{t('publicShare.managementError')}</AlertTitle>
+        {mutationError && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertDescription className='grid gap-1'>
+              <p>{mutationError.message}</p>
+              <p>{t('publicShare.managementError')}</p>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -423,98 +441,122 @@ function DocumentSharePanelContent({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>{t('publicShare.object')}</TableHead>
                 <TableHead>{t('publicShare.scope')}</TableHead>
                 <TableHead>{t('publicShare.password')}</TableHead>
                 <TableHead>{t('publicShare.expiry')}</TableHead>
-                <TableHead>{t('publicShare.reveal')}</TableHead>
+                <TableHead>{t('publicShare.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sharesQuery.data.items.map((share) => (
-                <TableRow key={share.id}>
-                  <TableCell>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <Badge variant='outline'>
-                        {share.version_scope === 2
-                          ? t('publicShare.allVersions')
-                          : t('publicShare.latest')}
-                      </Badge>
-                      <Badge
-                        variant={share.status === 1 ? 'secondary' : 'outline'}
-                      >
-                        {share.status === 1
-                          ? t('publicShare.active')
-                          : share.status === 3
-                            ? t('publicShare.expired')
-                            : t('publicShare.revoked')}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className='inline-flex items-center gap-2 text-sm'>
-                      {share.password_protected ? (
-                        <ShieldCheck className='size-4 text-primary' />
-                      ) : (
-                        <ShieldOff className='size-4 text-muted-foreground' />
-                      )}
-                      {share.password_protected
-                        ? t('publicShare.protected')
-                        : t('publicShare.unprotected')}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {share.expires_at
-                      ? new Date(share.expires_at).toLocaleDateString()
-                      : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <div className='flex flex-wrap gap-2'>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={
-                          !interactive ||
-                          share.status !== 1 ||
-                          revealMutation.isPending
-                        }
-                        onClick={() => {
-                          if (revealLockedRef.current) return
-                          revealLockedRef.current = true
-                          const requestId = latestRevealRequestId.current + 1
-                          latestRevealRequestId.current = requestId
-                          revealMutation.mutate({
-                            targetProjectId: projectId,
-                            targetDocumentId: documentId,
-                            shareId: share.id,
-                            requestId,
-                          })
-                        }}
-                      >
-                        <Eye className='size-4' />
-                        {t('publicShare.reveal')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        disabled={
-                          share.status !== 1 || revokeMutation.isPending
-                        }
-                        onClick={() => {
-                          revokeMutation.reset()
-                          setPendingRevokeShare({
-                            targetProjectId: projectId,
-                            targetDocumentId: documentId,
-                            shareId: share.id,
-                          })
-                        }}
-                      >
-                        <Trash2 className='size-4' />
-                        {t('publicShare.revoke')}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sharesQuery.data.items.map((share) => {
+                const branch = branches.find(
+                  (candidate) => candidate.id === share.branch_id
+                )
+                const branchName = branch
+                  ? branch.status === 1
+                    ? branch.name
+                    : `${branch.name} — ${t('admin.statuses.archived')}`
+                  : t('publicShare.unknownBranch')
+                return (
+                  <TableRow key={share.id}>
+                    <TableCell>
+                      <div className='grid min-w-44 gap-1'>
+                        <span className='font-medium'>
+                          {documentName || compactIdentifier(documentId)}
+                        </span>
+                        <span className='text-sm text-muted-foreground'>
+                          {t('publicShare.branchLabel', { branch: branchName })}
+                        </span>
+                        <code
+                          className='text-xs text-muted-foreground'
+                          title={share.id}
+                        >
+                          {compactIdentifier(share.id)}
+                        </code>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <Badge variant='outline'>
+                          {share.version_scope === 2
+                            ? t('publicShare.allVersions')
+                            : t('publicShare.latest')}
+                        </Badge>
+                        <Badge
+                          variant={share.status === 1 ? 'secondary' : 'outline'}
+                        >
+                          {documentShareStatusLabel(share.status, t)}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className='inline-flex items-center gap-2 text-sm'>
+                        {share.password_protected ? (
+                          <ShieldCheck className='size-4 text-primary' />
+                        ) : (
+                          <ShieldOff className='size-4 text-muted-foreground' />
+                        )}
+                        {share.password_protected
+                          ? t('publicShare.protected')
+                          : t('publicShare.unprotected')}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {share.expires_at
+                        ? new Date(share.expires_at).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <div className='flex flex-wrap gap-2'>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={
+                            !interactive ||
+                            share.status !== 1 ||
+                            revealMutation.isPending
+                          }
+                          onClick={() => {
+                            if (revealLockedRef.current) return
+                            revealLockedRef.current = true
+                            const requestId = latestRevealRequestId.current + 1
+                            latestRevealRequestId.current = requestId
+                            revealMutation.mutate({
+                              targetProjectId: projectId,
+                              targetDocumentId: documentId,
+                              shareId: share.id,
+                              requestId,
+                            })
+                          }}
+                        >
+                          <Eye className='size-4' />
+                          {t('publicShare.reveal')}
+                        </Button>
+                        <Button
+                          size='sm'
+                          variant='outline'
+                          disabled={
+                            share.status !== 1 || revokeMutation.isPending
+                          }
+                          onClick={() => {
+                            revokeMutation.reset()
+                            setPendingRevokeShare({
+                              targetProjectId: projectId,
+                              targetDocumentId: documentId,
+                              shareId: share.id,
+                              branchName,
+                            })
+                          }}
+                        >
+                          <Trash2 className='size-4' />
+                          {t('publicShare.revoke')}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         ) : (
@@ -532,9 +574,12 @@ function DocumentSharePanelContent({
             }
           }}
           title={t('publicShare.revokeConfirmTitle', {
-            id: pendingRevokeShare?.shareId ?? '',
+            document: documentName || compactIdentifier(documentId),
+            branch: pendingRevokeShare?.branchName ?? '',
           })}
-          desc={t('publicShare.revokeConfirmDescription')}
+          desc={t('publicShare.revokeConfirmDescription', {
+            id: compactIdentifier(pendingRevokeShare?.shareId ?? ''),
+          })}
           confirmText={t('publicShare.revoke')}
           destructive
           isLoading={revokeMutation.isPending}
@@ -547,13 +592,33 @@ function DocumentSharePanelContent({
         >
           {revokeMutation.isError && (
             <Alert variant='destructive' aria-live='polite'>
-              <AlertTitle>{t('publicShare.managementError')}</AlertTitle>
+              <AlertCircle />
+              <AlertTitle>{t('admin.common.error')}</AlertTitle>
+              <AlertDescription className='grid gap-1'>
+                <p>{revokeMutation.error.message}</p>
+                <p>{t('publicShare.managementError')}</p>
+              </AlertDescription>
             </Alert>
           )}
         </ConfirmDialog>
       </CardContent>
     </Card>
   )
+}
+
+function documentShareStatusLabel(
+  status: number,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (status === 1) return t('publicShare.active')
+  if (status === 2) return t('publicShare.revoked')
+  if (status === 3) return t('publicShare.expired')
+  return `${t('admin.common.unknown')} ${status}`
+}
+
+function compactIdentifier(value: string) {
+  if (value.length <= 16) return value
+  return `${value.slice(0, 8)}…${value.slice(-4)}`
 }
 
 function ShareField({
