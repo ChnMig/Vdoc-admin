@@ -39,6 +39,7 @@ export interface AuthUser {
   email: string
   name: string
   is_super_admin: boolean
+  can_access_audit: boolean
   status: number
   created_at?: string
   updated_at?: string

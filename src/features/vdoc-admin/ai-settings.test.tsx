@@ -42,6 +42,7 @@ const superAdmin: AuthUser = {
   email: 'super@example.com',
   name: 'Super Admin',
   is_super_admin: true,
+  can_access_audit: true,
   status: 1,
 }
 
@@ -50,6 +51,7 @@ const reader: AuthUser = {
   email: 'reader@example.com',
   name: 'Reader',
   is_super_admin: false,
+  can_access_audit: false,
   status: 1,
 }
 

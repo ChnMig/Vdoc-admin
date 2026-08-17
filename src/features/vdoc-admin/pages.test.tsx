@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import {
@@ -79,6 +79,7 @@ const apiMocks = vi.hoisted(() => ({
   promoteDraft: vi.fn(),
   rejectDraft: vi.fn(),
   regenerateAISummary: vi.fn(),
+  removeProjectMember: vi.fn(),
   requestDraftChanges: vi.fn(),
   revokeMCPToken: vi.fn(),
   sendAIChatMessage: vi.fn(),
@@ -137,6 +138,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     promoteDraft: apiMocks.promoteDraft,
     rejectDraft: apiMocks.rejectDraft,
     regenerateAISummary: apiMocks.regenerateAISummary,
+    removeProjectMember: apiMocks.removeProjectMember,
     requestDraftChanges: apiMocks.requestDraftChanges,
     revokeMCPToken: apiMocks.revokeMCPToken,
     sendAIChatMessage: apiMocks.sendAIChatMessage,
@@ -208,6 +210,10 @@ function setAuthUser(user: typeof identityFixture | null) {
 beforeEach(() => {
   useVdocContextStore.getState().reset()
   setAuthUser(identityFixture)
+})
+
+afterEach(() => {
+  document.cookie = 'vdoc-admin-language=; Max-Age=0; Path=/'
 })
 
 describe('DashboardPage role boundaries', () => {
@@ -589,6 +595,7 @@ describe('UsersPage password boundaries', () => {
     const user = userEvent.setup()
     const screen = renderUsersPage()
 
+    expect(await screen.findByText('Disabled')).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Enable user' }))
     const dialog = screen.getByRole('alertdialog')
     expect(
@@ -699,6 +706,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
           user_id: existingAdmin().id,
           role: 3,
           status: 1,
+          user_status: 1,
           added_by: identityFixture.id,
           created_at: projectFixture.created_at,
           updated_at: projectFixture.updated_at,
@@ -719,6 +727,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
       user_id: existingAdmin().id,
       role: 2,
       status: 1,
+      user_status: 1,
       added_by: identityFixture.id,
       created_at: projectFixture.created_at,
       updated_at: projectFixture.updated_at,
@@ -826,62 +835,71 @@ describe('ProjectsPage lifecycle boundaries', () => {
     expect(apiMocks.listProjectMembers).not.toHaveBeenCalled()
   })
 
-  it('confirms role changes and preserves the selected role when the request fails', async () => {
+  it('does not offer demotion or removal for the last effective project admin', async () => {
     apiMocks.listProjects.mockResolvedValue({
       items: [projectFixture],
       total: 1,
     })
-    apiMocks.patchProjectMemberRole
-      .mockRejectedValueOnce(new Error('The last admin cannot be demoted'))
-      .mockResolvedValueOnce({
-        project_id: 'project-1',
-        user_id: existingAdmin().id,
-        role: 2,
-        status: 1,
-        added_by: identityFixture.id,
-        created_at: projectFixture.created_at,
-        updated_at: projectFixture.updated_at,
-      })
-    const user = userEvent.setup()
     const screen = renderProjectsPage()
-    const roleSelect = await screen.findByLabelText(
-      'Role: existing@example.com'
-    )
 
-    await user.selectOptions(roleSelect, String(2))
+    expect(
+      await screen.findByText(
+        'Add another active Project Admin before changing this role or removing this member.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Role: existing@example.com')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Remove' })
+    ).not.toBeInTheDocument()
     expect(apiMocks.patchProjectMemberRole).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(apiMocks.removeProjectMember).not.toHaveBeenCalled()
+  })
 
-    const dialog = screen.getByRole('alertdialog')
+  it('offers member controls after another active project admin exists', async () => {
+    apiMocks.listProjects.mockResolvedValue({
+      items: [projectFixture],
+      total: 1,
+    })
+    apiMocks.listProjectMembers.mockResolvedValue({
+      items: [
+        {
+          project_id: 'project-1',
+          user_id: existingAdmin().id,
+          user_email: existingAdmin().email,
+          role: 3,
+          status: 1,
+          user_status: 1,
+          added_by: identityFixture.id,
+          created_at: projectFixture.created_at,
+          updated_at: projectFixture.updated_at,
+        },
+        {
+          project_id: 'project-1',
+          user_id: availableAdmin().id,
+          user_email: availableAdmin().email,
+          role: 3,
+          status: 1,
+          user_status: 1,
+          added_by: identityFixture.id,
+          created_at: projectFixture.created_at,
+          updated_at: projectFixture.updated_at,
+        },
+      ],
+      total: 2,
+    })
+    const screen = renderProjectsPage()
+
     expect(
-      within(dialog).getByRole('heading', {
-        name: 'Change existing@example.com from Admin to Writer?',
-      })
+      await screen.findByLabelText('Role: existing@example.com')
     ).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-
     expect(
-      await within(dialog).findByText('The last admin cannot be demoted')
+      screen.getByLabelText('Role: available@example.com')
     ).toBeInTheDocument()
-    expect(roleSelect).toHaveValue('2')
-    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
-
-    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
-    await waitFor(() =>
-      expect(apiMocks.patchProjectMemberRole).toHaveBeenCalledTimes(2)
-    )
-    expect(apiMocks.patchProjectMemberRole).toHaveBeenNthCalledWith(
-      1,
-      'project-1',
-      'user-existing',
-      { role: 2 }
-    )
-    expect(apiMocks.patchProjectMemberRole).toHaveBeenNthCalledWith(
-      2,
-      'project-1',
-      'user-existing',
-      { role: 2 }
-    )
+    expect(
+      screen.getAllByRole('button', { name: 'Remove member' })
+    ).toHaveLength(2)
   })
 
   it('shows an inline update error without discarding edited project input', async () => {
@@ -967,6 +985,41 @@ describe('MCPTokensPage secret lifecycle', () => {
       name: 'New token',
       token: `vdoc_${'b'.repeat(48)}`,
     })
+  })
+
+  it('requires an explicit scope and a future expiry before creating a token', async () => {
+    const user = userEvent.setup()
+    const screen = renderMCPTokensPage()
+    const card = screen
+      .getByText('Create MCP token')
+      .closest('[data-slot="card"]')
+    if (!(card instanceof HTMLElement)) throw new Error('missing token card')
+    await user.type(within(card).getByLabelText('Name'), 'Scoped token')
+    const apiRead = within(card).getAllByRole('checkbox')[0]
+    if (!(apiRead instanceof HTMLInputElement)) {
+      throw new Error('missing api:read checkbox')
+    }
+    await user.click(apiRead)
+    await user.click(within(card).getByRole('button', { name: 'Create' }))
+
+    expect(
+      await within(card).findByText('Select at least one token scope.')
+    ).toBeInTheDocument()
+    expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
+
+    await user.click(apiRead)
+    await user.type(
+      within(card).getByLabelText('Expires at'),
+      '2020-01-01T00:00:00Z'
+    )
+    await user.click(within(card).getByRole('button', { name: 'Create' }))
+
+    expect(
+      await within(card).findByText(
+        'Expiry must be a valid date and time in the future.'
+      )
+    ).toBeInTheDocument()
+    expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
   })
 
   it('clears a revealed plaintext token as soon as that token is revoked', async () => {
@@ -1513,6 +1566,7 @@ describe('VersionsPage', () => {
   it('renders Markdown facts for Markdown versions without requesting endpoints', async () => {
     const screen = renderVersionsPage()
 
+    expect(await screen.findByText('Published')).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'Markdown facts' })
     ).toBeInTheDocument()
@@ -2196,6 +2250,65 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       within(reviewFilter).getAllByRole('option', { name: 'All changes' })
     ).toHaveLength(1)
   })
+
+  it('maps all backend change types and localizes backend diff messages', async () => {
+    document.cookie = 'vdoc-admin-language=zh-CN; Path=/'
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [
+        {
+          ...markdownDocumentFixture,
+          name: 'OpenAPI document',
+          document_type: 1,
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.compareDiff.mockResolvedValue({
+      ...diffFixture,
+      items: Array.from({ length: 10 }, (_, index) => ({
+        id: `change-${index + 1}`,
+        change_type: index + 1,
+        severity: 1,
+        method: 'GET',
+        path: '/widgets',
+        location: `change.${index + 1}`,
+        message: index + 1 === 8 ? 'Response field removed' : 'Endpoint added',
+        frontend_impact:
+          index + 1 === 8 ? 'Response field removed' : 'Endpoint added',
+        is_breaking: index + 1 === 8,
+        must_handle: index + 1 === 8,
+        sort_order: index + 1,
+      })),
+    })
+    mockAIQueries('diff', diffFixture.id)
+    const user = userEvent.setup()
+    const screen = renderDiffsPage()
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: 'v0' })).toHaveLength(2)
+    )
+    await user.selectOptions(screen.getByLabelText('源版本'), 'version-0')
+    await user.selectOptions(screen.getByLabelText('目标版本'), 'version-1')
+    await user.click(screen.getByRole('button', { name: '比较' }))
+
+    for (const label of [
+      '新增端点',
+      '删除端点',
+      '修改端点',
+      '新增参数',
+      '删除参数',
+      '修改参数',
+      '请求体变更',
+      '响应变更',
+      '安全要求变更',
+      '弃用状态变更',
+    ]) {
+      expect((await screen.findAllByText(label)).length).toBeGreaterThan(0)
+    }
+    expect(screen.getAllByText('响应字段已删除')).toHaveLength(2)
+    expect(screen.queryByText('Response field removed')).not.toBeInTheDocument()
+    document.cookie = 'vdoc-admin-language=; Max-Age=0; Path=/'
+  })
 })
 
 describe('DraftsPage lifecycle boundaries', () => {
@@ -2479,11 +2592,13 @@ describe('DraftsPage lifecycle boundaries', () => {
       'document-1',
       'draft-1',
       expect.objectContaining({
-        branch_id: 'branch-1',
         version_name: 'draft v2 unsaved',
         content: '# Unsaved content',
         schema_content: '# Unsaved content',
       })
+    )
+    expect(apiMocks.updateDraft.mock.calls[0]?.[3]).not.toHaveProperty(
+      'branch_id'
     )
   })
 
@@ -2602,6 +2717,7 @@ const identityFixture = {
   email: 'admin@example.com',
   name: 'Admin',
   is_super_admin: true,
+  can_access_audit: true,
   status: 1,
 }
 

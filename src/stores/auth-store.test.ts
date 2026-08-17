@@ -11,6 +11,7 @@ const sampleUser = {
   email: 'user@example.com',
   name: 'Vdoc User',
   is_super_admin: true,
+  can_access_audit: true,
   status: 1,
 }
 

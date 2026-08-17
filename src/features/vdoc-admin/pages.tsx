@@ -133,8 +133,8 @@ import { DocumentSharePanel } from './document-share-panel'
 import { MarkdownFactsCard } from './markdown-facts-card'
 
 const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#7d641fadb8cc28fabfebe2fd229a22f63acd5113'
-const vdocSkillCommit = '73a203c4bd0d7d96997fab8e1fa478a859f32e91'
+  'github:ChnMig/Vdoc-mcp#b65f346453525a3f35a6ce466cf47a4488d5c8f8'
+const vdocSkillCommit = '9f3a1807e7cd09c677475b4a2397faff2a985829'
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
 VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
 VDOC_SKILL_COMMIT=${vdocSkillCommit}
@@ -351,10 +351,31 @@ function stringify(value: unknown) {
   return JSON.stringify(value, null, 2)
 }
 
-function statusLabel(status: number, t: ReturnType<typeof useLanguage>['t']) {
+function resourceStatusLabel(
+  status: number,
+  t: ReturnType<typeof useLanguage>['t']
+) {
   if (status === ACTIVE_STATUS) return t('admin.statuses.active')
   if (status === ARCHIVED_OR_DISABLED_STATUS)
     return t('admin.statuses.archived')
+  return `${t('admin.common.unknown')} ${status}`
+}
+
+function accountStatusLabel(
+  status: number,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (status === ACTIVE_STATUS) return t('admin.statuses.active')
+  if (status === ARCHIVED_OR_DISABLED_STATUS)
+    return t('admin.statuses.disabled')
+  return `${t('admin.common.unknown')} ${status}`
+}
+
+function versionStatusLabel(
+  status: number,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  if (status === ACTIVE_STATUS) return t('admin.statuses.published')
   return `${t('admin.common.unknown')} ${status}`
 }
 
@@ -431,10 +452,71 @@ function changeTypeLabel(
   changeType: number,
   t: ReturnType<typeof useLanguage>['t']
 ) {
-  if (changeType === 1) return t('admin.diff.added')
-  if (changeType === 2) return t('admin.diff.removed')
-  if (changeType === 3) return t('admin.diff.modified')
+  if (changeType === 1) return t('admin.diff.changeTypes.endpointAdded')
+  if (changeType === 2) return t('admin.diff.changeTypes.endpointRemoved')
+  if (changeType === 3) return t('admin.diff.changeTypes.endpointModified')
+  if (changeType === 4) return t('admin.diff.changeTypes.parameterAdded')
+  if (changeType === 5) return t('admin.diff.changeTypes.parameterRemoved')
+  if (changeType === 6) return t('admin.diff.changeTypes.parameterChanged')
+  if (changeType === 7) return t('admin.diff.changeTypes.requestBodyChanged')
+  if (changeType === 8) return t('admin.diff.changeTypes.responseChanged')
+  if (changeType === 9) return t('admin.diff.changeTypes.securityChanged')
+  if (changeType === 10) return t('admin.diff.changeTypes.deprecatedChanged')
   return `${t('admin.common.unknown')} ${changeType}`
+}
+
+function diffMessageLabel(
+  message: string,
+  t: ReturnType<typeof useLanguage>['t']
+) {
+  const keys = {
+    'Endpoint added': 'admin.diff.messages.endpointAdded',
+    'Endpoint removed': 'admin.diff.messages.endpointRemoved',
+    'Endpoint metadata changed': 'admin.diff.messages.endpointMetadataChanged',
+    'Parameter added': 'admin.diff.messages.parameterAdded',
+    'Parameter removed': 'admin.diff.messages.parameterRemoved',
+    'Parameter location changed':
+      'admin.diff.messages.parameterLocationChanged',
+    'Parameter type changed': 'admin.diff.messages.parameterTypeChanged',
+    'Parameter required flag changed':
+      'admin.diff.messages.parameterRequiredChanged',
+    'Parameter enum value removed': 'admin.diff.messages.parameterEnumRemoved',
+    'Request body required flag changed':
+      'admin.diff.messages.requestBodyRequiredChanged',
+    'Request body media type added':
+      'admin.diff.messages.requestBodyMediaAdded',
+    'Request body media type removed':
+      'admin.diff.messages.requestBodyMediaRemoved',
+    'Request body field added': 'admin.diff.messages.requestBodyFieldAdded',
+    'Request body field removed': 'admin.diff.messages.requestBodyFieldRemoved',
+    'Request body field type changed':
+      'admin.diff.messages.requestBodyFieldTypeChanged',
+    'Request body field required flag changed':
+      'admin.diff.messages.requestBodyFieldRequiredChanged',
+    'Request body schema type changed':
+      'admin.diff.messages.requestBodySchemaTypeChanged',
+    'Response status added': 'admin.diff.messages.responseStatusAdded',
+    'Response status removed': 'admin.diff.messages.responseStatusRemoved',
+    'Response body added': 'admin.diff.messages.responseBodyAdded',
+    'Response body removed': 'admin.diff.messages.responseBodyRemoved',
+    'Response field added': 'admin.diff.messages.responseFieldAdded',
+    'Response field removed': 'admin.diff.messages.responseFieldRemoved',
+    'Response field type changed':
+      'admin.diff.messages.responseFieldTypeChanged',
+    'Response field required flag changed':
+      'admin.diff.messages.responseFieldRequiredChanged',
+    'Response schema type changed':
+      'admin.diff.messages.responseSchemaTypeChanged',
+    'Enum value removed': 'admin.diff.messages.enumValueRemoved',
+    'Security requirements changed':
+      'admin.diff.messages.securityRequirementsChanged',
+    'Deprecated status changed': 'admin.diff.messages.deprecatedStatusChanged',
+    'Markdown line added': 'admin.diff.messages.markdownLineAdded',
+    'Markdown line removed': 'admin.diff.messages.markdownLineRemoved',
+    'Markdown line changed': 'admin.diff.messages.markdownLineChanged',
+  } as const
+  const key = keys[message as keyof typeof keys]
+  return key ? t(key) : message
 }
 
 function PageChrome({
@@ -1890,7 +1972,9 @@ export function UsersPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge>{statusLabel(user.status, t)}</StatusBadge>
+                    <StatusBadge>
+                      {accountStatusLabel(user.status, t)}
+                    </StatusBadge>
                   </TableCell>
                   <TableCell>
                     {user.is_super_admin
@@ -2543,6 +2627,16 @@ function MembersTable({
           const memberUserLabel =
             member.user_email ?? userEmail(member.user_id) ?? member.user_id
           const memberReadOnly = readOnly || member.status !== ACTIVE_STATUS
+          const protectsLastAdmin =
+            member.status === ACTIVE_STATUS &&
+            member.role === ROLE_ADMIN &&
+            !members.some(
+              (other) =>
+                other.user_id !== member.user_id &&
+                other.status === ACTIVE_STATUS &&
+                other.user_status === ACTIVE_STATUS &&
+                other.role === ROLE_ADMIN
+            )
           return (
             <TableRow key={member.user_id}>
               <TableCell>
@@ -2556,10 +2650,21 @@ function MembersTable({
                 </div>
               </TableCell>
               <TableCell>
-                {memberReadOnly ? (
-                  roleOptions(t).find(
-                    (option) => option.value === String(member.role)
-                  )?.label
+                {memberReadOnly || protectsLastAdmin ? (
+                  <div className='grid gap-1'>
+                    <span>
+                      {
+                        roleOptions(t).find(
+                          (option) => option.value === String(member.role)
+                        )?.label
+                      }
+                    </span>
+                    {protectsLastAdmin && (
+                      <span className='max-w-72 text-xs text-muted-foreground'>
+                        {t('admin.projects.lastAdminProtected')}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <MemberRoleControl
                     key={`${member.user_id}:${member.role}`}
@@ -2571,11 +2676,15 @@ function MembersTable({
                 )}
               </TableCell>
               <TableCell>
-                <StatusBadge>{statusLabel(member.status, t)}</StatusBadge>
+                <StatusBadge>
+                  {member.status === ACTIVE_STATUS
+                    ? accountStatusLabel(member.user_status, t)
+                    : accountStatusLabel(member.status, t)}
+                </StatusBadge>
               </TableCell>
               {!readOnly && (
                 <TableCell>
-                  {!memberReadOnly && (
+                  {!memberReadOnly && !protectsLastAdmin && (
                     <ConfirmActionButton
                       label={t('admin.actions.removeMember')}
                       title={t('admin.confirm.removeMemberTitle', {
@@ -2852,7 +2961,6 @@ export function DocumentsPage({
               name: document.name,
               description: document.description ?? '',
               relative_path: document.relative_path ?? '',
-              document_type: document.document_type,
             },
           })
         }
@@ -3007,7 +3115,9 @@ function DocumentsTable({
                   {documentTypeLabel(document.document_type, t)}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge>{statusLabel(document.status, t)}</StatusBadge>
+                  <StatusBadge>
+                    {resourceStatusLabel(document.status, t)}
+                  </StatusBadge>
                 </TableCell>
                 {!readOnly && (
                   <TableCell>
@@ -3159,7 +3269,9 @@ function BranchesTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge>{statusLabel(branch.status, t)}</StatusBadge>
+                  <StatusBadge>
+                    {resourceStatusLabel(branch.status, t)}
+                  </StatusBadge>
                 </TableCell>
                 {!readOnly && (
                   <TableCell>
@@ -3834,7 +3946,8 @@ export function DraftsPage({
   )
 }
 
-type DraftPayload = Parameters<typeof createDraft>[2]
+type CreateDraftPayload = Parameters<typeof createDraft>[2]
+type UpdateDraftPayload = Parameters<typeof updateDraft>[3]
 
 function DraftEditorCard({
   selectedDraft,
@@ -3854,8 +3967,8 @@ function DraftEditorCard({
   contextActive: boolean
   pending: boolean
   onClear: () => void
-  onCreate: (payload: DraftPayload) => Promise<unknown>
-  onUpdate: (id: string, payload: DraftPayload) => Promise<unknown>
+  onCreate: (payload: CreateDraftPayload) => Promise<unknown>
+  onUpdate: (id: string, payload: UpdateDraftPayload) => Promise<unknown>
 }) {
   const { t } = useLanguage()
   const editable = Boolean(
@@ -3915,9 +4028,6 @@ function DraftEditorCard({
           file instanceof File && file.size > 0 ? await file.text() : ''
         const content = uploadedContent || fieldValue(formData, 'content')
         const payload = {
-          branch_id: editable
-            ? (selectedDraft?.branch_id ?? '')
-            : fieldValue(formData, 'branch_id'),
           version_name: fieldValue(formData, 'version_name'),
           changelog: fieldValue(formData, 'changelog'),
           source_git_commit_id: fieldValue(formData, 'source_git_commit_id'),
@@ -3927,7 +4037,10 @@ function DraftEditorCard({
         if (editable && selectedDraft) {
           await onUpdate(selectedDraft.id, payload)
         } else {
-          await onCreate(payload)
+          await onCreate({
+            ...payload,
+            branch_id: fieldValue(formData, 'branch_id'),
+          })
         }
       }}
     >
@@ -4707,7 +4820,9 @@ function VersionsTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge>{statusLabel(version.status, t)}</StatusBadge>
+                  <StatusBadge>
+                    {versionStatusLabel(version.status, t)}
+                  </StatusBadge>
                 </TableCell>
                 <TableCell>{formatDate(version.published_at)}</TableCell>
               </TableRow>
@@ -5638,7 +5753,7 @@ function DiffReviewList({
           {items.map((item) => (
             <div key={item.id} className='border-b last:border-b-0'>
               <div className='bg-muted/50 px-3 py-2 text-muted-foreground'>
-                @@ {item.location ?? item.message} @@
+                @@ {item.location ?? diffMessageLabel(item.message, t)} @@
               </div>
               <pre className='overflow-x-auto px-3 py-2 leading-6'>
                 {(item.frontend_impact ?? item.message)
@@ -5697,10 +5812,14 @@ function DiffReviewList({
                         {item.path ?? item.location ?? t('admin.common.none')}
                       </code>
                     </div>
-                    <p className='font-medium'>{item.message}</p>
+                    <p className='font-medium'>
+                      {diffMessageLabel(item.message, t)}
+                    </p>
                     {item.frontend_impact && (
                       <p className='text-sm text-muted-foreground'>
-                        {item.frontend_impact}
+                        {item.frontend_impact === item.message
+                          ? diffMessageLabel(item.frontend_impact, t)
+                          : item.frontend_impact}
                       </p>
                     )}
                   </div>
@@ -5953,13 +6072,24 @@ export function MCPTokensPage({
         submitLabel={t('admin.common.create')}
         pending={createMutation.isPending}
         onSubmit={(formData) => {
+          const scopes = formData.getAll('scopes').map(Number)
+          if (scopes.length === 0) {
+            throw new Error(t('admin.token.scopeRequired'))
+          }
+          const expiry = optionalFieldValue(formData, 'expires_at')
+          if (expiry) {
+            const expiresAt = Date.parse(expiry)
+            if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+              throw new Error(t('admin.token.futureExpiryRequired'))
+            }
+          }
           const requestId = beginTokenOperation()
           return createMutation.mutateAsync({
             requestId,
             payload: {
               name: fieldValue(formData, 'name'),
-              scopes: formData.getAll('scopes').map(Number),
-              expires_at: optionalFieldValue(formData, 'expires_at') ?? null,
+              scopes,
+              expires_at: expiry ?? null,
             },
           })
         }}

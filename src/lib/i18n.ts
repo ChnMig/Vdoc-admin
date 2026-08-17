@@ -533,6 +533,8 @@ const en = {
     projects: {
       initialAdminHint:
         'Leave this blank to make the current signed-in actor the initial Project Admin; choose a user to assign someone else explicitly.',
+      lastAdminProtected:
+        'Add another active Project Admin before changing this role or removing this member.',
     },
     promote: {
       unavailableTitle: 'A promotion draft is not available yet',
@@ -667,6 +669,9 @@ const en = {
     },
     token: {
       scopesTitle: 'Token scopes',
+      scopeRequired: 'Select at least one token scope.',
+      futureExpiryRequired:
+        'Expiry must be a valid date and time in the future.',
       apiRead: 'api:read — query OpenAPI contracts and diffs',
       apiDraft: 'api:draft — create and update OpenAPI drafts',
       docRead: 'doc:read — query Markdown documents and diffs',
@@ -765,6 +770,53 @@ const en = {
       oldValue: 'Old value',
       newValue: 'New value',
       unifiedDiff: 'Unified line diff',
+      changeTypes: {
+        endpointAdded: 'Endpoint added',
+        endpointRemoved: 'Endpoint removed',
+        endpointModified: 'Endpoint modified',
+        parameterAdded: 'Parameter added',
+        parameterRemoved: 'Parameter removed',
+        parameterChanged: 'Parameter changed',
+        requestBodyChanged: 'Request body changed',
+        responseChanged: 'Response changed',
+        securityChanged: 'Security changed',
+        deprecatedChanged: 'Deprecation changed',
+      },
+      messages: {
+        endpointAdded: 'Endpoint added',
+        endpointRemoved: 'Endpoint removed',
+        endpointMetadataChanged: 'Endpoint metadata changed',
+        parameterAdded: 'Parameter added',
+        parameterRemoved: 'Parameter removed',
+        parameterLocationChanged: 'Parameter location changed',
+        parameterTypeChanged: 'Parameter type changed',
+        parameterRequiredChanged: 'Parameter required flag changed',
+        parameterEnumRemoved: 'Parameter enum value removed',
+        requestBodyRequiredChanged: 'Request body required flag changed',
+        requestBodyMediaAdded: 'Request body media type added',
+        requestBodyMediaRemoved: 'Request body media type removed',
+        requestBodyFieldAdded: 'Request body field added',
+        requestBodyFieldRemoved: 'Request body field removed',
+        requestBodyFieldTypeChanged: 'Request body field type changed',
+        requestBodyFieldRequiredChanged:
+          'Request body field required flag changed',
+        requestBodySchemaTypeChanged: 'Request body schema type changed',
+        responseStatusAdded: 'Response status added',
+        responseStatusRemoved: 'Response status removed',
+        responseBodyAdded: 'Response body added',
+        responseBodyRemoved: 'Response body removed',
+        responseFieldAdded: 'Response field added',
+        responseFieldRemoved: 'Response field removed',
+        responseFieldTypeChanged: 'Response field type changed',
+        responseFieldRequiredChanged: 'Response field required flag changed',
+        responseSchemaTypeChanged: 'Response schema type changed',
+        enumValueRemoved: 'Enum value removed',
+        securityRequirementsChanged: 'Security requirements changed',
+        deprecatedStatusChanged: 'Deprecated status changed',
+        markdownLineAdded: 'Markdown line added',
+        markdownLineRemoved: 'Markdown line removed',
+        markdownLineChanged: 'Markdown line changed',
+      },
     },
     fields: {
       id: 'ID',
@@ -1043,6 +1095,58 @@ const en = {
       submit: 'Create Vdoc account',
       footerPrefix: 'By creating an account, you agree to our',
       created: 'Vdoc account created.',
+    },
+  },
+  legal: {
+    backToSignIn: 'Back to sign in',
+    instanceNotice:
+      'Vdoc is self-hosted software. The operator of this instance provides the service and is responsible for its policies, notices, retention choices, and contact channel.',
+    lastUpdated: 'Software notice updated: August 17, 2026',
+    terms: {
+      title: 'Terms of Service',
+      description:
+        'Default product terms for using a Vdoc instance. Your instance operator may publish additional or replacement terms.',
+      sections: {
+        scope: {
+          title: 'Service scope',
+          body: 'Vdoc stores and reviews API contracts and documents, publishes immutable versions, and exposes scoped Agent access. The instance operator decides who may use this deployment and for what purpose.',
+        },
+        accounts: {
+          title: 'Accounts and access',
+          body: 'Use only accounts, projects, tokens, and share links you are authorized to access. Keep credentials secret, use the narrowest practical token scopes, and report suspected exposure to the instance operator.',
+        },
+        content: {
+          title: 'Content, review, and AI',
+          body: 'You remain responsible for content you submit and for confirming you have the right to process it. AI summaries and chat are assistive output only; they do not approve, reject, or publish a document and must be reviewed by a person.',
+        },
+        operation: {
+          title: 'Operation and changes',
+          body: 'Availability, backup, retention, upgrades, and support are controlled by the instance operator. Software behavior may change between releases; operators should review release notes and test upgrades before production use.',
+        },
+      },
+    },
+    privacy: {
+      title: 'Privacy Policy',
+      description:
+        'Default product privacy notice for Vdoc software. The instance operator determines the actual purposes, legal basis, retention period, and contact process for this deployment.',
+      sections: {
+        roles: {
+          title: 'Who handles data',
+          body: 'Vdoc does not designate a central hosted service provider. The organization or person operating this instance controls its database, object storage, logs, encryption keys, integrations, and user administration.',
+        },
+        data: {
+          title: 'Data the software processes',
+          body: 'The instance may process account identity, project membership, documents and versions, review comments, audit metadata, share settings, and redacted MCP activity. Passwords are hashed; raw JWTs, MCP token secrets, and provider API keys must not be copied into audit metadata.',
+        },
+        integrations: {
+          title: 'Storage and integrations',
+          body: 'Data is stored in infrastructure selected by the operator. When an operator enables an external AI provider, relevant prompt context is sent to that provider under the operator’s configuration and the provider’s own terms.',
+        },
+        choices: {
+          title: 'Retention, requests, and contact',
+          body: 'Retention, export, correction, deletion, backup, and incident handling depend on the instance configuration and operator policy. Contact the operator that issued your account or shared the instance URL for privacy requests.',
+        },
+      },
     },
   },
   toasts: {
@@ -1587,6 +1691,8 @@ const zhCN = {
     projects: {
       initialAdminHint:
         '留空时，当前登录操作者会成为首个项目管理员；如需指定其他负责人，请明确选择用户。',
+      lastAdminProtected:
+        '请先添加另一位有效的项目管理员，再修改此角色或移除该成员。',
     },
     promote: {
       unavailableTitle: '当前无法创建晋级草稿',
@@ -1715,6 +1821,8 @@ const zhCN = {
     },
     token: {
       scopesTitle: '令牌权限范围',
+      scopeRequired: '请至少选择一个令牌权限范围。',
+      futureExpiryRequired: '过期时间必须是有效的未来日期和时间。',
       apiRead: 'api:read — 查询 OpenAPI 契约和差异',
       apiDraft: 'api:draft — 创建和更新 OpenAPI 草稿',
       docRead: 'doc:read — 查询 Markdown 文档和差异',
@@ -1810,6 +1918,52 @@ const zhCN = {
       oldValue: '旧值',
       newValue: '新值',
       unifiedDiff: '统一行差异',
+      changeTypes: {
+        endpointAdded: '新增端点',
+        endpointRemoved: '删除端点',
+        endpointModified: '修改端点',
+        parameterAdded: '新增参数',
+        parameterRemoved: '删除参数',
+        parameterChanged: '修改参数',
+        requestBodyChanged: '请求体变更',
+        responseChanged: '响应变更',
+        securityChanged: '安全要求变更',
+        deprecatedChanged: '弃用状态变更',
+      },
+      messages: {
+        endpointAdded: '新增端点',
+        endpointRemoved: '删除端点',
+        endpointMetadataChanged: '端点元数据已变更',
+        parameterAdded: '新增参数',
+        parameterRemoved: '删除参数',
+        parameterLocationChanged: '参数位置已变更',
+        parameterTypeChanged: '参数类型已变更',
+        parameterRequiredChanged: '参数必填状态已变更',
+        parameterEnumRemoved: '参数枚举值已删除',
+        requestBodyRequiredChanged: '请求体必填状态已变更',
+        requestBodyMediaAdded: '新增请求体媒体类型',
+        requestBodyMediaRemoved: '请求体媒体类型已删除',
+        requestBodyFieldAdded: '新增请求体字段',
+        requestBodyFieldRemoved: '请求体字段已删除',
+        requestBodyFieldTypeChanged: '请求体字段类型已变更',
+        requestBodyFieldRequiredChanged: '请求体字段必填状态已变更',
+        requestBodySchemaTypeChanged: '请求体 Schema 类型已变更',
+        responseStatusAdded: '新增响应状态',
+        responseStatusRemoved: '响应状态已删除',
+        responseBodyAdded: '新增响应体',
+        responseBodyRemoved: '响应体已删除',
+        responseFieldAdded: '新增响应字段',
+        responseFieldRemoved: '响应字段已删除',
+        responseFieldTypeChanged: '响应字段类型已变更',
+        responseFieldRequiredChanged: '响应字段必填状态已变更',
+        responseSchemaTypeChanged: '响应 Schema 类型已变更',
+        enumValueRemoved: '枚举值已删除',
+        securityRequirementsChanged: '安全要求已变更',
+        deprecatedStatusChanged: '弃用状态已变更',
+        markdownLineAdded: '新增 Markdown 行',
+        markdownLineRemoved: '删除 Markdown 行',
+        markdownLineChanged: '修改 Markdown 行',
+      },
     },
     fields: {
       id: 'ID',
@@ -2071,6 +2225,58 @@ const zhCN = {
       submit: '创建 Vdoc 账号',
       footerPrefix: '创建账号即表示你同意我们的',
       created: 'Vdoc 账号已创建。',
+    },
+  },
+  legal: {
+    backToSignIn: '返回登录',
+    instanceNotice:
+      'Vdoc 是自托管软件。本实例的运营方提供实际服务，并负责制定适用政策、告知内容、保留期限和联系渠道。',
+    lastUpdated: '软件说明更新于：2026 年 8 月 17 日',
+    terms: {
+      title: '服务条款',
+      description:
+        '以下是使用 Vdoc 实例时的软件默认条款。实例运营方可以发布补充条款或以其正式条款替代本说明。',
+      sections: {
+        scope: {
+          title: '服务范围',
+          body: 'Vdoc 用于存储和审阅 API 契约与文档、发布不可变版本，并向智能体提供限定范围的访问。由实例运营方决定谁可以使用该部署以及允许的用途。',
+        },
+        accounts: {
+          title: '账号与访问',
+          body: '只能使用你获准访问的账号、项目、令牌和分享链接。请妥善保管凭据，为令牌选择满足任务所需的最小权限，并向实例运营方报告疑似泄露。',
+        },
+        content: {
+          title: '内容、审阅与 AI',
+          body: '你需要对提交的内容及其处理权限负责。AI 摘要和对话仅用于辅助，不能批准、拒绝或发布文档，相关输出必须由人员审阅。',
+        },
+        operation: {
+          title: '运行与变更',
+          body: '可用性、备份、保留、升级和支持由实例运营方控制。软件行为可能随版本变化；运营方应阅读版本说明，并在生产升级前完成测试。',
+        },
+      },
+    },
+    privacy: {
+      title: '隐私政策',
+      description:
+        '以下是 Vdoc 软件的默认隐私说明。该部署的实际处理目的、法律依据、保留期限和联系流程由实例运营方决定。',
+      sections: {
+        roles: {
+          title: '谁负责处理数据',
+          body: 'Vdoc 本身不指定统一的托管服务商。运行本实例的组织或个人控制数据库、对象存储、日志、加密密钥、外部集成和用户管理。',
+        },
+        data: {
+          title: '软件处理的数据',
+          body: '实例可能处理账号身份、项目成员关系、文档与版本、审阅备注、审计元数据、分享设置和脱敏后的 MCP 活动。密码以哈希保存；原始 JWT、MCP 令牌明文和提供商 API 密钥不得写入审计元数据。',
+        },
+        integrations: {
+          title: '存储与外部集成',
+          body: '数据保存在运营方选择的基础设施中。运营方启用外部 AI 提供商后，相关提示词上下文会按运营方配置发送给该提供商，并受提供商自身条款约束。',
+        },
+        choices: {
+          title: '保留、请求与联系',
+          body: '保留、导出、更正、删除、备份和事件响应取决于实例配置及运营方政策。如需提出隐私请求，请联系向你发放账号或提供实例网址的运营方。',
+        },
+      },
     },
   },
   toasts: {

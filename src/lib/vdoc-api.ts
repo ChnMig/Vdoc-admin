@@ -70,6 +70,7 @@ export type ProjectMemberDTO = {
   user_id: string
   user_email?: string
   user_name?: string
+  user_status: number
   role: number
   status: number
   added_by: string
@@ -299,28 +300,40 @@ type PatchProjectMemberRolePayload = {
   role: number
 }
 
-type DocumentPayload = NameDescriptionPayload & {
+type CreateDocumentPayload = NameDescriptionPayload & {
   document_type: number
   relative_path: string
 }
 
-type PatchBranchPayload = NameDescriptionPayload & {
+type PatchDocumentPayload = Partial<NameDescriptionPayload> & {
+  relative_path?: string
+}
+
+type PatchBranchPayload = Partial<NameDescriptionPayload> & {
   is_default?: boolean
   is_protected?: boolean
 }
 
-type DraftPayload = {
-  branch_id: string
-  version_name: string
-  changelog: string
-  source_git_commit_id: string
+type DraftContentPayload = {
   schema_content?: string
   content?: string
 }
 
+type CreateDraftPayload = DraftContentPayload & {
+  branch_id: string
+  version_name: string
+  changelog?: string
+  source_git_commit_id?: string
+}
+
+type PatchDraftPayload = DraftContentPayload & {
+  version_name?: string
+  changelog?: string
+  source_git_commit_id?: string
+}
+
 export type DraftReviewPayload = {
   comment?: string
-  reason?: string
 }
 
 type CompareDiffPayload = {
@@ -684,7 +697,10 @@ export function listDocuments(projectId: string, documentType?: number) {
   )
 }
 
-export function createDocument(projectId: string, payload: DocumentPayload) {
+export function createDocument(
+  projectId: string,
+  payload: CreateDocumentPayload
+) {
   return unwrapEnvelope<DocumentDTO>(
     vdocApi.post(`/api/v1/private/projects/${projectId}/documents`, payload)
   )
@@ -693,7 +709,7 @@ export function createDocument(projectId: string, payload: DocumentPayload) {
 export function updateDocument(
   projectId: string,
   documentId: string,
-  payload: DocumentPayload
+  payload: PatchDocumentPayload
 ) {
   return unwrapEnvelope<DocumentDTO>(
     vdocApi.patch(
@@ -774,7 +790,7 @@ export function listDrafts(
 export function createDraft(
   projectId: string,
   documentId: string,
-  payload: DraftPayload
+  payload: CreateDraftPayload
 ) {
   return unwrapEnvelope<DraftDTO>(
     vdocApi.post(
@@ -788,7 +804,7 @@ export function updateDraft(
   projectId: string,
   documentId: string,
   draftId: string,
-  payload: DraftPayload
+  payload: PatchDraftPayload
 ) {
   return unwrapEnvelope<DraftDTO>(
     vdocApi.patch(
