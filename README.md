@@ -72,6 +72,22 @@ pnpm test:entrypoint
 pnpm test:browser
 ```
 
+## Automated Releases
+
+Push a version tag such as `v0.1.1` or `v0.1.1-rc.1` after committing the release changes. CI completes its build, lint, unit, container-entrypoint, and browser checks, then packages the verified `dist/` as `vdoc-admin_<tag>.tar.gz` with licenses and `SHA256SUMS`. A separate job creates the [GitHub Release](https://github.com/ChnMig/Vdoc-admin/releases) from those artifacts; prerelease tags create prereleases. Ordinary branch pushes and pull requests run checks only. Existing releases are not overwritten.
+
+For local packaging, run `pnpm build` followed by `pnpm release:package v0.1.0`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
+
+Extract the release archive and serve its contents with SPA fallback to `index.html`. Before serving, configure the included `runtime-config.js` for your backend:
+
+```js
+window.__VDOC_ADMIN_CONFIG__ = {
+  apiBaseUrl: 'https://your-vdoc.example.com',
+}
+```
+
+Allow the Admin origin in the backend's `VDOC_SERVER_CORS_ALLOWED_ORIGINS`. The release workflow publishes the static package; hosting configuration and deployment are separate.
+
 ## Attribution
 
 This starter is adapted from `satnaing/shadcn-admin`, Copyright (c) 2024 Sat Naing, under the MIT License. See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for the retained upstream notice. The project license remains the Vdoc Admin license in [LICENSE](./LICENSE).

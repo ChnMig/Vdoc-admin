@@ -33,5 +33,6 @@ dist-ssr
 **/__screenshots__/
 .vitest-attachments/
 .artifacts/playwright/
+.artifacts/release/
 playwright-report/
 test-results/

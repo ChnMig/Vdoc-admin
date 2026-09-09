@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "release:package": "bash scripts/package-release.sh",
     "lint": "eslint .",
     "preview": "vite preview",
     "format:check": "prettier --check .",
