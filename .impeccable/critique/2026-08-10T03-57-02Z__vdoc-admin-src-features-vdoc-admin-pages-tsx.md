@@ -10,7 +10,7 @@ p1_count: 4
 timestamp: 2026-08-10T03-57-02Z
 slug: vdoc-admin-src-features-vdoc-admin-pages-tsx
 ---
-> 历史审计快照：本文件保留 2026-08-10 当时的问题与评分，不代表当前开放问题。P0/P1/P2 的当前状态与验证证据以 [2026-08-17 真实闭环审计](./2026-08-17T06-29-31Z__vdoc-admin-real-closure-audit.md) 为准。
+> 历史审计快照：本文件保留 2026-08-10 当时的问题与评分，不代表当前开放问题。P0/P1/P2 的当前状态与验证证据以 [2026-08-17 真实闭环审计](./2026-08-17T06-29-31Z__vdoc-admin-real-closure-audit.md) 为准。源码链接用于定位当前仓库文件；标注的原始行号和问题描述仍对应历史快照。
 
 Method: dual-agent (A: /root/assessment_a · B: /root/assessment_b)
 
@@ -58,7 +58,7 @@ Vdoc 已经能让人相信它“懂文档生命周期”，但还不能让人相
 
 **为什么重要**：Dashboard 只检查 Team、Project、Document、Branch、任意 Draft、任意 Token；没有 Submitted、Review、Published Version 或 Agent read verification。Branch 在创建 Document 时本就自动生成，撤销/过期 Token 也能贡献 total。卡片还是不可点击的 `div`，并用第一个 Project/Document 代表整个工作区。于是界面可以在尚无已发布事实、尚无可用 Agent 连接时显示“Done”。跨页后 selector 又回到各页本地状态或第一项，无法分享精确 Version/Diff 链接。
 
-证据：[Dashboard 与 selection hooks](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:719)、[onboarding 计算](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:909)。
+证据：[Dashboard 与 selection hooks（原行 719）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[onboarding 计算（原行 909）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)。
 
 **修复**：把 readiness 改成选定 Project/Document 下的状态机：Document ready → Draft created → Submitted → Awaiting review → Published Version → active scoped Token → MCP `tools/list`/read tool verified。把实体 ID 放入 URL search params，并让每一步 CTA 直达同一上下文。
 
@@ -68,7 +68,7 @@ Vdoc 已经能让人相信它“懂文档生命周期”，但还不能让人相
 
 **为什么重要**：Reader/Writer 会看到注定失败的创建、审查和管理动作；Project Admin 的成员管理又依赖 SuperAdmin-only 的 Users API，因此 user picker 为空，核心任务实质受阻。Users/Teams/Projects 导航和表单也不按角色收敛，失败大多只表现为 403 或空数据。
 
-证据：[ProjectsPage 无条件调用用户目录](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:1418)、[后端 Users 权限](/Users/chenming/work/Vdoc/Vdoc/services/vdoc/store.go:569)、[静态导航](/Users/chenming/work/Vdoc/Vdoc-admin/src/components/layout/data/sidebar-data.ts:32)。
+证据：[ProjectsPage 无条件调用用户目录（原行 1418）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[后端 Users 权限（原行 569）](https://github.com/ChnMig/Vdoc/blob/main/services/vdoc/store.go)、[静态导航（原行 32）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/components/layout/data/sidebar-data.ts)。
 
 **修复**：为选定 Project 生成统一 capability matrix；按角色隐藏或只读化导航与动作，同时提供 Project Admin 可用的受限用户搜索/选择契约。无权限时解释原因，不要展示可点击但必败的按钮。
 
@@ -78,7 +78,7 @@ Vdoc 已经能让人相信它“懂文档生命周期”，但还不能让人相
 
 **为什么重要**：Document/Branch 的 Update 只是把原 DTO 原样重发，没有编辑入口；选择 Draft 后表单切成 Update，却不回填所选内容。共享 FormCard 在 mutation 成功前立即 reset，失败输入丢失。Review note 声称属于已选 Draft，但任意行的 Approve/Reject 都会携带同一 note，可能把 Draft A 的意见发给 Draft B；Submit/Request/Reject 也未按状态禁用。多数 archive、权限切换、member removal、approve/reject、token revoke 没有分享撤销已有的确认保护。
 
-证据：[FormCard reset](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:525)、[Document Update 原样重发](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:1826)、[review mutation](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:2153)、[Draft row actions](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:2521)。
+证据：[FormCard reset（原行 525）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[Document Update 原样重发（原行 1826）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[review mutation（原行 2153）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[Draft row actions（原行 2521）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)。
 
 **修复**：将 Draft review 改为单一 selected-draft console，把 note、diff、content、AI 与 valid action 绑定到同一 draft ID；由实体状态机产出允许动作。表单只在成功后 reset，失败保留值并显示局部错误。补真实 edit mode 与一致的 destructive confirm。
 
@@ -88,7 +88,7 @@ Vdoc 已经能让人相信它“懂文档生命周期”，但还不能让人相
 
 **为什么重要**：共享 `statusLabel` 让 Published Version 显示 Active、Disabled User 显示 Archived；Token 状态 3 Expired 被显示为 Revoked，Draft Published 被称为 Approved。Diff change type 4–10 会显示 `Unknown n`。文案又暗示“Approve 后再 Promote”，但 Approve 已直接发布 Version，而 Promote 实际创建跨分支 Draft。审查动作还出现在 diff/content/AI 证据之前。
 
-证据：[共享状态映射](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:212)、[后端枚举](/Users/chenming/work/Vdoc/Vdoc/common/vdoc/codes.go:1)。
+证据：[共享状态映射（原行 212）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[后端枚举（原行 1）](https://github.com/ChnMig/Vdoc/blob/main/common/vdoc/codes.go)。
 
 **修复**：按实体建立 typed status/change maps；将 Promote 统一命名为“Create promotion draft / 创建晋级草稿”。审查顺序改为状态与来源 → machine diff/content → optional AI → review note → 唯一有效主动作。
 
@@ -98,7 +98,7 @@ Vdoc 已经能让人相信它“懂文档生命周期”，但还不能让人相
 
 **为什么重要**：Admin 生成 direct HTTP + raw Authorization header；PRD、站点文档和 `Vdoc-mcp` 的正式路径却是 `npx -y @vdoc/mcp` + `VDOC_BASE_URL` + `VDOC_MCP_TOKEN`。Skill 页面又要求 `cp -R Vdoc-skill ...`，只适合拥有源码 checkout 的开发者。没有 client profile、下载/安装入口、secret-safe copy 状态、`tools/list` 测试或有效权限解释。Public Share 也列出所有 active branch，而未先约束“必须已有 Published Version”。
 
-证据：[Admin MCP/Skill 输出](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/pages.tsx:3663)、[正式 MCP 示例](/Users/chenming/work/Vdoc/Vdoc-mcp/README.md:61)、[分享创建条件 UI](/Users/chenming/work/Vdoc/Vdoc-admin/src/features/vdoc-admin/document-share-panel.tsx:226)。
+证据：[Admin MCP/Skill 输出（原行 3663）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/pages.tsx)、[正式 MCP 示例（原行 61）](https://github.com/ChnMig/Vdoc-mcp/blob/main/README.md)、[分享创建条件 UI（原行 226）](https://github.com/ChnMig/Vdoc-admin/blob/main/src/features/vdoc-admin/document-share-panel.tsx)。
 
 **修复**：明确每类客户端的 canonical connection profile，默认输出正式 stdio adapter 配置；提供 Skill 下载/安装方式与连接测试，展示 effective permission = token scope × project role。分享入口移到 Published Version/eligible branch 上，并把缺少版本作为前置状态而非通用错误。
 

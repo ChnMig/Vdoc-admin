@@ -35,9 +35,9 @@ pnpm build
 pnpm dev
 ```
 
-Copy `.env.example` to `.env` before local development if your backend is not running at the example URL. Workspace-level pilot and deploy guidance lives in `../PILOT_RUNBOOK.md` and `../RELEASE_DEPLOY.md`.
+Copy `.env.example` to `.env` before local development if your backend is not running at the example URL. Public workspace guidance is available in [PILOT_RUNBOOK.md](https://github.com/ChnMig/Vdoc-site/blob/main/workspace/PILOT_RUNBOOK.md) and [RELEASE_DEPLOY.md](https://github.com/ChnMig/Vdoc-site/blob/main/workspace/RELEASE_DEPLOY.md).
 
-For the full local closure path, run from the workspace root:
+First [download and initialize the full workspace](https://vibe-doc.com/en/deployment), which supplies the Compose files and scripts outside this repository. For the full local closure path, run from that workspace root:
 
 ```sh
 scripts/vdoc-local-bootstrap.sh
