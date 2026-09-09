@@ -21,7 +21,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         <div className='hidden max-w-xl gap-5 lg:grid'>
           <div className='flex items-center gap-3'>
             <span className='flex size-10 items-center justify-center rounded-lg border bg-card text-primary shadow-[var(--shadow-card)]'>
-              <Logo className='size-5' />
+              <Logo className='size-7' />
             </span>
             <div>
               <p className='text-sm font-semibold'>{t('auth.brand')}</p>
@@ -54,7 +54,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         </div>
         <div className='mx-auto grid w-full max-w-md gap-4'>
           <div className='mb-1 flex items-center justify-center lg:hidden'>
-            <Logo className='me-2' />
+            <Logo className='me-2 size-7' />
             <h1 className='text-xl font-medium'>{t('auth.brand')}</h1>
           </div>
           {children}

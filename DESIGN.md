@@ -40,7 +40,7 @@ Responsive behavior should preserve task hierarchy: sidebar and header chrome fi
 - Tables use semantic `table`, `thead`, `tbody`, `th`, and `td` wrappers with horizontal overflow and hover state.
 - Forms should keep labels, validation messages, required fields, and disabled/loading states visible.
 - Alerts, badges, status labels, copy buttons, command search, language switch, theme switch, and profile dropdown are functional controls, not decoration.
-- Lucide icons are the icon vocabulary; do not mix in unrelated icon styles.
+- Lucide icons are the functional icon vocabulary. Product branding uses the owner-supplied Vdoc artwork through `src/assets/logo.tsx`, with the original blue-and-cyan colors and transparent background in both themes. `public/images/vdoc-logo.png` is the 256px mark and `public/images/favicon.png` is the 64px browser variant. The shared Logo component reserves its dimensions and uses empty alt text alongside the visible brand name.
 
 ## Motion
 

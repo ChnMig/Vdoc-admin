@@ -42,8 +42,8 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
               size='lg'
               className='h-13 border border-sidebar-border/70 bg-background/45 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
             >
-              <div className='flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_1px_1px_oklch(0_0_0_/_12%)]'>
-                <activeTeam.logo className='size-4' />
+              <div className='flex aspect-square size-8 items-center justify-center'>
+                <activeTeam.logo className='size-7' />
               </div>
               <div className='grid flex-1 text-start text-sm leading-tight'>
                 <span className='truncate font-semibold'>{activeTeamName}</span>
@@ -73,7 +73,7 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                   className='gap-2 p-2'
                 >
                   <div className='flex size-6 items-center justify-center rounded-sm border'>
-                    <team.logo className='size-4 shrink-0' />
+                    <team.logo className='size-5 shrink-0' />
                   </div>
                   {teamName}
                   <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>

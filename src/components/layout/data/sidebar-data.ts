@@ -19,7 +19,7 @@ export const sidebarData: SidebarData = {
   user: {
     name: 'Vdoc',
     email: '',
-    avatar: '/images/favicon.svg',
+    avatar: '/images/vdoc-logo.png',
   },
   teams: [
     {

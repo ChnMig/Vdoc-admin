@@ -1,3 +1,7 @@
+<p>
+  <img src="public/images/vdoc-logo.png" width="96" height="96" alt="Vdoc logo" />
+</p>
+
 # Vdoc Admin
 
 Vdoc Admin is the Vite + React + TypeScript product workbench and developer portal for the Vdoc backend. It is adapted from [satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin) and keeps the template's TanStack and shadcn UI foundation while replacing template authentication with Vdoc's raw-JWT API contract.

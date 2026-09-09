@@ -56,7 +56,7 @@ export function LegalPage({ kind }: LegalPageProps) {
         <div className='mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6'>
           <Link to='/sign-in' className='flex items-center gap-3'>
             <span className='flex size-9 items-center justify-center rounded-lg border bg-background text-primary shadow-[var(--shadow-card)]'>
-              <Logo className='size-5' />
+              <Logo className='size-6' />
             </span>
             <span className='font-semibold'>{t('auth.brand')}</span>
           </Link>
