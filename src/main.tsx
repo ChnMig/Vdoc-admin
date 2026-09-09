@@ -10,6 +10,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { isUnauthenticatedError } from '@/lib/auth-errors'
+import { bindQueryCacheToAuth } from '@/lib/auth-query-cache'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getStoredLanguage, translate } from '@/lib/i18n'
 import { shouldRetryQuery } from '@/lib/query-retry'
@@ -66,6 +67,9 @@ const queryClient = new QueryClient({
     },
   }),
 })
+
+const unbindAuthQueryCache = bindQueryCacheToAuth(queryClient)
+import.meta.hot?.dispose(unbindAuthQueryCache)
 
 // Create a new router instance
 const router = createRouter({
