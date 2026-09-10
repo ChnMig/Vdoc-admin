@@ -2331,6 +2331,235 @@ describe('DraftsPage lifecycle boundaries', () => {
     apiMocks.updateDraft.mockResolvedValue({ ...draftFixture, status: 1 })
   })
 
+  it('keeps unsaved editor text when the server draft refreshes', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const screen = render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider>
+          <DraftsPage />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    const user = userEvent.setup()
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await screen.findByText('Edit selected draft')
+    await user.clear(screen.getByLabelText('Content'))
+    await user.type(screen.getByLabelText('Content'), '# My unsaved edits')
+    expect(screen.getByLabelText('Content')).toHaveValue('# My unsaved edits')
+
+    apiMocks.getDraftContent.mockResolvedValue({
+      owner_type: 'draft',
+      owner_id: 'draft-1',
+      kind: 'document',
+      content_kind: 'raw',
+      content: '# Updated by another editor',
+      hash: 'new-server-hash',
+    })
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: [
+          'draft-content',
+          'project-1',
+          'document-1',
+          'draft-1',
+          'raw',
+        ],
+        exact: true,
+      })
+    })
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<{ content: string }>([
+          'draft-content',
+          'project-1',
+          'document-1',
+          'draft-1',
+          'raw',
+        ])?.content
+      ).toBe('# Updated by another editor')
+    )
+    expect(screen.getByLabelText('Content')).toHaveValue('# My unsaved edits')
+    expect(
+      screen.getByText('This draft changed on the server')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled()
+
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ['drafts', 'project-1', 'document-1'] },
+        {
+          items: [
+            { ...draftFixture, status: 1, changelog: 'Updated metadata' },
+          ],
+          total: 1,
+        }
+      )
+    })
+    await user.click(screen.getByRole('button', { name: 'Keep my edits' }))
+    expect(screen.getByLabelText('Content')).toHaveValue('# My unsaved edits')
+    expect(screen.getByLabelText('Changelog')).toHaveValue('Updated metadata')
+    expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled()
+    expect(
+      screen.queryByText('This draft changed on the server')
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      queryClient.setQueryData(
+        ['draft-content', 'project-1', 'document-1', 'draft-1', 'raw'],
+        { content: '# Newer server content', hash: 'newer-hash' }
+      )
+    })
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Discard edits and load server version',
+      })
+    )
+    expect(screen.getByLabelText('Content')).toHaveValue(
+      '# Newer server content'
+    )
+    expect(
+      screen.queryByText('This draft changed on the server')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Unsaved edits are kept/)).not.toBeInTheDocument()
+  })
+
+  it('isolates a new draft form when the document changes', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [
+        markdownDocumentFixture,
+        {
+          ...markdownDocumentFixture,
+          id: 'document-2',
+          name: 'Second document',
+          relative_path: 'second.md',
+        },
+      ],
+      total: 2,
+    })
+    apiMocks.listBranches.mockImplementation(
+      (_projectId: string, documentId: string) =>
+        Promise.resolve({
+          items: [
+            {
+              ...branchFixture,
+              id: documentId === 'document-2' ? 'branch-2' : 'branch-1',
+              document_id: documentId,
+            },
+          ],
+          total: 1,
+        })
+    )
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+    )
+    await user.type(
+      screen.getByLabelText('Content'),
+      '# Only belongs to document one'
+    )
+    await user.type(screen.getByLabelText('Version name'), 'document-one-draft')
+    await user.selectOptions(
+      screen.getAllByLabelText('Branch', { exact: true })[1],
+      'branch-1'
+    )
+    await user.upload(
+      screen.getByLabelText('Schema or Markdown file'),
+      new File(['# File one'], 'one.md', { type: 'text/markdown' })
+    )
+    await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-2')
+    )
+    expect(screen.getByLabelText('Content')).toHaveValue('')
+    expect(screen.getByLabelText('Version name')).toHaveValue('')
+    expect(screen.getAllByLabelText('Branch', { exact: true })[1]).toHaveValue(
+      ''
+    )
+    expect(screen.queryByText('one.md')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Content'), '# Document two')
+    await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+    expect(screen.getByLabelText('Content')).toHaveValue(
+      '# Only belongs to document one'
+    )
+    expect(screen.getByLabelText('Version name')).toHaveValue(
+      'document-one-draft'
+    )
+    expect(screen.getAllByLabelText('Branch', { exact: true })[1]).toHaveValue(
+      'branch-1'
+    )
+    expect(screen.getByText('one.md')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.queryByText('one.md')).not.toBeInTheDocument()
+  })
+
+  it('keeps a delayed file submission bound to its original document', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [
+        markdownDocumentFixture,
+        {
+          ...markdownDocumentFixture,
+          id: 'document-2',
+          name: 'Second document',
+        },
+      ],
+      total: 2,
+    })
+    apiMocks.createDraft.mockResolvedValue({ ...draftFixture, status: 1 })
+    let finishRead!: (content: string) => void
+    const file = new File(['# Delayed upload'], 'delayed.md', {
+      type: 'text/markdown',
+    })
+    file.text = () =>
+      new Promise<string>((resolve) => {
+        finishRead = resolve
+      })
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await screen.findAllByRole('option', { name: 'main' })
+    await user.selectOptions(
+      screen.getAllByLabelText('Branch', { exact: true })[1],
+      'branch-1'
+    )
+    await user.type(screen.getByLabelText('Version name'), 'v-file')
+    await user.upload(screen.getByLabelText('Schema or Markdown file'), file)
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(screen.getByLabelText('Content')).toBeDisabled()
+    expect(apiMocks.createDraft).not.toHaveBeenCalled()
+    await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+    await act(async () => {
+      finishRead('# Delayed upload')
+    })
+    await waitFor(() =>
+      expect(apiMocks.createDraft).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        expect.objectContaining({
+          branch_id: 'branch-1',
+          version_name: 'v-file',
+          content: '# Delayed upload',
+        })
+      )
+    )
+    expect(screen.getByLabelText('Document')).toHaveValue('document-2')
+    expect(screen.getByLabelText('Content')).toHaveValue('')
+    await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+    expect(screen.getByLabelText('Version name')).toHaveValue('')
+    expect(screen.queryByText('delayed.md')).not.toBeInTheDocument()
+  })
+
   for (const [status, label] of [
     [1, 'Draft'],
     [3, 'Changes requested'],

@@ -130,6 +130,7 @@ import { MarkdownDocumentViewer } from '@/features/public-share/markdown-documen
 import { AIContextPanel } from './ai-panels'
 import { AISettingsPanel } from './ai-settings'
 import { DocumentSharePanel } from './document-share-panel'
+import { useDraftEditorState } from './draft-editor-state'
 import { MarkdownFactsCard } from './markdown-facts-card'
 
 const vdocMcpSource =
@@ -837,7 +838,7 @@ function FormCard({
           className='grid gap-4'
           onSubmit={async (event) => {
             event.preventDefault()
-            if (submitLockedRef.current) return
+            if (submitLockedRef.current || pending || disabled) return
             submitLockedRef.current = true
             const form = event.currentTarget
             setSubmitError(null)
@@ -1085,6 +1086,8 @@ function TextAreaField({
   name,
   required = false,
   defaultValue,
+  value,
+  onChange,
   disabled = false,
 }: {
   id?: string
@@ -1092,6 +1095,8 @@ function TextAreaField({
   name: string
   required?: boolean
   defaultValue?: string
+  value?: string
+  onChange?: (value: string) => void
   disabled?: boolean
 }) {
   const generatedId = useId()
@@ -1103,7 +1108,11 @@ function TextAreaField({
         id={controlId}
         name={name}
         required={required}
-        defaultValue={defaultValue}
+        value={value}
+        defaultValue={value === undefined ? defaultValue : undefined}
+        onChange={
+          onChange ? (event) => onChange(event.currentTarget.value) : undefined
+        }
         disabled={disabled}
         className='min-h-32 font-mono'
       />
@@ -3587,15 +3596,22 @@ export function DraftsPage({
     activeBranches.some((target) => target.id !== source.value)
   )
   const createMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof createDraft>[2]) =>
-      createDraft(projectId, documentId, payload),
+    mutationFn: (request: {
+      projectId: string
+      documentId: string
+      payload: Parameters<typeof createDraft>[2]
+    }) => createDraft(request.projectId, request.documentId, request.payload),
     onSuccess: invalidate,
   })
   const updateMutation = useMutation({
     mutationFn: ({
+      projectId,
+      documentId,
       id,
       payload,
     }: {
+      projectId: string
+      documentId: string
       id: string
       payload: Parameters<typeof updateDraft>[3]
     }) => updateDraft(projectId, documentId, id, payload),
@@ -3730,6 +3746,7 @@ export function DraftsPage({
       </SelectorGrid>
       {canDraftForRole && (
         <DraftEditorCard
+          contextKey={`${authUser?.id ?? ''}:${projectId}:${documentId}:${draftId || 'new'}`}
           selectedDraft={selectedDraft}
           rawContent={editorRawContentQuery.data?.content}
           rawContentState={{
@@ -3741,9 +3758,11 @@ export function DraftsPage({
           contextActive={activeDocumentContext}
           pending={createMutation.isPending || updateMutation.isPending}
           onClear={() => handleDraftSelect('')}
-          onCreate={(payload) => createMutation.mutateAsync(payload)}
+          onCreate={(payload) =>
+            createMutation.mutateAsync({ projectId, documentId, payload })
+          }
           onUpdate={(id, payload) =>
-            updateMutation.mutateAsync({ id, payload })
+            updateMutation.mutateAsync({ projectId, documentId, id, payload })
           }
         />
       )}
@@ -3950,6 +3969,7 @@ type CreateDraftPayload = Parameters<typeof createDraft>[2]
 type UpdateDraftPayload = Parameters<typeof updateDraft>[3]
 
 function DraftEditorCard({
+  contextKey,
   selectedDraft,
   rawContent,
   rawContentState,
@@ -3960,6 +3980,7 @@ function DraftEditorCard({
   onCreate,
   onUpdate,
 }: {
+  contextKey: string
   selectedDraft?: DraftDTO
   rawContent?: string
   rawContentState: QueryState
@@ -3971,6 +3992,9 @@ function DraftEditorCard({
   onUpdate: (id: string, payload: UpdateDraftPayload) => Promise<unknown>
 }) {
   const { t } = useLanguage()
+  const editor = useDraftEditorState(contextKey, selectedDraft, rawContent)
+  const [submitting, setSubmitting] = useState(false)
+  const busy = pending || submitting
   const editable = Boolean(
     selectedDraft &&
     (selectedDraft.status === DRAFT_STATUS_DRAFT ||
@@ -3979,9 +4003,6 @@ function DraftEditorCard({
   const selectedBranchActive = selectedDraft
     ? branches.some((branch) => branch.id === selectedDraft.branch_id)
     : true
-  const formKey = selectedDraft
-    ? `${selectedDraft.id}:${rawContent ?? 'loading'}`
-    : 'new'
 
   if (selectedDraft && !editable) {
     return (
@@ -4010,7 +4031,7 @@ function DraftEditorCard({
 
   return (
     <FormCard
-      key={formKey}
+      key={contextKey}
       title={
         editable
           ? t('admin.draftEditor.editTitle')
@@ -4019,28 +4040,41 @@ function DraftEditorCard({
       submitLabel={
         editable ? t('admin.common.update') : t('admin.common.create')
       }
-      pending={pending}
-      resetOnSuccess={!editable}
-      disabled={!contextActive || !selectedBranchActive}
-      onSubmit={async (formData) => {
-        const file = formData.get('schema_file')
-        const uploadedContent =
-          file instanceof File && file.size > 0 ? await file.text() : ''
-        const content = uploadedContent || fieldValue(formData, 'content')
-        const payload = {
-          version_name: fieldValue(formData, 'version_name'),
-          changelog: fieldValue(formData, 'changelog'),
-          source_git_commit_id: fieldValue(formData, 'source_git_commit_id'),
-          content,
-          schema_content: content,
-        }
-        if (editable && selectedDraft) {
-          await onUpdate(selectedDraft.id, payload)
-        } else {
-          await onCreate({
-            ...payload,
-            branch_id: fieldValue(formData, 'branch_id'),
-          })
+      pending={busy}
+      resetOnSuccess={false}
+      disabled={
+        !contextActive ||
+        !selectedBranchActive ||
+        editor.conflict ||
+        (editable && (rawContent === undefined || rawContentState.isError))
+      }
+      onSubmit={async () => {
+        if (editor.conflict)
+          throw new Error(t('admin.draftEditor.conflictDescription'))
+        setSubmitting(true)
+        try {
+          const file = editor.values.file
+          const uploadedContent =
+            file instanceof File && file.size > 0 ? await file.text() : ''
+          const content = uploadedContent || editor.values.content
+          const payload = {
+            version_name: editor.values.version_name,
+            changelog: editor.values.changelog,
+            source_git_commit_id: editor.values.source_git_commit_id,
+            content,
+            schema_content: content,
+          }
+          if (editable && selectedDraft) {
+            await onUpdate(selectedDraft.id, payload)
+          } else {
+            await onCreate({
+              ...payload,
+              branch_id: editor.values.branch_id,
+            })
+          }
+          editor.saved()
+        } finally {
+          setSubmitting(false)
         }
       }}
     >
@@ -4064,62 +4098,120 @@ function DraftEditorCard({
         </Alert>
       )}
       {rawContentState.isError && <LoadingErrorState state={rawContentState} />}
-      <div className='grid gap-4 md:grid-cols-2'>
-        {editable ? (
+      {editor.dirty && (
+        <p role='status' className='text-sm text-muted-foreground'>
+          {t('admin.draftEditor.unsavedDescription')}
+        </p>
+      )}
+      {editor.conflict && (
+        <Alert aria-live='polite'>
+          <AlertCircle />
+          <AlertTitle>{t('admin.draftEditor.conflictTitle')}</AlertTitle>
+          <AlertDescription>
+            <p>{t('admin.draftEditor.conflictDescription')}</p>
+            <div className='flex flex-wrap gap-2 pt-2'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={busy}
+                onClick={editor.keepEdits}
+              >
+                {t('admin.draftEditor.keepEdits')}
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={busy}
+                onClick={editor.reload}
+              >
+                {t('admin.draftEditor.reload')}
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+      <fieldset className='grid min-w-0 gap-4' disabled={busy}>
+        <div className='grid gap-4 md:grid-cols-2'>
+          {editable ? (
+            <TextField
+              label={t('admin.fields.branch')}
+              name='branch_display'
+              defaultValue={
+                branches.find(
+                  (branch) => branch.id === selectedDraft?.branch_id
+                )?.name ?? selectedDraft?.branch_id
+              }
+              readOnly
+            />
+          ) : (
+            <NativeSelect
+              name='branch_id'
+              label={t('admin.fields.branch')}
+              placeholder={t('admin.placeholders.selectBranch')}
+              value={editor.values.branch_id}
+              onChange={(value) => editor.change('branch_id', value)}
+              options={branches.map((branch) => ({
+                value: branch.id,
+                label: branch.name,
+              }))}
+              required
+            />
+          )}
           <TextField
-            label={t('admin.fields.branch')}
-            name='branch_display'
-            defaultValue={
-              branches.find((branch) => branch.id === selectedDraft?.branch_id)
-                ?.name ?? selectedDraft?.branch_id
-            }
-            readOnly
-          />
-        ) : (
-          <NativeSelect
-            name='branch_id'
-            label={t('admin.fields.branch')}
-            placeholder={t('admin.placeholders.selectBranch')}
-            options={branches.map((branch) => ({
-              value: branch.id,
-              label: branch.name,
-            }))}
+            label={t('admin.fields.versionName')}
+            name='version_name'
+            value={editor.values.version_name}
+            onChange={(value) => editor.change('version_name', value)}
             required
           />
-        )}
-        <TextField
-          label={t('admin.fields.versionName')}
-          name='version_name'
-          defaultValue={selectedDraft?.version_name}
-          required
+          <TextField
+            label={t('admin.fields.gitCommit')}
+            name='source_git_commit_id'
+            value={editor.values.source_git_commit_id}
+            onChange={(value) => editor.change('source_git_commit_id', value)}
+          />
+          <TextField
+            label={t('admin.fields.changelog')}
+            name='changelog'
+            value={editor.values.changelog}
+            onChange={(value) => editor.change('changelog', value)}
+          />
+        </div>
+        <TextAreaField
+          label={t('admin.fields.content')}
+          name='content'
+          value={editor.values.content}
+          onChange={(value) => editor.change('content', value)}
         />
-        <TextField
-          label={t('admin.fields.gitCommit')}
-          name='source_git_commit_id'
-          defaultValue={selectedDraft?.source_git_commit_id}
-        />
-        <TextField
-          label={t('admin.fields.changelog')}
-          name='changelog'
-          defaultValue={selectedDraft?.changelog}
-        />
-      </div>
-      <TextAreaField
-        label={t('admin.fields.content')}
-        name='content'
-        defaultValue={editable ? rawContent : ''}
-      />
-      <div className='grid gap-2'>
-        <Label htmlFor={`schema-file-${selectedDraft?.id ?? 'new'}`}>
-          {t('admin.fields.schemaFile')}
-        </Label>
-        <Input
-          id={`schema-file-${selectedDraft?.id ?? 'new'}`}
-          name='schema_file'
-          type='file'
-          accept='.yaml,.yml,.json,.md,text/markdown,application/json,application/yaml,text/yaml'
-        />
-      </div>
+        <div className='grid gap-2'>
+          <Label htmlFor={`schema-file-${selectedDraft?.id ?? 'new'}`}>
+            {t('admin.fields.schemaFile')}
+          </Label>
+          <Input
+            id={`schema-file-${selectedDraft?.id ?? 'new'}`}
+            name='schema_file'
+            type='file'
+            onChange={(event) => {
+              editor.change('file', event.currentTarget.files?.[0])
+              event.currentTarget.value = ''
+            }}
+            accept='.yaml,.yml,.json,.md,text/markdown,application/json,application/yaml,text/yaml'
+          />
+          {editor.values.file && (
+            <div className='flex flex-wrap items-center gap-2 text-sm'>
+              <span className='break-all'>{editor.values.file.name}</span>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => editor.change('file', undefined)}
+              >
+                {t('admin.draftEditor.removeFile')}
+              </Button>
+            </div>
+          )}
+        </div>
+      </fieldset>
     </FormCard>
   )
 }

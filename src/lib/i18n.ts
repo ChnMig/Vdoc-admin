@@ -518,6 +518,14 @@ const en = {
         'The selected draft will be closed as rejected and cannot be edited again.',
     },
     draftEditor: {
+      unsavedDescription:
+        'Unsaved edits are kept for this document while you switch selections on this page. Save before leaving the page.',
+      conflictTitle: 'This draft changed on the server',
+      conflictDescription:
+        'Your unsaved edits are preserved. Keep your edits against the latest version, or discard them and load the server version before saving.',
+      keepEdits: 'Keep my edits',
+      reload: 'Discard edits and load server version',
+      removeFile: 'Remove file',
       createTitle: 'Create draft',
       editTitle: 'Edit selected draft',
       readOnlyTitle: 'Selected draft is read-only',
@@ -1677,6 +1685,14 @@ const zhCN = {
         '所选草稿会以已拒绝状态关闭，之后不能继续编辑。',
     },
     draftEditor: {
+      unsavedDescription:
+        '切换当前页面的文档或草稿时，会保留各自的未保存编辑。离开页面前请先保存。',
+      conflictTitle: '服务器上的草稿已更新',
+      conflictDescription:
+        '你的未保存编辑已保留。保存前，请选择在最新版本上保留自己的修改，或放弃本地编辑并加载服务器版本。',
+      keepEdits: '保留我的修改',
+      reload: '放弃本地编辑并加载服务器版本',
+      removeFile: '移除文件',
       createTitle: '创建草稿',
       editTitle: '编辑所选草稿',
       readOnlyTitle: '所选草稿为只读状态',

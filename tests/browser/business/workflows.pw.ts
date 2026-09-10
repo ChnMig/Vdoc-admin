@@ -293,6 +293,87 @@ async function installAdminApi(
   })
 }
 
+for (const viewport of [
+  { width: 1280, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`draft conflict preserves edits and supports both resolutions at ${viewport.width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport)
+    await installAdminSession(page)
+    await installAdminApi(page)
+    let serverContent = '# Original draft'
+    await page.route(
+      `**/drafts/${editableDraftId}/content/raw`,
+      async (route) => {
+        if (route.request().method() === 'OPTIONS') {
+          await fulfillOptions(route)
+          return
+        }
+        await fulfillEnvelope(route, {
+          owner_type: 'draft',
+          owner_id: editableDraftId,
+          kind: 'raw',
+          content_kind: 'markdown',
+          content: serverContent,
+          hash: serverContent,
+        })
+      }
+    )
+    await page.goto('/drafts/')
+    const draftSelect = page.getByLabel('Draft', { exact: true })
+    await draftSelect.selectOption(editableDraftId)
+    const content = page.getByLabel('Content', { exact: true })
+    await expect(content).toHaveValue('# Original draft')
+    await content.fill('# Local edits to retain')
+    await page.clock.install()
+    const refetch = async (nextContent: string) => {
+      serverContent = nextContent
+      await page.clock.fastForward(11_000)
+      await draftSelect.selectOption('')
+      await draftSelect.selectOption(editableDraftId)
+      await expect(
+        page.getByText('This draft changed on the server')
+      ).toBeVisible()
+    }
+    await refetch('# Updated server draft')
+    await expect(content).toHaveValue('# Local edits to retain')
+    const update = page.getByRole('button', { name: 'Update', exact: true })
+    await expect(update).toBeDisabled()
+    const editor = page.locator('[data-slot="card"]').filter({ has: content })
+    await editor.scrollIntoViewIfNeeded()
+    await editor.screenshot({
+      path: testInfo.outputPath(`draft-conflict-${viewport.width}.png`),
+    })
+    expect(
+      await editor.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth + 1
+      )
+    ).toBe(true)
+    await page
+      .getByRole('button', { name: 'Keep my edits', exact: true })
+      .click()
+    await expect(content).toHaveValue('# Local edits to retain')
+    await expect(update).toBeEnabled()
+    await expect(
+      page.getByText('This draft changed on the server')
+    ).toBeHidden()
+    await refetch('# Latest server draft')
+    await page
+      .getByRole('button', {
+        name: 'Discard edits and load server version',
+        exact: true,
+      })
+      .click()
+    await expect(content).toHaveValue('# Latest server draft')
+    await expect(update).toBeEnabled()
+    await expect(
+      page.getByText('This draft changed on the server')
+    ).toBeHidden()
+  })
+}
+
 test('draft review confirms and approves the selected submitted draft', async ({
   page,
 }) => {
