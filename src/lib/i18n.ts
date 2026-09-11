@@ -198,6 +198,16 @@ const en = {
     },
   },
   admin: {
+    pagination: {
+      label: 'Pagination',
+      previous: 'Previous',
+      next: 'Next',
+      range: 'Showing {from}–{to}',
+      total: '{total} results',
+      searchVersions: 'Search versions',
+      from: 'From (inclusive)',
+      to: 'Until (exclusive)',
+    },
     common: {
       loading: 'Loading backend data...',
       error: 'Backend request failed',
@@ -1385,6 +1395,16 @@ const zhCN = {
     },
   },
   admin: {
+    pagination: {
+      label: '分页',
+      previous: '上一页',
+      next: '下一页',
+      range: '第 {from}–{to} 条',
+      total: '共 {total} 条',
+      searchVersions: '搜索版本',
+      from: '开始时间（含）',
+      to: '结束时间（不含）',
+    },
     common: {
       loading: '正在加载后端数据...',
       error: '后端请求失败',

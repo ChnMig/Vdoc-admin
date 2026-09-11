@@ -63,14 +63,19 @@ function AIContextPanelContent({
   const sessionCreationRef = useRef<Promise<string> | null>(null)
   const sendLockedRef = useRef(false)
 
-  const summaryQuery = useQuery({
+  const summaryQuery = useQuery<AISummaryDTO | null>({
     queryKey: ['ai-summary', target],
-    queryFn: () => getAISummary(target ?? emptyTarget),
+    refetchInterval: (query) =>
+      query.state.data?.status === 'pending' && !query.state.error
+        ? 2000
+        : false,
+    queryFn: ({ signal }) => getAISummary(target ?? emptyTarget, { signal }),
     enabled: target !== undefined,
   })
   const chatSessionsQuery = useQuery({
     queryKey: ['ai-chat-sessions', targetKey, target],
-    queryFn: () => listAIChatSessions(target ?? emptyTarget),
+    queryFn: ({ signal }) =>
+      listAIChatSessions(target ?? emptyTarget, { signal }),
     enabled: target !== undefined,
   })
   const chatSessions = chatSessionsQuery.data?.items ?? []
@@ -82,7 +87,8 @@ function AIContextPanelContent({
       target?.projectId,
       activeSessionId,
     ],
-    queryFn: () => getAIChatSession(target?.projectId ?? '', activeSessionId),
+    queryFn: ({ signal }) =>
+      getAIChatSession(target?.projectId ?? '', activeSessionId, { signal }),
     enabled: target !== undefined && activeSessionId.length > 0,
   })
   const regenerateMutation = useMutation({
@@ -90,8 +96,10 @@ function AIContextPanelContent({
       if (!target || !canRegenerate) throw new Error('AI summary is read-only.')
       return regenerateAISummary(target)
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['ai-summary', target] }),
+    onSuccess: (summary) => {
+      queryClient.setQueryData(['ai-summary', target], summary)
+      return queryClient.invalidateQueries({ queryKey: ['ai-summary', target] })
+    },
   })
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -173,14 +181,21 @@ function AIContextPanelContent({
               variant='outline'
               size='sm'
               disabled={
-                !target || !canRegenerate || regenerateMutation.isPending
+                !target ||
+                !canRegenerate ||
+                regenerateMutation.isPending ||
+                summaryQuery.data?.status === 'pending'
               }
               onClick={() => regenerateMutation.mutate()}
             >
               {t('admin.ai.regenerateSummary')}
             </Button>
           </div>
-          <div className='min-h-32 rounded-md border bg-[var(--surface-control)] p-4 text-sm leading-6 text-muted-foreground'>
+          <div
+            role='status'
+            aria-live='polite'
+            className='min-h-32 rounded-md border bg-[var(--surface-control)] p-4 text-sm leading-6 text-muted-foreground'
+          >
             {summaryContent(summaryQuery.data, summaryQuery.isLoading, t)}
           </div>
           <AIRequestError

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { TeamsPage } from '@/features/vdoc-admin/pages'
+import { TeamsPage } from '@/features/vdoc-admin/teams-page'
 
 export const Route = createFileRoute('/_authenticated/teams/')({
   component: TeamsPage,

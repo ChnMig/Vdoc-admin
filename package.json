@@ -19,7 +19,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:browser": "node scripts/run-playwright.mjs",
-    "test:browser:live": "node scripts/run-playwright.mjs --project=live-capability-text"
+    "test:browser:live": "node scripts/run-playwright.mjs --project=live-capability-text",
+    "check:build-budget": "node scripts/check-build-budget.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

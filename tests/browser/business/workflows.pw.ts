@@ -199,6 +199,22 @@ async function installAdminApi(
     }
     if (
       method === 'GET' &&
+      path ===
+        `/api/v1/private/projects/${projectId}/documents/${documentId}/overview`
+    ) {
+      await fulfillEnvelope(route, {
+        version_count: 2,
+        endpoint_count: 0,
+        latest_version: latestVersion,
+        published_branch_ids: [branchId],
+        has_reviewed_draft: true,
+        raw_size_bytes: 120,
+        raw_line_count: 5,
+      })
+      return
+    }
+    if (
+      method === 'GET' &&
       path === `/api/v1/private/projects/${projectId}/documents`
     ) {
       await fulfillEnvelope(route, [document], { total: 1 })
@@ -274,6 +290,24 @@ async function installAdminApi(
     }
     if (
       method === 'GET' &&
+      (path.endsWith('/shares') || path.endsWith('/diffs'))
+    ) {
+      await fulfillEnvelope(route, [], { total: 0 })
+      return
+    }
+    if (
+      method === 'GET' &&
+      (path.endsWith(`/versions/${latestVersionId}`) ||
+        path.endsWith(`/versions/${previousVersionId}`))
+    ) {
+      await fulfillEnvelope(
+        route,
+        path.endsWith(latestVersionId) ? latestVersion : previousVersion
+      )
+      return
+    }
+    if (
+      method === 'GET' &&
       path === `/api/v1/private/projects/${projectId}/ai/chat-sessions`
     ) {
       await fulfillEnvelope(route, [], { total: 0 })
@@ -292,6 +326,171 @@ async function installAdminApi(
     throw new Error(`Unexpected Admin API request: ${method} ${path}`)
   })
 }
+
+for (const width of [1280, 390]) {
+  test(`document overview uses one statistics request at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    const paths: string[] = []
+    page.on('request', (request) => paths.push(new URL(request.url()).pathname))
+    await page.goto('/documents/')
+    await expect(page.getByText('120 B', { exact: true })).toBeVisible()
+    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(1)
+    expect(
+      paths.some(
+        (path) =>
+          path.endsWith('/versions') ||
+          path.includes('/content/') ||
+          path.endsWith('/endpoints')
+      )
+    ).toBe(false)
+    await expect(page.getByLabel('Document', { exact: true })).toHaveValue(
+      documentId
+    )
+  })
+}
+
+test('diff version pagination retains selected historical versions', async ({
+  page,
+}) => {
+  await installAdminSession(page)
+  await installAdminApi(page)
+  const offsets: string[] = []
+  await page.route('**/versions?*', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await fulfillOptions(route)
+      return
+    }
+    const params = new URL(route.request().url()).searchParams
+    expect(params.get('page_size')).toBe('50')
+    offsets.push(params.get('offset') ?? '0')
+    const offset = Number(params.get('offset') ?? '0')
+    await fulfillEnvelope(
+      route,
+      Array.from({ length: 50 }, (_, i) => ({
+        ...latestVersion,
+        id: (offset + i + 1).toString(16).padStart(32, '0'),
+        version_name: `release-${offset + i + 1}`,
+      })),
+      { total: 100 }
+    )
+  })
+  await page.goto(
+    `/diffs/?project_id=${projectId}&document_id=${documentId}&from_version_id=${previousVersionId}&to_version_id=${latestVersionId}`
+  )
+  const from = page.getByLabel('From version', { exact: true })
+  await expect(from).toHaveValue(previousVersionId)
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect.poll(() => offsets.includes('50')).toBe(true)
+  await expect(from).toHaveValue(previousVersionId)
+  await expect(page.getByLabel('To version', { exact: true })).toHaveValue(
+    latestVersionId
+  )
+})
+
+test('a comparison completed after document navigation stays in its original history', async ({
+  page,
+}) => {
+  await installAdminSession(page)
+  await installAdminApi(page)
+  const otherDocument = {
+    ...document,
+    id: 'document-other',
+    name: 'Other Handbook',
+  }
+  const result = {
+    id: 'cccccccccccccccccccccccccccccccc',
+    document_id: documentId,
+    from_version_id: previousVersionId,
+    to_version_id: latestVersionId,
+    diff_status: 1,
+    summary: {
+      added_endpoints: 0,
+      removed_endpoints: 0,
+      modified_endpoints: 0,
+      breaking_changes: 0,
+    },
+    items: [],
+    created_at: timestamp,
+    updated_at: timestamp,
+  }
+  let releaseComparison!: () => void
+  const comparisonGate = new Promise<void>((resolve) => {
+    releaseComparison = resolve
+  })
+  let comparisonStarted = false
+  let comparisonFinished = false
+  const documentPath = `/api/v1/private/projects/${projectId}/documents`
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    if (method === 'POST' && path === `${documentPath}/${documentId}/diffs`) {
+      comparisonStarted = true
+      await comparisonGate
+      comparisonFinished = true
+      await fulfillEnvelope(route, result)
+      return
+    }
+    if (method === 'GET' && path === documentPath) {
+      await fulfillEnvelope(route, [document, otherDocument], { total: 2 })
+      return
+    }
+    if (method === 'GET' && path === `${documentPath}/${documentId}/diffs`) {
+      await fulfillEnvelope(route, comparisonFinished ? [result] : [], {
+        total: comparisonFinished ? 1 : 0,
+      })
+      return
+    }
+    if (
+      method === 'GET' &&
+      path === `${documentPath}/${documentId}/diffs/${result.id}/summary`
+    ) {
+      await fulfillEnvelope(route, result.summary)
+      return
+    }
+    if (
+      method === 'GET' &&
+      path.startsWith(`${documentPath}/${otherDocument.id}/`)
+    ) {
+      await fulfillEnvelope(route, [], { total: 0 })
+      return
+    }
+    await route.fallback()
+  })
+  await page.goto(
+    `/diffs/?project_id=${projectId}&document_id=${documentId}&from_version_id=${previousVersionId}&to_version_id=${latestVersionId}`
+  )
+  await page.getByRole('button', { name: 'Compare', exact: true }).click()
+  await expect.poll(() => comparisonStarted).toBe(true)
+  const documentSelect = page.getByLabel('Document', { exact: true })
+  await documentSelect.selectOption(otherDocument.id)
+  await expect(documentSelect).toHaveValue(otherDocument.id)
+  await expect(page.getByLabel('From version', { exact: true })).toHaveValue('')
+  const switchedUrl = page.url()
+  const response = page.waitForResponse(
+    (value) =>
+      value.request().method() === 'POST' &&
+      value.url().endsWith(`/${documentId}/diffs`)
+  )
+  releaseComparison()
+  await response
+  await expect(page).toHaveURL(switchedUrl)
+  await expect(documentSelect).toHaveValue(otherDocument.id)
+  await expect(
+    page.getByText('Linked entity is unavailable', { exact: true })
+  ).toHaveCount(0)
+  await documentSelect.selectOption(documentId)
+  const history = page.getByText(
+    `${previousVersion.version_name} → ${latestVersion.version_name}`,
+    { exact: true }
+  )
+  await expect(history).toBeVisible()
+  await history.click()
+  await expect(page).toHaveURL(new RegExp(`diff_id=${result.id}`))
+})
 
 for (const viewport of [
   { width: 1280, height: 900 },

@@ -99,7 +99,9 @@ function panel(
       documentId={documentId}
       documentName='Document 1'
       branches={options.branches ?? [branch]}
-      versions={options.versions ?? [version]}
+      publishedBranchIds={(options.versions ?? [version])
+        .filter((item) => item.status === 1)
+        .map((item) => item.branch_id)}
       canManage
       interactive={options.interactive ?? true}
     />

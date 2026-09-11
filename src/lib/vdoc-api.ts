@@ -2,6 +2,11 @@ import axios from 'axios'
 import { useAuthStore, type AuthUser } from '@/stores/auth-store'
 import { parseSecureHttpOrigin } from './origin-security'
 
+export type RequestOptions = {
+  signal?: AbortSignal
+  page?: { page_size: number; offset?: number; search?: string }
+}
+
 export type VdocEnvelope<T> = {
   code: number
   status: string
@@ -11,6 +16,8 @@ export type VdocEnvelope<T> = {
   total?: number
   trace_id?: string
   timestamp: number
+  has_more?: boolean
+  next_cursor?: string
 }
 
 type VdocSession = {
@@ -21,6 +28,8 @@ type VdocSession = {
 type VdocList<T> = {
   items: T[]
   total: number
+  hasMore?: boolean
+  nextCursor?: string
 }
 
 type VdocHealthDependency = {
@@ -170,6 +179,9 @@ export type AuditLogQuery = {
   resource_type?: string
   resource_id?: string
   limit?: number
+  cursor?: string
+  from?: string
+  to?: string
 }
 
 export type MCPUsageQuery = {
@@ -210,6 +222,42 @@ export type VersionDTO = Omit<
   status: number
   published_by: string
   published_at: string
+}
+
+export type DocumentOverviewDTO = {
+  version_count: number
+  endpoint_count: number
+  latest_version: VersionDTO | null
+  published_branch_ids: string[]
+  has_reviewed_draft: boolean
+  raw_size_bytes: number
+  raw_line_count: number | null
+}
+
+export function getDocumentOverview(
+  projectId: string,
+  documentId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<DocumentOverviewDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/overview`,
+      { signal: options?.signal }
+    )
+  )
+}
+
+export function getDocumentMCPReadiness(
+  projectId: string,
+  documentId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<{ last_read_at: string | null }>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/mcp-readiness`,
+      { signal: options?.signal }
+    )
+  )
 }
 
 type DraftActionResultDTO = DraftDTO | VersionDTO
@@ -506,12 +554,18 @@ export const apiBaseUrl = resolveApiBaseUrl()
 
 export const vdocApi = axios.create({
   baseURL: apiBaseUrl,
+  timeout: 35_000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
 vdocApi.interceptors.request.use((config) => {
+  if (
+    config.method !== 'get' &&
+    (config.url?.includes('/ai/') || config.url?.includes('/ai-summary/'))
+  )
+    config.timeout = 160_000
   const token = useAuthStore.getState().auth.accessToken
   if (token) {
     config.headers.Authorization = token
@@ -545,6 +599,8 @@ export async function unwrapListEnvelope<T>(
   return {
     items: envelope.detail ?? [],
     total: envelope.total ?? envelope.detail?.length ?? 0,
+    ...(envelope.has_more === undefined ? {} : { hasMore: envelope.has_more }),
+    ...(envelope.next_cursor ? { nextCursor: envelope.next_cursor } : {}),
   }
 }
 
@@ -560,21 +616,27 @@ export function register(payload: RegisterPayload) {
   )
 }
 
-export function getAuthConfig() {
-  return unwrapEnvelope<AuthConfigDTO>(vdocApi.get('/api/v1/open/auth/config'))
+export function getAuthConfig(options?: RequestOptions) {
+  return unwrapEnvelope<AuthConfigDTO>(
+    vdocApi.get('/api/v1/open/auth/config', { signal: options?.signal })
+  )
 }
 
-export function getIdentity() {
-  return unwrapEnvelope<AuthUser>(vdocApi.get('/api/v1/private/identity/me'))
+export function getIdentity(options?: RequestOptions) {
+  return unwrapEnvelope<AuthUser>(
+    vdocApi.get('/api/v1/private/identity/me', { signal: options?.signal })
+  )
 }
 
-export function getHealth() {
-  return unwrapEnvelope<VdocHealth>(vdocApi.get('/api/v1/open/health'))
+export function getHealth(options?: RequestOptions) {
+  return unwrapEnvelope<VdocHealth>(
+    vdocApi.get('/api/v1/open/health', { signal: options?.signal })
+  )
 }
 
-export function listUsers() {
+export function listUsers(options?: RequestOptions) {
   return unwrapListEnvelope<UserDTO>(
-    vdocApi.get('/api/v1/private/system/users')
+    vdocApi.get('/api/v1/private/system/users', { signal: options?.signal })
   )
 }
 
@@ -590,9 +652,11 @@ export function patchUser(userId: string, payload: PatchUserPayload) {
   )
 }
 
-export function listUserMCPTokens(userId: string) {
+export function listUserMCPTokens(userId: string, options?: RequestOptions) {
   return unwrapListEnvelope<MCPTokenDTO>(
-    vdocApi.get(`/api/v1/private/system/users/${userId}/mcp-tokens`)
+    vdocApi.get(`/api/v1/private/system/users/${userId}/mcp-tokens`, {
+      signal: options?.signal,
+    })
   )
 }
 
@@ -604,8 +668,10 @@ export function revokeUserMCPToken(userId: string, tokenId: string) {
   )
 }
 
-export function listTeams() {
-  return unwrapListEnvelope<TeamDTO>(vdocApi.get('/api/v1/private/teams'))
+export function listTeams(options?: RequestOptions) {
+  return unwrapListEnvelope<TeamDTO>(
+    vdocApi.get('/api/v1/private/teams', { signal: options?.signal })
+  )
 }
 
 export function createTeam(payload: NameDescriptionPayload) {
@@ -624,8 +690,10 @@ export function archiveTeam(teamId: string) {
   )
 }
 
-export function listProjects() {
-  return unwrapListEnvelope<ProjectDTO>(vdocApi.get('/api/v1/private/projects'))
+export function listProjects(options?: RequestOptions) {
+  return unwrapListEnvelope<ProjectDTO>(
+    vdocApi.get('/api/v1/private/projects', { signal: options?.signal })
+  )
 }
 
 export function createProject(payload: CreateProjectPayload) {
@@ -649,15 +717,25 @@ export function archiveProject(projectId: string) {
   )
 }
 
-export function listProjectMembers(projectId: string) {
+export function listProjectMembers(
+  projectId: string,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<ProjectMemberDTO>(
-    vdocApi.get(`/api/v1/private/projects/${projectId}/members`)
+    vdocApi.get(`/api/v1/private/projects/${projectId}/members`, {
+      signal: options?.signal,
+    })
   )
 }
 
-export function listProjectMemberCandidates(projectId: string) {
+export function listProjectMemberCandidates(
+  projectId: string,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<UserDTO>(
-    vdocApi.get(`/api/v1/private/projects/${projectId}/member-candidates`)
+    vdocApi.get(`/api/v1/private/projects/${projectId}/member-candidates`, {
+      signal: options?.signal,
+    })
   )
 }
 
@@ -689,9 +767,14 @@ export function removeProjectMember(projectId: string, userId: string) {
   )
 }
 
-export function listDocuments(projectId: string, documentType?: number) {
+export function listDocuments(
+  projectId: string,
+  documentType?: number,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<DocumentDTO>(
     vdocApi.get(`/api/v1/private/projects/${projectId}/documents`, {
+      signal: options?.signal,
       params: documentType ? { document_type: documentType } : undefined,
     })
   )
@@ -727,10 +810,15 @@ export function archiveDocument(projectId: string, documentId: string) {
   )
 }
 
-export function listBranches(projectId: string, documentId: string) {
+export function listBranches(
+  projectId: string,
+  documentId: string,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<BranchDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/branches`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/branches`,
+      { signal: options?.signal }
     )
   )
 }
@@ -777,12 +865,16 @@ export function archiveBranch(
 export function listDrafts(
   projectId: string,
   documentId: string,
-  branchId?: string
+  branchId?: string,
+  options?: RequestOptions
 ) {
   return unwrapListEnvelope<DraftDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts`,
-      { params: branchId ? { branch_id: branchId } : undefined }
+      {
+        signal: options?.signal,
+        params: branchId ? { branch_id: branchId } : undefined,
+      }
     )
   )
 }
@@ -818,11 +910,13 @@ export function getDraftContent(
   projectId: string,
   documentId: string,
   draftId: string,
-  contentKind: string
+  contentKind: string,
+  options?: RequestOptions
 ) {
   return unwrapEnvelope<ContentDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/content/${contentKind}`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/content/${contentKind}`,
+      { signal: options?.signal }
     )
   )
 }
@@ -891,12 +985,34 @@ export function promoteDraft(
 export function listVersions(
   projectId: string,
   documentId: string,
-  branchId?: string
+  branchId?: string,
+  options?: RequestOptions
 ) {
   return unwrapListEnvelope<VersionDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/versions`,
-      { params: branchId ? { branch_id: branchId } : undefined }
+      {
+        signal: options?.signal,
+        params: options?.page
+          ? { branch_id: branchId, ...options.page }
+          : branchId
+            ? { branch_id: branchId }
+            : undefined,
+      }
+    )
+  )
+}
+
+export function getVersion(
+  projectId: string,
+  documentId: string,
+  versionId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<VersionDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}`,
+      { signal: options?.signal }
     )
   )
 }
@@ -905,11 +1021,13 @@ export function getVersionContent(
   projectId: string,
   documentId: string,
   versionId: string,
-  contentKind: string
+  contentKind: string,
+  options?: RequestOptions
 ) {
   return unwrapEnvelope<ContentDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}/content/${contentKind}`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}/content/${contentKind}`,
+      { signal: options?.signal }
     )
   )
 }
@@ -918,12 +1036,13 @@ export function listEndpoints(
   projectId: string,
   documentId: string,
   versionId: string,
-  path?: string
+  path?: string,
+  options?: RequestOptions
 ) {
   return unwrapListEnvelope<EndpointSummaryDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}/endpoints`,
-      { params: { path } }
+      { signal: options?.signal, params: { path, ...options?.page } }
     )
   )
 }
@@ -932,11 +1051,13 @@ export function getEndpoint(
   projectId: string,
   documentId: string,
   versionId: string,
-  endpointId: string
+  endpointId: string,
+  options?: RequestOptions
 ) {
   return unwrapEnvelope<EndpointDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}/endpoints/${endpointId}`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/versions/${versionId}/endpoints/${endpointId}`,
+      { signal: options?.signal }
     )
   )
 }
@@ -958,12 +1079,14 @@ export function listDiffs(
   projectId: string,
   documentId: string,
   fromVersionId?: string,
-  toVersionId?: string
+  toVersionId?: string,
+  options?: RequestOptions
 ) {
   return unwrapListEnvelope<DiffDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs`,
       {
+        signal: options?.signal,
         params: {
           from_version_id: fromVersionId || undefined,
           to_version_id: toVersionId || undefined,
@@ -973,27 +1096,35 @@ export function listDiffs(
   )
 }
 
-export function listAuditLogs(query: AuditLogQuery = {}) {
+export function listAuditLogs(
+  query: AuditLogQuery = {},
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<AuditLogDTO>(
-    vdocApi.get('/api/v1/private/audit-logs', { params: query })
+    vdocApi.get('/api/v1/private/audit-logs', {
+      signal: options?.signal,
+      params: query,
+    })
   )
 }
 
 export function getDiffSummary(
   projectId: string,
   documentId: string,
-  diffId: string
+  diffId: string,
+  options?: RequestOptions
 ) {
   return unwrapEnvelope<DiffSummaryDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}/summary`
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}/summary`,
+      { signal: options?.signal }
     )
   )
 }
 
-export function getSystemAIProvider() {
+export function getSystemAIProvider(options?: RequestOptions) {
   return unwrapEnvelope<AIProviderDTO>(
-    vdocApi.get('/api/v1/private/ai/provider')
+    vdocApi.get('/api/v1/private/ai/provider', { signal: options?.signal })
   )
 }
 
@@ -1009,9 +1140,14 @@ export function testSystemAIProvider(payload?: AIProviderPayload) {
   )
 }
 
-export function getProjectAIProvider(projectId: string) {
+export function getProjectAIProvider(
+  projectId: string,
+  options?: RequestOptions
+) {
   return unwrapEnvelope<AIProviderDTO>(
-    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/provider`)
+    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/provider`, {
+      signal: options?.signal,
+    })
   )
 }
 
@@ -1036,9 +1172,9 @@ export function testProjectAIProvider(
   )
 }
 
-export function listSystemAIPrompts() {
+export function listSystemAIPrompts(options?: RequestOptions) {
   return unwrapListEnvelope<AIPromptTemplateDTO>(
-    vdocApi.get('/api/v1/private/ai/prompts')
+    vdocApi.get('/api/v1/private/ai/prompts', { signal: options?.signal })
   )
 }
 
@@ -1051,9 +1187,14 @@ export function updateSystemAIPrompt(
   )
 }
 
-export function listProjectAIPrompts(projectId: string) {
+export function listProjectAIPrompts(
+  projectId: string,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<AIPromptTemplateDTO>(
-    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/prompts`)
+    vdocApi.get(`/api/v1/private/projects/${projectId}/ai/prompts`, {
+      signal: options?.signal,
+    })
   )
 }
 
@@ -1070,9 +1211,14 @@ export function updateProjectAIPrompt(
   )
 }
 
-export function getAISummary(target: AISummaryTarget) {
+export function getAISummary(
+  target: AISummaryTarget,
+  options?: RequestOptions
+) {
   return unwrapEnvelope<AISummaryDTO | null>(
-    vdocApi.get(`${aiSummaryPath(target)}/ai-summary`)
+    vdocApi.get(`${aiSummaryPath(target)}/ai-summary`, {
+      signal: options?.signal,
+    })
   )
 }
 
@@ -1094,11 +1240,15 @@ export function createAIChatSession(
   )
 }
 
-export function listAIChatSessions(target: AISummaryTarget) {
+export function listAIChatSessions(
+  target: AISummaryTarget,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<AIChatSessionDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${target.projectId}/ai/chat-sessions`,
       {
+        signal: options?.signal,
         params: {
           document_id: target.documentId,
           context_type: target.ownerType,
@@ -1109,10 +1259,15 @@ export function listAIChatSessions(target: AISummaryTarget) {
   )
 }
 
-export function getAIChatSession(projectId: string, sessionId: string) {
+export function getAIChatSession(
+  projectId: string,
+  sessionId: string,
+  options?: RequestOptions
+) {
   return unwrapEnvelope<AIChatSessionDetailDTO>(
     vdocApi.get(
-      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}`
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}`,
+      { signal: options?.signal }
     )
   )
 }
@@ -1134,15 +1289,21 @@ function aiSummaryPath(target: AISummaryTarget) {
   return `/api/v1/private/projects/${target.projectId}/documents/${target.documentId}/${aiSummaryOwnerPath[target.ownerType]}/${target.ownerId}`
 }
 
-export function listMCPTokens() {
+export function listMCPTokens(options?: RequestOptions) {
   return unwrapListEnvelope<MCPTokenDTO>(
-    vdocApi.get('/api/v1/private/mcp-tokens')
+    vdocApi.get('/api/v1/private/mcp-tokens', { signal: options?.signal })
   )
 }
 
-export function listMCPUsage(query: MCPUsageQuery = {}) {
+export function listMCPUsage(
+  query: MCPUsageQuery = {},
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<AuditLogDTO>(
-    vdocApi.get('/api/v1/private/mcp-usage', { params: query })
+    vdocApi.get('/api/v1/private/mcp-usage', {
+      signal: options?.signal,
+      params: query,
+    })
   )
 }
 
@@ -1152,9 +1313,11 @@ export function createMCPToken(payload: CreateMCPTokenPayload) {
   )
 }
 
-export function getMCPToken(tokenId: string) {
+export function getMCPToken(tokenId: string, options?: RequestOptions) {
   return unwrapEnvelope<MCPTokenDTO>(
-    vdocApi.get(`/api/v1/private/mcp-tokens/${tokenId}`)
+    vdocApi.get(`/api/v1/private/mcp-tokens/${tokenId}`, {
+      signal: options?.signal,
+    })
   )
 }
 

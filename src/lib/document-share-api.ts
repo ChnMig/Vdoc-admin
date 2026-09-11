@@ -1,4 +1,9 @@
-import { unwrapEnvelope, unwrapListEnvelope, vdocApi } from './vdoc-api'
+import {
+  type RequestOptions,
+  unwrapEnvelope,
+  unwrapListEnvelope,
+  vdocApi,
+} from './vdoc-api'
 
 type DocumentShareVersionScope = 1 | 2
 
@@ -44,9 +49,15 @@ function documentSharesPath(projectId: string, documentId: string): string {
   return `/api/v1/private/projects/${projectId}/documents/${documentId}/shares`
 }
 
-export function listDocumentShares(projectId: string, documentId: string) {
+export function listDocumentShares(
+  projectId: string,
+  documentId: string,
+  options?: RequestOptions
+) {
   return unwrapListEnvelope<DocumentShareDTO>(
-    vdocApi.get(documentSharesPath(projectId, documentId))
+    vdocApi.get(documentSharesPath(projectId, documentId), {
+      signal: options?.signal,
+    })
   )
 }
 

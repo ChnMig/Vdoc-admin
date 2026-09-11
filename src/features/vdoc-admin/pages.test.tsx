@@ -25,9 +25,12 @@ import {
   updateSystemAIProvider,
   updateSystemAIPrompt,
 } from '@/lib/vdoc-api'
+import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 import { LanguageProvider } from '@/context/language-provider'
+import { AuditPage } from './audit-page'
 import {
   DashboardPage,
+  DocumentsPage,
   DiffsPage,
   DraftsPage,
   ConfirmActionButton,
@@ -48,6 +51,8 @@ const apiMocks = vi.hoisted(() => ({
   createDraft: vi.fn(),
   createAIChatSession: vi.fn(),
   getAISummary: vi.fn(),
+  getDocumentOverview: vi.fn(),
+  getDocumentMCPReadiness: vi.fn(),
   getAIChatSession: vi.fn(),
   getDiffSummary: vi.fn(),
   getDraftContent: vi.fn(),
@@ -57,6 +62,8 @@ const apiMocks = vi.hoisted(() => ({
   getMCPToken: vi.fn(),
   getProjectAIProvider: vi.fn(),
   getSystemAIProvider: vi.fn(),
+  getVersion: vi.fn(),
+  listAuditLogs: vi.fn(),
   getVersionContent: vi.fn(),
   listBranches: vi.fn(),
   listAIChatSessions: vi.fn(),
@@ -107,6 +114,8 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     createDraft: apiMocks.createDraft,
     createAIChatSession: apiMocks.createAIChatSession,
     getAISummary: apiMocks.getAISummary,
+    getDocumentOverview: apiMocks.getDocumentOverview,
+    getDocumentMCPReadiness: apiMocks.getDocumentMCPReadiness,
     getAIChatSession: apiMocks.getAIChatSession,
     getDiffSummary: apiMocks.getDiffSummary,
     getDraftContent: apiMocks.getDraftContent,
@@ -116,6 +125,8 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     getMCPToken: apiMocks.getMCPToken,
     getProjectAIProvider: apiMocks.getProjectAIProvider,
     getSystemAIProvider: apiMocks.getSystemAIProvider,
+    getVersion: apiMocks.getVersion,
+    listAuditLogs: apiMocks.listAuditLogs,
     getVersionContent: apiMocks.getVersionContent,
     listBranches: apiMocks.listBranches,
     listAIChatSessions: apiMocks.listAIChatSessions,
@@ -182,11 +193,12 @@ vi.mock('@/components/theme-switch', () => ({
   ThemeSwitch: () => <button type='button'>Theme</button>,
 }))
 
-function renderPage(element: ReactNode) {
-  const queryClient = new QueryClient({
+function renderPage(
+  element: ReactNode,
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-
+) {
   return render(
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>{element}</LanguageProvider>
@@ -208,12 +220,51 @@ function setAuthUser(user: typeof identityFixture | null) {
 }
 
 beforeEach(() => {
+  apiMocks.getDocumentOverview.mockResolvedValue({
+    version_count: 0,
+    endpoint_count: 0,
+    latest_version: null,
+    published_branch_ids: [],
+    has_reviewed_draft: false,
+    raw_size_bytes: 0,
+    raw_line_count: null,
+  })
+  apiMocks.getDocumentMCPReadiness.mockResolvedValue({ last_read_at: null })
   useVdocContextStore.getState().reset()
   setAuthUser(identityFixture)
 })
 
 afterEach(() => {
   document.cookie = 'vdoc-admin-language=; Max-Age=0; Path=/'
+})
+
+describe('Document overview reads', () => {
+  it('renders statistics without downloading version lists, endpoints, or Markdown content', async () => {
+    vi.clearAllMocks()
+    mockWorkspaceQueries()
+    setAuthUser({ ...identityFixture, is_super_admin: false })
+    apiMocks.listProjectMembers.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.getDocumentOverview.mockResolvedValue({
+      version_count: 4000,
+      endpoint_count: 0,
+      latest_version: markdownVersionFixture,
+      published_branch_ids: [],
+      has_reviewed_draft: false,
+      raw_size_bytes: 1234,
+      raw_line_count: 98,
+    })
+    const screen = renderPage(<DocumentsPage />)
+    expect(await screen.findByText('4000')).toBeInTheDocument()
+    expect(screen.getByText('1234 B')).toBeInTheDocument()
+    expect(apiMocks.getDocumentOverview).toHaveBeenCalledWith(
+      'project-1',
+      'document-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(apiMocks.listVersions).not.toHaveBeenCalled()
+    expect(apiMocks.listEndpoints).not.toHaveBeenCalled()
+    expect(apiMocks.getVersionContent).not.toHaveBeenCalled()
+  })
 })
 
 describe('DashboardPage role boundaries', () => {
@@ -438,6 +489,18 @@ describe('DashboardPage role boundaries', () => {
   })
 
   it('replaces next-step guidance with a completed state when all checks pass', async () => {
+    apiMocks.getDocumentOverview.mockResolvedValue({
+      version_count: 1,
+      endpoint_count: 0,
+      latest_version: markdownVersionFixture,
+      published_branch_ids: [branchFixture.id],
+      has_reviewed_draft: true,
+      raw_size_bytes: 20,
+      raw_line_count: 2,
+    })
+    apiMocks.getDocumentMCPReadiness.mockResolvedValue({
+      last_read_at: '2026-01-01T01:00:00Z',
+    })
     apiMocks.listDrafts.mockResolvedValue({
       items: [{ ...draftFixture, status: 2 }],
       total: 1,
@@ -500,6 +563,9 @@ describe('DashboardPage role boundaries', () => {
       )
     ).toBeInTheDocument()
     expect(within(guidance).queryByRole('link')).not.toBeInTheDocument()
+    expect(apiMocks.listMCPUsage).not.toHaveBeenCalled()
+    expect(apiMocks.listVersions).not.toHaveBeenCalled()
+    expect(apiMocks.listDrafts).not.toHaveBeenCalled()
   })
 })
 
@@ -747,7 +813,10 @@ describe('ProjectsPage lifecycle boundaries', () => {
       expect(screen.getByLabelText('Project')).toHaveValue('project-2')
     )
     await waitFor(() =>
-      expect(apiMocks.listProjectMembers).toHaveBeenCalledWith('project-2')
+      expect(apiMocks.listProjectMembers).toHaveBeenCalledWith(
+        'project-2',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     )
   })
 
@@ -1227,10 +1296,13 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect(screen.getAllByText(/version_id=version-1/).length).toBeGreaterThan(
       0
     )
-    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith({
-      token_id: token.id,
-      limit: 200,
-    })
+    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith(
+      {
+        token_id: token.id,
+        limit: 200,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(getMCPToken).not.toHaveBeenCalled()
     expect(screen.queryByText(/vdoc_[a-z0-9]{48}/)).not.toBeInTheDocument()
   })
@@ -1358,10 +1430,13 @@ describe('MCPTokensPage secret lifecycle', () => {
       expect(screen.queryByText('get_latest_schema')).not.toBeInTheDocument()
     )
     expect(apiMocks.listMCPUsage).toHaveBeenCalledTimes(1)
-    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith({
-      token_id: undefined,
-      limit: 200,
-    })
+    expect(apiMocks.listMCPUsage).toHaveBeenCalledWith(
+      {
+        token_id: undefined,
+        limit: 200,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
   })
 
   it('coalesces rapid token creation submissions', async () => {
@@ -1563,6 +1638,70 @@ describe('VersionsPage', () => {
     mockAIQueries('version', 'version-1')
   })
 
+  it('paginates versions on the server and keeps an older deep link selected', async () => {
+    const user = userEvent.setup()
+    const first = {
+      ...markdownVersionFixture,
+      id: 'version-1',
+      version_name: 'v1',
+    }
+    const older = {
+      ...markdownVersionFixture,
+      id: 'version-older',
+      version_name: 'v0',
+    }
+    apiMocks.listVersions.mockImplementation(
+      (_project, _document, _branch, options) =>
+        Promise.resolve({
+          items: options?.page?.offset ? [older] : [first],
+          total: 51,
+          hasMore: !options?.page?.offset,
+        })
+    )
+    apiMocks.getVersion.mockResolvedValue(older)
+    const screen = renderPage(
+      <VersionsPage
+        search={{
+          project_id: 'project-1',
+          document_id: 'document-1',
+          version_id: 'version-older',
+        }}
+      />
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Version')).toHaveValue('version-older')
+    )
+    expect(apiMocks.getVersion).toHaveBeenCalledWith(
+      'project-1',
+      'document-1',
+      'version-older',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() =>
+      expect(apiMocks.listVersions).toHaveBeenLastCalledWith(
+        'project-1',
+        'document-1',
+        undefined,
+        expect.objectContaining({
+          page: { page_size: 50, offset: 50, search: '' },
+        })
+      )
+    )
+    expect(screen.getByLabelText('Version')).toHaveValue('version-older')
+    await user.type(screen.getByLabelText('Search versions'), 'v0')
+    await waitFor(() =>
+      expect(apiMocks.listVersions).toHaveBeenLastCalledWith(
+        'project-1',
+        'document-1',
+        undefined,
+        expect.objectContaining({
+          page: { page_size: 50, offset: 0, search: 'v0' },
+        })
+      )
+    )
+  })
+
   it('renders Markdown facts for Markdown versions without requesting endpoints', async () => {
     const screen = renderVersionsPage()
 
@@ -1583,13 +1722,23 @@ describe('VersionsPage', () => {
     expect(screen.queryByLabelText('Endpoint search')).not.toBeInTheDocument()
 
     await waitFor(() => expect(listProjects).toHaveBeenCalledOnce())
-    expect(listDocuments).toHaveBeenCalledWith('project-1')
-    expect(listVersions).toHaveBeenCalledWith('project-1', 'document-1')
+    expect(listDocuments).toHaveBeenCalledWith(
+      'project-1',
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(listVersions).toHaveBeenCalledWith(
+      'project-1',
+      'document-1',
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(getVersionContent).toHaveBeenCalledWith(
       'project-1',
       'document-1',
       'version-1',
-      'raw'
+      'raw',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     expect(listEndpoints).not.toHaveBeenCalled()
     expect(getEndpoint).not.toHaveBeenCalled()
@@ -1617,7 +1766,10 @@ describe('VersionsPage', () => {
     await waitFor(() =>
       expect(regenerateAISummary).toHaveBeenCalledWith(target)
     )
-    expect(getAISummary).toHaveBeenCalledWith(target)
+    expect(getAISummary).toHaveBeenCalledWith(
+      target,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(createAIChatSession).toHaveBeenCalledWith('project-1', {
       document_id: 'document-1',
       context_type: 'version',
@@ -1661,13 +1813,15 @@ describe('VersionsPage', () => {
     expect(listVersions).toHaveBeenCalledWith(
       projectFixture.id,
       markdownDocumentFixture.id,
-      branchFixture.id
+      branchFixture.id,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     expect(getVersionContent).toHaveBeenCalledWith(
       projectFixture.id,
       markdownDocumentFixture.id,
       linkedVersion.id,
-      'raw'
+      'raw',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     expect(
       screen.queryByText('Linked entity is unavailable')
@@ -2152,13 +2306,15 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     expect(apiMocks.listDrafts).toHaveBeenCalledWith(
       projectFixture.id,
       markdownDocumentFixture.id,
-      branchFixture.id
+      branchFixture.id,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     expect(apiMocks.getDraftContent).toHaveBeenCalledWith(
       projectFixture.id,
       markdownDocumentFixture.id,
       draftFixture.id,
-      'raw'
+      'raw',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
   })
 
@@ -2202,12 +2358,15 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     expect(await screen.findByText('AI summary for draft')).toBeInTheDocument()
 
     await waitFor(() =>
-      expect(getAISummary).toHaveBeenCalledWith({
-        projectId: 'project-1',
-        documentId: 'document-1',
-        ownerType: 'draft',
-        ownerId: 'draft-1',
-      })
+      expect(getAISummary).toHaveBeenCalledWith(
+        {
+          projectId: 'project-1',
+          documentId: 'document-1',
+          ownerType: 'draft',
+          ownerId: 'draft-1',
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     )
   })
 
@@ -2229,13 +2388,237 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       from_version_id: 'version-0',
       to_version_id: 'version-1',
     })
-    expect(getAISummary).toHaveBeenCalledWith({
-      projectId: 'project-1',
-      documentId: 'document-1',
-      ownerType: 'diff',
-      ownerId: 'diff-1',
-    })
+    expect(getAISummary).toHaveBeenCalledWith(
+      {
+        projectId: 'project-1',
+        documentId: 'document-1',
+        ownerType: 'diff',
+        ownerId: 'diff-1',
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
   })
+
+  it.each(['document', 'version', 'unmount', 'round-trip'] as const)(
+    'ignores a late comparison after a %s navigation',
+    async (navigation) => {
+      mockAIQueries('diff', diffFixture.id)
+      const completion = createDeferred<typeof diffFixture>()
+      apiMocks.compareDiff.mockReturnValue(completion.promise)
+      apiMocks.listDocuments.mockResolvedValue({
+        items: [
+          markdownDocumentFixture,
+          {
+            ...markdownDocumentFixture,
+            id: 'document-2',
+            name: 'Second document',
+          },
+        ],
+        total: 2,
+      })
+      apiMocks.listVersions.mockImplementation(
+        async (_project, documentId) => ({
+          items:
+            documentId === 'document-1'
+              ? [fromVersionFixture, markdownVersionFixture]
+              : [],
+          total: documentId === 'document-1' ? 2 : 0,
+        })
+      )
+      const routeChanges = vi.fn()
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      function Harness() {
+        const [search, setSearch] = useState<VdocRouteSearch>({
+          project_id: 'project-1',
+          document_id: 'document-1',
+          from_version_id: 'version-0',
+          to_version_id: 'version-1',
+        })
+        return (
+          <DiffsPage
+            search={search}
+            onSearchChange={(patch) => {
+              routeChanges(patch)
+              setSearch((current) => ({ ...current, ...patch }))
+            }}
+          />
+        )
+      }
+      const screen = renderPage(<Harness />, queryClient)
+      const user = userEvent.setup()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+      )
+      await user.click(screen.getByRole('button', { name: 'Compare' }))
+      expect(compareDiff).toHaveBeenCalledWith('project-1', 'document-1', {
+        from_version_id: 'version-0',
+        to_version_id: 'version-1',
+      })
+      if (navigation === 'unmount') {
+        screen.unmount()
+      } else if (navigation === 'version') {
+        await user.selectOptions(
+          screen.getByLabelText('From version'),
+          'version-1'
+        )
+      } else {
+        await user.selectOptions(
+          screen.getByLabelText('Document'),
+          'document-2'
+        )
+        await waitFor(() =>
+          expect(screen.getByLabelText('Document')).toHaveValue('document-2')
+        )
+        if (navigation === 'round-trip') {
+          await user.selectOptions(
+            screen.getByLabelText('Document'),
+            'document-1'
+          )
+          await user.selectOptions(
+            screen.getByLabelText('From version'),
+            'version-0'
+          )
+          await user.selectOptions(
+            screen.getByLabelText('To version'),
+            'version-1'
+          )
+        }
+      }
+      routeChanges.mockClear()
+      await act(async () => completion.resolve(diffFixture))
+      await waitFor(() => expect(queryClient.isMutating()).toBe(0))
+      expect(
+        routeChanges.mock.calls.some(
+          ([patch]) => patch.diff_id === diffFixture.id
+        )
+      ).toBe(false)
+      if (navigation === 'document') {
+        expect(screen.getByLabelText('Document')).toHaveValue('document-2')
+        expect(screen.getByLabelText('From version')).toHaveValue('')
+        expect(
+          screen.queryByText('Linked entity is unavailable')
+        ).not.toBeInTheDocument()
+      }
+      screen.unmount()
+      queryClient.clear()
+    }
+  )
+
+  it('updates the route and history when the comparison context is unchanged', async () => {
+    mockAIQueries('diff', diffFixture.id)
+    let compared = false
+    apiMocks.compareDiff.mockImplementation(async () => {
+      compared = true
+      return diffFixture
+    })
+    apiMocks.listDiffs.mockImplementation(async () => ({
+      items: compared ? [diffFixture] : [],
+      total: compared ? 1 : 0,
+    }))
+    const routeChanges = vi.fn()
+    const screen = renderPage(
+      <DiffsPage
+        search={{
+          project_id: 'project-1',
+          document_id: 'document-1',
+          from_version_id: 'version-0',
+          to_version_id: 'version-1',
+        }}
+        onSearchChange={routeChanges}
+      />
+    )
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: 'Compare' }))
+    await waitFor(() =>
+      expect(routeChanges).toHaveBeenCalledWith({
+        from_version_id: 'version-0',
+        to_version_id: 'version-1',
+        diff_id: 'diff-1',
+      })
+    )
+    expect(await screen.findByText('v0 → v1')).toBeInTheDocument()
+  })
+
+  it.each(['success', 'failure'] as const)(
+    'keeps a newer comparison selected after the previous request completes with %s',
+    async (result) => {
+      mockAIQueries('diff', diffFixture.id)
+      const oldRequest = createDeferred<typeof diffFixture>()
+      const newRequest = createDeferred<typeof diffFixture>()
+      apiMocks.compareDiff
+        .mockReturnValueOnce(oldRequest.promise)
+        .mockReturnValueOnce(newRequest.promise)
+      apiMocks.listVersions.mockResolvedValue({
+        items: [
+          fromVersionFixture,
+          markdownVersionFixture,
+          { ...markdownVersionFixture, id: 'version-2', version_name: 'v2' },
+        ],
+        total: 3,
+      })
+      const routeChanges = vi.fn()
+      function Harness() {
+        const [search, setSearch] = useState<VdocRouteSearch>({
+          project_id: 'project-1',
+          document_id: 'document-1',
+          from_version_id: 'version-0',
+          to_version_id: 'version-1',
+        })
+        return (
+          <DiffsPage
+            search={search}
+            onSearchChange={(patch) => {
+              routeChanges(patch)
+              setSearch((current) => ({ ...current, ...patch }))
+            }}
+          />
+        )
+      }
+      const screen = renderPage(<Harness />)
+      const user = userEvent.setup()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+      )
+      await user.click(screen.getByRole('button', { name: 'Compare' }))
+      await user.selectOptions(screen.getByLabelText('To version'), 'version-2')
+      expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+      await user.click(screen.getByRole('button', { name: 'Compare' }))
+      const latestDiff = {
+        ...diffFixture,
+        id: 'diff-new',
+        to_version_id: 'version-2',
+      }
+      apiMocks.listDiffs.mockResolvedValue({ items: [latestDiff], total: 1 })
+      await act(async () => newRequest.resolve(latestDiff))
+      await waitFor(() =>
+        expect(routeChanges).toHaveBeenCalledWith({
+          from_version_id: 'version-0',
+          to_version_id: 'version-2',
+          diff_id: 'diff-new',
+        })
+      )
+      routeChanges.mockClear()
+      await act(async () => {
+        if (result === 'success') oldRequest.resolve(diffFixture)
+        else oldRequest.reject(new Error('Old comparison failed'))
+        await oldRequest.promise.catch(() => undefined)
+      })
+      expect(screen.getByLabelText('To version')).toHaveValue('version-2')
+      expect(
+        routeChanges.mock.calls.some(
+          ([patch]) => patch.diff_id === diffFixture.id
+        )
+      ).toBe(false)
+      expect(
+        screen.queryByText('Old comparison failed')
+      ).not.toBeInTheDocument()
+    }
+  )
 
   it('labels stored diffs by version name and renders one filter option per label', async () => {
     apiMocks.listDiffs.mockResolvedValue({ items: [diffFixture], total: 1 })
@@ -2560,6 +2943,109 @@ describe('DraftsPage lifecycle boundaries', () => {
     expect(screen.queryByText('delayed.md')).not.toBeInTheDocument()
   })
 
+  it.each(['create', 'update'] as const)(
+    'refreshes the original document after a delayed file %s across document navigation',
+    async (operation) => {
+      let saved = false
+      const updatedDraft = {
+        ...draftFixture,
+        status: 1,
+        version_name: 'v-file',
+      }
+      apiMocks.listDocuments.mockResolvedValue({
+        items: [
+          markdownDocumentFixture,
+          {
+            ...markdownDocumentFixture,
+            id: 'document-2',
+            name: 'Second document',
+          },
+        ],
+        total: 2,
+      })
+      apiMocks.listDrafts.mockImplementation(async (_project, documentId) => {
+        const items =
+          documentId === 'document-1'
+            ? saved
+              ? [updatedDraft]
+              : operation === 'update'
+                ? [{ ...draftFixture, status: 1 }]
+                : []
+            : []
+        return { items, total: items.length }
+      })
+      const save =
+        operation === 'create' ? apiMocks.createDraft : apiMocks.updateDraft
+      save.mockImplementation(async () => {
+        saved = true
+        return updatedDraft
+      })
+      const read = createDeferred<string>()
+      const file = new File(['# Delayed upload'], 'delayed.md', {
+        type: 'text/markdown',
+      })
+      file.text = () => read.promise
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: 10_000 } },
+      })
+      const screen = renderPage(<DraftsPage />, queryClient)
+      const user = userEvent.setup()
+      await screen.findAllByRole('option', { name: 'main' })
+      if (operation === 'update') {
+        await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+        await screen.findByText('Edit selected draft')
+        await waitFor(() =>
+          expect(screen.getByLabelText('Content')).toHaveValue(
+            '# Loaded raw content'
+          )
+        )
+        await user.clear(screen.getByLabelText('Version name'))
+      } else {
+        await user.selectOptions(
+          screen.getAllByLabelText('Branch', { exact: true })[1],
+          'branch-1'
+        )
+      }
+      await user.type(screen.getByLabelText('Version name'), 'v-file')
+      await user.upload(screen.getByLabelText('Schema or Markdown file'), file)
+      await user.click(
+        screen.getByRole('button', {
+          name: operation === 'create' ? 'Create' : 'Update',
+        })
+      )
+      expect(save).not.toHaveBeenCalled()
+      await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+      await waitFor(() =>
+        expect(
+          apiMocks.listDrafts.mock.calls.some(
+            (call) => call[1] === 'document-2'
+          )
+        ).toBe(true)
+      )
+      const otherDocumentReads = apiMocks.listDrafts.mock.calls.filter(
+        (call) => call[1] === 'document-2'
+      ).length
+      await act(async () => read.resolve('# Delayed upload'))
+      await waitFor(() => expect(queryClient.isMutating()).toBe(0))
+      expect(saved).toBe(true)
+      expect(save.mock.calls[0]?.slice(0, 2)).toEqual([
+        'project-1',
+        'document-1',
+      ])
+      expect(
+        apiMocks.listDrafts.mock.calls.filter(
+          (call) => call[1] === 'document-2'
+        )
+      ).toHaveLength(otherDocumentReads)
+      await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+      expect(
+        await screen.findByRole('option', { name: 'v-file' })
+      ).toBeInTheDocument()
+      screen.unmount()
+      queryClient.clear()
+    }
+  )
+
   for (const [status, label] of [
     [1, 'Draft'],
     [3, 'Changes requested'],
@@ -2593,7 +3079,8 @@ describe('DraftsPage lifecycle boundaries', () => {
         'project-1',
         'document-1',
         'draft-1',
-        'raw'
+        'raw',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     })
   }
@@ -2832,6 +3319,9 @@ describe('DraftsPage lifecycle boundaries', () => {
   })
 
   it('limits promotion sources and targets to valid active branch combinations', async () => {
+    apiMocks.getDocumentOverview.mockResolvedValue({
+      published_branch_ids: [branchFixture.id],
+    })
     const activeTarget = {
       ...branchFixture,
       id: 'branch-target',
@@ -3100,3 +3590,45 @@ function createDeferred<T>() {
   })
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
+
+describe('AuditPage cursor navigation', () => {
+  it('follows the next cursor, returns to the previous page and resets filters', async () => {
+    setAuthUser({ ...identityFixture, is_super_admin: true })
+    apiMocks.listProjects.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listAuditLogs.mockImplementation((query) =>
+      Promise.resolve({
+        items: [
+          {
+            id: query.cursor ? 'audit-old' : 'audit-new',
+            action: query.cursor ? 'old.event' : 'new.event',
+            resource_type: 'document',
+            metadata: { result: 'success' },
+            created_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+        hasMore: !query.cursor,
+        nextCursor: query.cursor ? undefined : 'opaque-cursor',
+      })
+    )
+    const user = userEvent.setup()
+    const screen = renderPage(<AuditPage />)
+    expect(await screen.findByText('new.event')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('old.event')).toBeInTheDocument()
+    expect(apiMocks.listAuditLogs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'opaque-cursor', limit: 50 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    await user.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(await screen.findByText('new.event')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.type(screen.getByLabelText('Action'), 'review')
+    await waitFor(() =>
+      expect(apiMocks.listAuditLogs).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cursor: undefined, action: 'review' }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+  })
+})

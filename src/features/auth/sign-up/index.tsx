@@ -19,7 +19,7 @@ export function SignUp() {
   const { t } = useLanguage()
   const authConfigQuery = useQuery({
     queryKey: ['auth-config'],
-    queryFn: getAuthConfig,
+    queryFn: ({ signal }) => getAuthConfig({ signal }),
     staleTime: 60_000,
   })
   const registrationEnabled =

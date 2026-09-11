@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { DraftsPage } from '@/features/vdoc-admin/pages'
+import { DraftsPage } from '@/features/vdoc-admin/drafts-page'
 
 export const Route = createFileRoute('/_authenticated/drafts/')({
   component: DraftsRoute,

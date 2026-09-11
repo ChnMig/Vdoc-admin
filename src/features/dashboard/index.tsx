@@ -1,1 +1,1 @@
-export { DashboardPage as Dashboard } from '@/features/vdoc-admin/pages'
+export { DashboardPage as Dashboard } from '@/features/vdoc-admin/dashboard-page'

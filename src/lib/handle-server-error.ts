@@ -1,4 +1,4 @@
-import { AxiosError } from 'axios'
+import { AxiosError, isCancel } from 'axios'
 import { toast } from 'sonner'
 import { getStoredLanguage, translate } from '@/lib/i18n'
 import { VdocApiError } from '@/lib/vdoc-api'
@@ -7,6 +7,11 @@ const message = (key: Parameters<typeof translate>[1]) =>
   translate(getStoredLanguage(), key)
 
 export function handleServerError(error: unknown) {
+  if (
+    isCancel(error) ||
+    (error instanceof DOMException && error.name === 'AbortError')
+  )
+    return
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console
     console.log('Vdoc request failed', sanitizeErrorForConsole(error))

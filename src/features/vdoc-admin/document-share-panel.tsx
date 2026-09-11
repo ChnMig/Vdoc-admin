@@ -24,7 +24,7 @@ import {
   parseDocumentShareSecret,
 } from '@/lib/document-share-url'
 import { resolvePublicShareBaseUrl } from '@/lib/public-share-config'
-import type { BranchDTO, VersionDTO } from '@/lib/vdoc-api'
+import type { BranchDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -53,7 +53,7 @@ export function DocumentSharePanel({
   documentId,
   documentName,
   branches,
-  versions,
+  publishedBranchIds,
   canManage,
   interactive,
 }: {
@@ -61,7 +61,7 @@ export function DocumentSharePanel({
   readonly documentId: string
   readonly documentName: string
   readonly branches: readonly BranchDTO[]
-  readonly versions: readonly VersionDTO[]
+  readonly publishedBranchIds: readonly string[]
   readonly canManage: boolean
   readonly interactive: boolean
 }) {
@@ -74,7 +74,7 @@ export function DocumentSharePanel({
       documentId={documentId}
       documentName={documentName}
       branches={branches}
-      versions={versions}
+      publishedBranchIds={publishedBranchIds}
       canManage={canManage}
       interactive={interactive}
     />
@@ -86,7 +86,7 @@ function DocumentSharePanelContent({
   documentId,
   documentName,
   branches,
-  versions,
+  publishedBranchIds,
   canManage,
   interactive,
 }: {
@@ -94,7 +94,7 @@ function DocumentSharePanelContent({
   readonly documentId: string
   readonly documentName: string
   readonly branches: readonly BranchDTO[]
-  readonly versions: readonly VersionDTO[]
+  readonly publishedBranchIds: readonly string[]
   readonly canManage: boolean
   readonly interactive: boolean
 }) {
@@ -114,20 +114,16 @@ function DocumentSharePanelContent({
   const revokeLockedRef = useRef(false)
   const latestRevealRequestId = useRef(0)
   const latestCopyRequestId = useRef(0)
-  const publishedBranchIds = new Set(
-    versions
-      .filter((version) => version.status === 1)
-      .map((version) => version.branch_id)
-  )
   const shareableBranches = branches.filter(
-    (branch) => branch.status === 1 && publishedBranchIds.has(branch.id)
+    (branch) => branch.status === 1 && publishedBranchIds.includes(branch.id)
   )
   const passwordValidationError = documentSharePasswordError(sharePassword, {
     optional: true,
   })
   const sharesQuery = useQuery({
     queryKey: ['document-shares', projectId, documentId],
-    queryFn: () => listDocumentShares(projectId, documentId),
+    queryFn: ({ signal }) =>
+      listDocumentShares(projectId, documentId, { signal }),
     enabled: canManage && projectId.length > 0 && documentId.length > 0,
   })
   const invalidate = (

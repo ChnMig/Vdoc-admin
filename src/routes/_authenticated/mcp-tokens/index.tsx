@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { MCPTokensPage } from '@/features/vdoc-admin/pages'
+import { MCPTokensPage } from '@/features/vdoc-admin/mcptokens-page'
 
 export const Route = createFileRoute('/_authenticated/mcp-tokens/')({
   component: MCPTokensRoute,

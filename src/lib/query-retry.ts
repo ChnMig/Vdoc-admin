@@ -1,4 +1,4 @@
-import { AxiosError } from 'axios'
+import { AxiosError, isCancel } from 'axios'
 import { VdocApiError } from './vdoc-api'
 
 const MAX_QUERY_RETRIES = 3
@@ -7,6 +7,11 @@ export function shouldRetryQuery(
   failureCount: number,
   error: unknown
 ): boolean {
+  if (
+    isCancel(error) ||
+    (error instanceof DOMException && error.name === 'AbortError')
+  )
+    return false
   if (failureCount >= MAX_QUERY_RETRIES) return false
 
   const code =

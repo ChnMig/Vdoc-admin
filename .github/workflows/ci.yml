@@ -40,6 +40,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check build budget
+        run: pnpm check:build-budget
+
       - name: Lint
         run: pnpm lint
 

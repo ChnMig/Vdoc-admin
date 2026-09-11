@@ -145,6 +145,46 @@ function deferred<T>() {
 }
 
 describe('AIContextPanel', () => {
+  it('polls pending summaries and stops after completion', async () => {
+    apiMocks.getAISummary
+      .mockResolvedValueOnce({
+        ...summaryForTarget(targetA),
+        status: 'pending',
+        content: '',
+      })
+      .mockResolvedValue({
+        ...summaryForTarget(targetA),
+        status: 'succeeded',
+        content: 'Background complete',
+      })
+    const screen = renderPanel(targetA)
+    await waitFor(() => expect(apiMocks.getAISummary).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Regenerate AI summary' })
+      ).toBeDisabled()
+    )
+    expect(
+      await screen.findByText('Background complete', {}, { timeout: 3500 })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Regenerate AI summary' })
+    ).toBeEnabled()
+    const calls = apiMocks.getAISummary.mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 2100))
+    expect(apiMocks.getAISummary).toHaveBeenCalledTimes(calls)
+    screen.unmount()
+  }, 10000)
+
+  it('aborts an unfinished summary read when its panel unmounts', async () => {
+    apiMocks.getAISummary.mockImplementation(() => new Promise(() => {}))
+    const screen = renderPanel(targetA)
+    await waitFor(() => expect(apiMocks.getAISummary).toHaveBeenCalledOnce())
+    const signal = apiMocks.getAISummary.mock.calls[0][1].signal as AbortSignal
+    screen.unmount()
+    expect(signal.aborted).toBe(true)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     chatMessagesBySession.clear()
@@ -353,7 +393,10 @@ describe('AIContextPanel', () => {
     expect(
       await screen.findByText('answer for version-1: Recovered history')
     ).toBeInTheDocument()
-    expect(listAIChatSessions).toHaveBeenCalledWith(targetA)
+    expect(listAIChatSessions).toHaveBeenCalledWith(
+      targetA,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(apiMocks.createAIChatSession).not.toHaveBeenCalled()
   })
 

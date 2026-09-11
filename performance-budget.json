@@ -1,0 +1,9 @@
+{
+  "baseline": "Before page splitting: pages chunk 154400 bytes (34730 gzip); entry plus a workbench route approximately 326656 gzip bytes.",
+  "limits": {
+    "entryGzipBytes": 200000,
+    "pageChunkBytes": 40000,
+    "routeGzipBytes": 300000,
+    "minimumPageChunks": 12
+  }
+}

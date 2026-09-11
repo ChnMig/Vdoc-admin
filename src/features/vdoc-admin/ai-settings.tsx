@@ -49,7 +49,7 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
   const projectsQuery = useQuery({
     queryKey: ['projects'],
-    queryFn: listProjects,
+    queryFn: ({ signal }) => listProjects({ signal }),
   })
   const projects = projectsQuery.data?.items ?? []
   const projectOptions = toProjectOptions(projects, t)
@@ -65,7 +65,7 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
   const projectIsActive = selectedProject?.status === ACTIVE_PROJECT_STATUS
   const projectMembersQuery = useQuery({
     queryKey: ['project-members', selectedProjectId],
-    queryFn: () => listProjectMembers(selectedProjectId),
+    queryFn: ({ signal }) => listProjectMembers(selectedProjectId, { signal }),
     enabled: selectedProjectId.length > 0 && !isSuperAdmin,
   })
   const canManageProject = Boolean(
@@ -83,22 +83,24 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
 
   const systemProviderQuery = useQuery({
     queryKey: ['ai-provider', 'system'],
-    queryFn: getSystemAIProvider,
+    queryFn: ({ signal }) => getSystemAIProvider({ signal }),
     enabled: isSuperAdmin,
   })
   const projectProviderQuery = useQuery({
     queryKey: ['ai-provider', 'project', selectedProjectId],
-    queryFn: () => getProjectAIProvider(selectedProjectId),
+    queryFn: ({ signal }) =>
+      getProjectAIProvider(selectedProjectId, { signal }),
     enabled: selectedProjectId.length > 0 && canManageProject,
   })
   const systemPromptsQuery = useQuery({
     queryKey: ['ai-prompts', 'system'],
-    queryFn: listSystemAIPrompts,
+    queryFn: ({ signal }) => listSystemAIPrompts({ signal }),
     enabled: isSuperAdmin,
   })
   const projectPromptsQuery = useQuery({
     queryKey: ['ai-prompts', 'project', selectedProjectId],
-    queryFn: () => listProjectAIPrompts(selectedProjectId),
+    queryFn: ({ signal }) =>
+      listProjectAIPrompts(selectedProjectId, { signal }),
     enabled: selectedProjectId.length > 0 && canManageProject,
   })
   const systemProviderFormIdentity = providerFormKey(

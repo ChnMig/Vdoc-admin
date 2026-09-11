@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { DiffsPage } from '@/features/vdoc-admin/pages'
+import { DiffsPage } from '@/features/vdoc-admin/diffs-page'
 
 export const Route = createFileRoute('/_authenticated/diffs/')({
   component: DiffsRoute,
