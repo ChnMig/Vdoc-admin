@@ -331,6 +331,38 @@ async function installAdminApi(
 }
 
 for (const width of [1280, 390]) {
+  test(`client configuration stays inside its card at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    await page.goto('/skill/')
+    for (const client of ['Codex', 'Cursor']) {
+      await page.getByRole('tab', { name: client, exact: true }).click()
+      const panel = page.getByRole('tabpanel')
+      await expect(panel).toBeVisible()
+      expect(
+        await panel.evaluate((element) => {
+          const card = element.closest('[data-slot="card"]')
+          if (!card) return false
+          return (
+            element.getBoundingClientRect().right <=
+            card.getBoundingClientRect().right
+          )
+        })
+      ).toBe(true)
+      expect(
+        await panel
+          .locator('p')
+          .first()
+          .evaluate((element) => {
+            return element.scrollWidth <= element.clientWidth
+          })
+      ).toBe(true)
+    }
+  })
+
   test(`document overview uses one statistics request at ${width}px`, async ({
     page,
   }) => {

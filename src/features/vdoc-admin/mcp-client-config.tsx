@@ -29,7 +29,7 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
     },
   })
   return (
-    <Tabs defaultValue='codex'>
+    <Tabs defaultValue='codex' className='min-w-0'>
       <TabsList aria-label={t('admin.token.clientLabel')}>
         <TabsTrigger value='codex'>Codex</TabsTrigger>
         <TabsTrigger value='cursor'>Cursor</TabsTrigger>
@@ -45,7 +45,7 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
           ],
         ] as const
       ).map(([client, path, content, steps]) => (
-        <TabsContent key={client} value={client} className='space-y-3'>
+        <TabsContent key={client} value={client} className='min-w-0 space-y-3'>
           <p className='text-sm text-muted-foreground'>
             <code>{path}</code> — {steps}
           </p>
