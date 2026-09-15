@@ -76,7 +76,7 @@ pnpm test:browser
 
 Push a version tag such as `v0.1.1` or `v0.1.1-rc.1` after committing the release changes. CI completes its build, lint, unit, container-entrypoint, and browser checks, then packages the verified `dist/` as `vdoc-admin_<tag>.tar.gz` with licenses and `SHA256SUMS`. A separate job creates the [GitHub Release](https://github.com/ChnMig/Vdoc-admin/releases) from those artifacts; prerelease tags create prereleases. Ordinary branch pushes and pull requests run checks only. Existing releases are not overwritten.
 
-For local packaging, run `pnpm build` followed by `pnpm release:package v0.2.0`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
+For local packaging, run `pnpm build` followed by `pnpm release:package v0.2.1`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
 
 Extract the release archive and serve its contents with SPA fallback to `index.html`. Before serving, configure the included `runtime-config.js` for your backend:
 
