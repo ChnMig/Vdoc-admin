@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { MCPClientConfig } from './mcp-client-config'
 import {
   PageChrome,
   LoadingErrorState,
@@ -49,7 +50,6 @@ import {
   tokenIsActive,
   formatDate,
   stringify,
-  vdocMcpSource,
 } from './page-utils'
 
 function optionalFieldValue(formData: FormData, key: string) {
@@ -473,20 +473,10 @@ export function MCPTokensPage({
         title={t('admin.token.configTitle')}
         description={t('admin.token.configDescription')}
       >
-        <pre className='overflow-x-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed'>
-          {stringify({
-            mcpServers: {
-              vdoc: {
-                command: 'npx',
-                args: ['--yes', vdocMcpSource],
-                env: {
-                  VDOC_BASE_URL: apiBaseUrl,
-                  VDOC_MCP_TOKEN: visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>',
-                },
-              },
-            },
-          })}
-        </pre>
+        <MCPClientConfig
+          baseUrl={apiBaseUrl}
+          token={visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>'}
+        />
       </CollectionCard>
     </PageChrome>
   )

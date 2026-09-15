@@ -37,7 +37,7 @@ pnpm dev
 
 Copy `.env.example` to `.env` before local development if your backend is not running at the example URL. Public workspace guidance is available in [PILOT_RUNBOOK.md](https://github.com/ChnMig/Vdoc-site/blob/main/workspace/PILOT_RUNBOOK.md) and [RELEASE_DEPLOY.md](https://github.com/ChnMig/Vdoc-site/blob/main/workspace/RELEASE_DEPLOY.md).
 
-First [download and initialize the full workspace](https://vibe-doc.com/en/deployment), which supplies the Compose files and scripts outside this repository. For the full local closure path, run from that workspace root:
+First [download and initialize the full workspace](https://chnmig.github.io/Vdoc-site/en/deployment), which supplies the Compose files and scripts outside this repository. For the full local closure path, run from that workspace root:
 
 ```sh
 scripts/vdoc-local-bootstrap.sh
@@ -76,7 +76,7 @@ pnpm test:browser
 
 Push a version tag such as `v0.1.1` or `v0.1.1-rc.1` after committing the release changes. CI completes its build, lint, unit, container-entrypoint, and browser checks, then packages the verified `dist/` as `vdoc-admin_<tag>.tar.gz` with licenses and `SHA256SUMS`. A separate job creates the [GitHub Release](https://github.com/ChnMig/Vdoc-admin/releases) from those artifacts; prerelease tags create prereleases. Ordinary branch pushes and pull requests run checks only. Existing releases are not overwritten.
 
-For local packaging, run `pnpm build` followed by `pnpm release:package v0.1.0`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
+For local packaging, run `pnpm build` followed by `pnpm release:package v0.2.0`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
 
 Extract the release archive and serve its contents with SPA fallback to `index.html`. Before serving, configure the included `runtime-config.js` for your backend:
 

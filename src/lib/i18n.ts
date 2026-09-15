@@ -714,6 +714,13 @@ const en = {
       copyFailed: 'The token could not be copied. Select and copy it manually.',
       revealErrorTitle: 'Token could not be revealed',
       revokeErrorTitle: 'Token could not be revoked',
+      clientLabel: 'Agent client',
+      codexSteps:
+        'Add this section to your personal configuration, save it, and restart the Vdoc MCP server or open a new Codex session. Use /mcp to check the connection.',
+      cursorSteps:
+        'Merge this entry into your personal MCP configuration, save it, then enable or restart Vdoc in Cursor Settings → Tools & MCP.',
+      clientVerify:
+        'Keep the token in your private configuration. After connecting, query a published document with an explicit branch, then refresh the connection evidence above.',
       configTitle: 'MCP client configuration',
       configDescription:
         'Run the Vdoc stdio adapter. The token stays in VDOC_MCP_TOKEN instead of command arguments or copied HTTP headers.',
@@ -1898,6 +1905,13 @@ const zhCN = {
       copyFailed: '令牌复制失败，请手动选择并复制。',
       revealErrorTitle: '无法查看令牌',
       revokeErrorTitle: '无法撤销令牌',
+      clientLabel: '智能体客户端',
+      codexSteps:
+        '将这一节加入个人配置并保存，重启 Vdoc MCP 服务或新开 Codex 会话，再用 /mcp 查看连接状态。',
+      cursorSteps:
+        '将这一项合并到个人 MCP 配置并保存，在 Cursor Settings → Tools & MCP 中启用或重启 Vdoc。',
+      clientVerify:
+        '令牌只保存在私密配置中。连接后，请明确分支并查询一份已发布文档，再刷新连接证据。',
       configTitle: 'MCP 客户端配置',
       configDescription:
         '运行 Vdoc stdio 适配器，并把令牌放入 VDOC_MCP_TOKEN 环境变量，而不是命令参数或 HTTP 配置。',

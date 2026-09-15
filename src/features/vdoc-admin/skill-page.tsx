@@ -3,10 +3,10 @@ import { apiBaseUrl } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
-import { stringify, vdocMcpSource } from './page-utils'
 
-const vdocSkillCommit = '402cb3e607de287aac57f60cd511ac8db1a09f23'
+const vdocSkillCommit = '1c032ba97f69e11afbbc117af2c098ff8ccef69a'
 
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
 VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
@@ -60,20 +60,7 @@ export function SkillPage() {
         title={t('admin.token.configTitle')}
         description={t('admin.token.configDescription')}
       >
-        <pre className='overflow-x-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed'>
-          {stringify({
-            mcpServers: {
-              vdoc: {
-                command: 'npx',
-                args: ['--yes', vdocMcpSource],
-                env: {
-                  VDOC_BASE_URL: apiBaseUrl,
-                  VDOC_MCP_TOKEN: '<YOUR_ACTIVE_VDOC_TOKEN>',
-                },
-              },
-            },
-          })}
-        </pre>
+        <MCPClientConfig baseUrl={apiBaseUrl} />
       </CollectionCard>
     </PageChrome>
   )

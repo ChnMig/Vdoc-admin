@@ -36,3 +36,6 @@ dist-ssr
 .artifacts/release/
 playwright-report/
 test-results/
+
+# Local release artifacts
+.artifacts/

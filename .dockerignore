@@ -8,3 +8,6 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local release artifacts
+.artifacts/
