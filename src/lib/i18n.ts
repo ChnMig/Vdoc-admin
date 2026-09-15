@@ -513,6 +513,14 @@ const en = {
     },
     review: {
       noteTitle: 'Review note',
+      snapshotUnavailableTitle: 'Review content is not ready',
+      snapshotUnavailableDescription:
+        'Load the draft content and its diff together before reviewing.',
+      reloadSnapshot: 'Reload content and diff',
+      conflictTitle: 'This review is out of date',
+      conflictDescription:
+        'The draft or publication baseline changed. This review was not completed. Your note is preserved. Check the latest content and diff before deciding again.',
+      returnToReview: 'Review latest content and diff',
       noteDescription:
         'Select one submitted draft, add optional context, then confirm the exact review action.',
       selectedDraft: 'Applies to selected draft: {draft}',
@@ -531,6 +539,10 @@ const en = {
       unsavedDescription:
         'Unsaved edits are kept for this document while you switch selections on this page. Save before leaving the page.',
       conflictTitle: 'This draft changed on the server',
+      saveConflict:
+        'Save stopped because the draft changed. Your edits are preserved.',
+      snapshotUnavailable:
+        'The editable draft could not be loaded. Refresh the page before saving.',
       conflictDescription:
         'Your unsaved edits are preserved. Keep your edits against the latest version, or discard them and load the server version before saving.',
       keepEdits: 'Keep my edits',
@@ -829,6 +841,12 @@ const en = {
         responseFieldRequiredChanged: 'Response field required flag changed',
         responseSchemaTypeChanged: 'Response schema type changed',
         enumValueRemoved: 'Enum value removed',
+        enumConstraintAdded: 'Enum constraint added',
+        enumConstraintRemoved: 'Enum constraint removed',
+        parameterFieldAdded: 'Parameter field added',
+        parameterFieldRemoved: 'Parameter field removed',
+        parameterFieldTypeChanged: 'Parameter field type changed',
+        parameterFieldRequiredChanged: 'Parameter field required flag changed',
         securityRequirementsChanged: 'Security requirements changed',
         deprecatedStatusChanged: 'Deprecated status changed',
         markdownLineAdded: 'Markdown line added',
@@ -1690,6 +1708,14 @@ const zhCN = {
     },
     review: {
       noteTitle: '审阅备注',
+      snapshotUnavailableTitle: '审核内容尚未就绪',
+      snapshotUnavailableDescription:
+        '请先完整加载草稿内容和差异，再进行审核。',
+      reloadSnapshot: '重新加载内容与差异',
+      conflictTitle: '本次审核已过期',
+      conflictDescription:
+        '草稿内容、提交状态或发布基线已有变化，本次审核未完成。审阅备注已保留，请重新查看最新内容与差异后再决定。',
+      returnToReview: '重新查看内容与差异',
       noteDescription:
         '先选择一份已提交草稿，填写可选备注，再确认对该草稿执行的审阅动作。',
       selectedDraft: '作用于所选草稿：{draft}',
@@ -1708,6 +1734,8 @@ const zhCN = {
       unsavedDescription:
         '切换当前页面的文档或草稿时，会保留各自的未保存编辑。离开页面前请先保存。',
       conflictTitle: '服务器上的草稿已更新',
+      saveConflict: '草稿已有更新，本次保存未完成。你的修改已保留。',
+      snapshotUnavailable: '未能加载可编辑的草稿，请刷新页面后再保存。',
       conflictDescription:
         '你的未保存编辑已保留。保存前，请选择在最新版本上保留自己的修改，或放弃本地编辑并加载服务器版本。',
       keepEdits: '保留我的修改',
@@ -1994,6 +2022,12 @@ const zhCN = {
         responseFieldRequiredChanged: '响应字段必填状态已变更',
         responseSchemaTypeChanged: '响应 Schema 类型已变更',
         enumValueRemoved: '枚举值已删除',
+        enumConstraintAdded: '新增枚举限制',
+        enumConstraintRemoved: '取消枚举限制',
+        parameterFieldAdded: '参数字段已新增',
+        parameterFieldRemoved: '参数字段已删除',
+        parameterFieldTypeChanged: '参数字段类型已变更',
+        parameterFieldRequiredChanged: '参数字段必填状态已变更',
         securityRequirementsChanged: '安全要求已变更',
         deprecatedStatusChanged: '弃用状态已变更',
         markdownLineAdded: '新增 Markdown 行',

@@ -62,6 +62,7 @@ const branch = {
 
 const editableDraft = {
   id: editableDraftId,
+  revision: 'revision-1',
   project_id: projectId,
   document_id: documentId,
   branch_id: branchId,
@@ -76,6 +77,7 @@ const editableDraft = {
 }
 
 const submittedDraft = {
+  review_revision: 'review-1',
   ...editableDraft,
   id: submittedDraftId,
   version_name: '2.0.0',
@@ -258,6 +260,7 @@ async function installAdminApi(
         owner_id: submittedDraftId,
         kind: 'raw',
         content_kind: 'markdown',
+        draft: submittedDraft,
         content: '# Submitted handbook',
         hash: 'draft-hash',
       })
@@ -515,6 +518,7 @@ for (const viewport of [
           owner_id: editableDraftId,
           kind: 'raw',
           content_kind: 'markdown',
+          draft: { ...editableDraft, revision: serverContent },
           content: serverContent,
           hash: serverContent,
         })
@@ -573,6 +577,106 @@ for (const viewport of [
   })
 }
 
+for (const width of [1280, 390]) {
+  test(`stale draft save is rejected and reconciled at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    let current = { ...editableDraft }
+    let serverContent = '# Original draft'
+    const saves: Record<string, string>[] = []
+    await page.route(
+      `**/drafts/${editableDraftId}/content/raw`,
+      async (route) => {
+        if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
+        await fulfillEnvelope(route, {
+          owner_type: 'draft',
+          owner_id: editableDraftId,
+          kind: 'raw',
+          content_kind: 'markdown',
+          draft: current,
+          content: serverContent,
+          hash: current.revision,
+        })
+      }
+    )
+    await page.route(`**/drafts/${editableDraftId}`, async (route) => {
+      if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
+      if (route.request().method() !== 'PATCH') return route.fallback()
+      const body = route.request().postDataJSON() as Record<string, string>
+      saves.push(body)
+      if (body.expected_revision !== current.revision) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: responseHeaders(),
+          body: JSON.stringify({
+            code: 400,
+            status: 'FAILED_PRECONDITION',
+            message: 'draft changed since it was loaded',
+            timestamp: Date.now(),
+          }),
+        })
+        return
+      }
+      current = {
+        ...current,
+        revision: 'revision-3',
+        changelog: body.changelog!,
+      }
+      serverContent = body.content!
+      await fulfillEnvelope(route, current)
+    })
+    await page.goto('/drafts/')
+    await page
+      .getByLabel('Draft', { exact: true })
+      .selectOption(editableDraftId)
+    const content = page.getByLabel('Content', { exact: true })
+    await expect(content).toHaveValue('# Original draft')
+    await page
+      .getByLabel('Changelog', { exact: true })
+      .fill('Editor B changelog')
+    current = { ...current, revision: 'revision-2' }
+    serverContent = '# Editor A saved content'
+    const update = page.getByRole('button', { name: 'Update', exact: true })
+    await update.click()
+    await expect(
+      page.getByText('This draft changed on the server')
+    ).toBeVisible()
+    await expect(update).toBeDisabled()
+    expect(saves).toHaveLength(1)
+    expect(saves[0]?.expected_revision).toBe('revision-1')
+    expect(serverContent).toBe('# Editor A saved content')
+    await expect(page.getByLabel('Changelog', { exact: true })).toHaveValue(
+      'Editor B changelog'
+    )
+    const editor = page.locator('[data-slot="card"]').filter({ has: content })
+    await editor.screenshot({
+      path: testInfo.outputPath(`stale-save-${width}.png`),
+    })
+    expect(
+      await editor.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth + 1
+      )
+    ).toBe(true)
+    await page
+      .getByRole('button', { name: 'Keep my edits', exact: true })
+      .click()
+    await expect(content).toHaveValue('# Editor A saved content')
+    await update.click()
+    await expect(page.getByText(/Unsaved edits are kept/)).toBeHidden()
+    expect(saves).toHaveLength(2)
+    expect(saves[1]).toMatchObject({
+      expected_revision: 'revision-2',
+      content: '# Editor A saved content',
+      changelog: 'Editor B changelog',
+    })
+    expect(serverContent).toBe('# Editor A saved content')
+  })
+}
+
 test('draft review confirms and approves the selected submitted draft', async ({
   page,
 }) => {
@@ -605,9 +709,102 @@ test('draft review confirms and approves the selected submitted draft', async ({
     .poll(() => approvedRequest)
     .toEqual({
       path: `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${submittedDraftId}/approve`,
-      body: { comment: 'Reviewed against the release checklist.' },
+      body: {
+        expected_review_revision: 'review-1',
+        comment: 'Reviewed against the release checklist.',
+      },
     })
 })
+
+for (const width of [1280, 390]) {
+  test(`stale review requires a new decision at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    let current = { ...submittedDraft }
+    const requests: Record<string, string>[] = []
+    await page.route(
+      `**/drafts/${submittedDraftId}/content/raw`,
+      async (route) => {
+        if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
+        await fulfillEnvelope(route, {
+          owner_type: 'draft',
+          owner_id: submittedDraftId,
+          kind: 'raw',
+          content_kind: 'markdown',
+          draft: current,
+          content:
+            current.review_revision === 'review-1'
+              ? '# Original review content'
+              : '# Latest content and baseline',
+          hash: current.revision,
+        })
+      }
+    )
+    await page.route(`**/drafts/${submittedDraftId}/approve`, async (route) => {
+      if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
+      const body = route.request().postDataJSON() as Record<string, string>
+      requests.push(body)
+      if (body.expected_review_revision !== current.review_revision) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: responseHeaders(),
+          body: JSON.stringify({
+            code: 400,
+            status: 'FAILED_PRECONDITION',
+            message: 'review baseline changed',
+            timestamp: Date.now(),
+          }),
+        })
+        return
+      }
+      await fulfillEnvelope(route, latestVersion)
+    })
+    await page.goto('/drafts/')
+    await page
+      .getByLabel('Draft', { exact: true })
+      .selectOption(submittedDraftId)
+    const note = page.getByLabel('Review note', { exact: true })
+    await expect(note).toBeEnabled()
+    await note.fill('Preserve this review note')
+    await page.getByRole('button', { name: 'Approve', exact: true }).click()
+    const dialog = page.getByRole('alertdialog')
+    current = { ...current, review_revision: 'review-2' }
+    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(dialog).toContainText('This review is out of date')
+    await expect(note).toHaveValue('Preserve this review note')
+    await expect(
+      dialog.getByRole('button', { name: 'Approve', exact: true })
+    ).toHaveCount(0)
+    await page.screenshot({
+      path: testInfo.outputPath(`stale-review-${width}.png`),
+      fullPage: true,
+    })
+    await dialog
+      .getByRole('button', { name: 'Review latest content and diff' })
+      .click()
+    await expect(dialog).toBeHidden()
+    await expect(
+      page.getByText('# Latest content and baseline', { exact: true })
+    ).toBeVisible()
+    expect(requests).toEqual([
+      {
+        expected_review_revision: 'review-1',
+        comment: 'Preserve this review note',
+      },
+    ])
+    await page.getByRole('button', { name: 'Approve', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    expect(requests[1]).toEqual({
+      expected_review_revision: 'review-2',
+      comment: 'Preserve this review note',
+    })
+  })
+}
 
 test('versions route renders reviewed Markdown and keeps relative links inert', async ({
   page,

@@ -191,6 +191,8 @@ export type MCPUsageQuery = {
 
 export type DraftDTO = {
   id: string
+  revision: string
+  review_revision: string
   project_id: string
   document_id: string
   branch_id: string
@@ -216,7 +218,12 @@ export type DraftDTO = {
 
 export type VersionDTO = Omit<
   DraftDTO,
-  'status' | 'diff_preview' | 'created_by' | 'submitted_at'
+  | 'revision'
+  | 'review_revision'
+  | 'status'
+  | 'diff_preview'
+  | 'created_by'
+  | 'submitted_at'
 > & {
   draft_id: string
   status: number
@@ -375,12 +382,14 @@ type CreateDraftPayload = DraftContentPayload & {
 }
 
 type PatchDraftPayload = DraftContentPayload & {
+  expected_revision: string
   version_name?: string
   changelog?: string
   source_git_commit_id?: string
 }
 
 export type DraftReviewPayload = {
+  expected_review_revision: string
   comment?: string
 }
 
@@ -913,7 +922,7 @@ export function getDraftContent(
   contentKind: string,
   options?: RequestOptions
 ) {
-  return unwrapEnvelope<ContentDTO>(
+  return unwrapEnvelope<ContentDTO & { draft: DraftDTO }>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${draftId}/content/${contentKind}`,
       { signal: options?.signal }
@@ -946,7 +955,7 @@ export function approveDraft(
   projectId: string,
   documentId: string,
   draftId: string,
-  payload?: DraftReviewPayload
+  payload: DraftReviewPayload
 ) {
   return draftAction(projectId, documentId, draftId, 'approve', payload)
 }
@@ -955,7 +964,7 @@ export function requestDraftChanges(
   projectId: string,
   documentId: string,
   draftId: string,
-  payload?: DraftReviewPayload
+  payload: DraftReviewPayload
 ) {
   return draftAction(projectId, documentId, draftId, 'request-changes', payload)
 }
@@ -964,7 +973,7 @@ export function rejectDraft(
   projectId: string,
   documentId: string,
   draftId: string,
-  payload?: DraftReviewPayload
+  payload: DraftReviewPayload
 ) {
   return draftAction(projectId, documentId, draftId, 'reject', payload)
 }

@@ -13,6 +13,7 @@ type DraftValues = {
 type EditorSession = {
   baseline: DraftValues
   values: DraftValues
+  revision: string
 }
 
 const fields = [
@@ -46,12 +47,15 @@ export function useDraftEditorState(
   const stored = sessions[contextKey]
   const dirty = Boolean(stored && !equalValues(stored.values, stored.baseline))
   const session =
-    dirty && stored ? stored : { baseline: server, values: server }
+    dirty && stored
+      ? stored
+      : { baseline: server, values: server, revision: draft?.revision ?? '' }
   const conflict = Boolean(
     draft &&
     rawContent !== undefined &&
     dirty &&
-    !equalValues(session.baseline, server)
+    (session.revision !== draft.revision ||
+      !equalValues(session.baseline, server))
   )
 
   function change<K extends keyof DraftValues>(
@@ -69,6 +73,7 @@ export function useDraftEditorState(
         [contextKey]: {
           baseline: latest.baseline,
           values: { ...latest.values, [field]: value },
+          revision: latest.revision,
         },
       }
     })
@@ -77,7 +82,11 @@ export function useDraftEditorState(
   function reload() {
     setSessions((previous) => ({
       ...previous,
-      [contextKey]: { baseline: server, values: server },
+      [contextKey]: {
+        baseline: server,
+        values: server,
+        revision: draft?.revision ?? '',
+      },
     }))
   }
 
@@ -89,7 +98,11 @@ export function useDraftEditorState(
     }
     setSessions((previous) => ({
       ...previous,
-      [contextKey]: { baseline: server, values },
+      [contextKey]: {
+        baseline: server,
+        values,
+        revision: draft?.revision ?? '',
+      },
     }))
   }
 
@@ -109,6 +122,7 @@ export function useDraftEditorState(
 
   return {
     values: session.values,
+    revision: session.revision,
     dirty,
     conflict,
     change,

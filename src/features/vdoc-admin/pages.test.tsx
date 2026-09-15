@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import {
   compareDiff,
+  VdocApiError,
   createAIChatSession,
   getAISummary,
   getEndpoint,
@@ -2270,6 +2271,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     })
     apiMocks.listDrafts.mockResolvedValue({ items: [draftFixture], total: 1 })
     apiMocks.getDraftContent.mockResolvedValue({
+      draft: { ...draftFixture, status: 1 },
       owner_type: 'draft',
       owner_id: 'draft-1',
       kind: 'document',
@@ -2702,14 +2704,22 @@ describe('DraftsPage lifecycle boundaries', () => {
       items: [branchFixture],
       total: 1,
     })
-    apiMocks.getDraftContent.mockResolvedValue({
-      owner_type: 'draft',
-      owner_id: 'draft-1',
-      kind: 'document',
-      content_kind: 'raw',
-      content: '# Loaded raw content',
-      hash: 'hash-draft',
-    })
+    apiMocks.getDraftContent.mockImplementation(
+      async (projectId, documentId, draftId) => {
+        const drafts = await apiMocks.listDrafts(projectId, documentId)
+        return {
+          draft: drafts?.items.find(
+            (item: { id: string }) => item.id === draftId
+          ),
+          owner_type: 'draft',
+          owner_id: draftId,
+          kind: 'document',
+          content_kind: 'raw',
+          content: '# Loaded raw content',
+          hash: 'hash-draft',
+        }
+      }
+    )
     apiMocks.listVersions.mockResolvedValue({ items: [], total: 0 })
     apiMocks.updateDraft.mockResolvedValue({ ...draftFixture, status: 1 })
   })
@@ -2745,6 +2755,12 @@ describe('DraftsPage lifecycle boundaries', () => {
       owner_id: 'draft-1',
       kind: 'document',
       content_kind: 'raw',
+      draft: {
+        ...draftFixture,
+        status: 1,
+        revision: 'revision-2',
+        changelog: 'Updated metadata',
+      },
       content: '# Updated by another editor',
       hash: 'new-server-hash',
     })
@@ -2799,7 +2815,11 @@ describe('DraftsPage lifecycle boundaries', () => {
     await act(async () => {
       queryClient.setQueryData(
         ['draft-content', 'project-1', 'document-1', 'draft-1', 'raw'],
-        { content: '# Newer server content', hash: 'newer-hash' }
+        {
+          draft: { ...draftFixture, status: 1, revision: 'revision-3' },
+          content: '# Newer server content',
+          hash: 'newer-hash',
+        }
       )
     })
     await user.click(
@@ -3120,7 +3140,10 @@ describe('DraftsPage lifecycle boundaries', () => {
         'project-1',
         'document-1',
         'draft-1',
-        { comment: 'Reviewed the selected draft' }
+        {
+          expected_review_revision: 'review-1',
+          comment: 'Reviewed the selected draft',
+        }
       )
     )
   })
@@ -3151,6 +3174,105 @@ describe('DraftsPage lifecycle boundaries', () => {
       contentTitle.compareDocumentPosition(reviewTitle) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+  })
+
+  it('reviews the coherent content snapshot and requires a fresh decision after a conflict', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, review_revision: 'list-only-revision' }],
+      total: 1,
+    })
+    let snapshot = { ...draftFixture }
+    let content = '# Original review content'
+    apiMocks.getDraftContent.mockImplementation(async () => ({
+      draft: snapshot,
+      content,
+      hash: snapshot.revision,
+    }))
+    apiMocks.approveDraft
+      .mockRejectedValueOnce(
+        new VdocApiError({
+          code: 400,
+          status: 'FAILED_PRECONDITION',
+          message: 'review baseline changed',
+          timestamp: 0,
+        })
+      )
+      .mockResolvedValueOnce(markdownVersionFixture)
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    const note = screen.getByLabelText('Review note')
+    await waitFor(() => expect(note).toBeEnabled())
+    await user.type(note, 'Keep my review context')
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    const dialog = screen.getByRole('alertdialog')
+    snapshot = { ...draftFixture, review_revision: 'review-2' }
+    content = '# Latest content and baseline'
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
+    await within(dialog).findByText('This review is out of date')
+    expect(apiMocks.approveDraft).toHaveBeenNthCalledWith(
+      1,
+      'project-1',
+      'document-1',
+      'draft-1',
+      {
+        expected_review_revision: 'review-1',
+        comment: 'Keep my review context',
+      }
+    )
+    expect(note).toHaveValue('Keep my review context')
+    expect(
+      within(dialog).queryByRole('button', { name: 'Approve' })
+    ).not.toBeInTheDocument()
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: 'Review latest content and diff',
+      })
+    )
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('# Latest content and baseline')
+    ).toBeInTheDocument()
+    expect(apiMocks.approveDraft).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Approve',
+      })
+    )
+    await waitFor(() => expect(apiMocks.approveDraft).toHaveBeenCalledTimes(2))
+    expect(apiMocks.approveDraft).toHaveBeenNthCalledWith(
+      2,
+      'project-1',
+      'document-1',
+      'draft-1',
+      {
+        expected_review_revision: 'review-2',
+        comment: 'Keep my review context',
+      }
+    )
+  })
+
+  it('blocks reviews without a coherent content snapshot and offers reload', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [draftFixture], total: 1 })
+    apiMocks.getDraftContent.mockResolvedValueOnce({
+      content: '# Missing snapshot',
+      hash: 'hash',
+    })
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await screen.findByText('Review content is not ready')
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+    expect(apiMocks.approveDraft).not.toHaveBeenCalled()
+    await user.click(
+      screen.getByRole('button', { name: 'Reload content and diff' })
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+    )
   })
 
   it('keeps a failed review confirmation open and retries its captured request', async () => {
@@ -3184,14 +3306,14 @@ describe('DraftsPage lifecycle boundaries', () => {
       'project-1',
       'document-1',
       'draft-1',
-      { comment: 'Captured note' }
+      { expected_review_revision: 'review-1', comment: 'Captured note' }
     )
     expect(apiMocks.approveDraft).toHaveBeenNthCalledWith(
       2,
       'project-1',
       'document-1',
       'draft-1',
-      { comment: 'Captured note' }
+      { expected_review_revision: 'review-1', comment: 'Captured note' }
     )
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -3237,7 +3359,7 @@ describe('DraftsPage lifecycle boundaries', () => {
         'project-1',
         'document-1',
         'draft-2',
-        undefined
+        { expected_review_revision: 'review-1' }
       )
     )
   })
@@ -3273,6 +3395,122 @@ describe('DraftsPage lifecycle boundaries', () => {
       ).toBeInTheDocument()
     })
   }
+
+  it('keeps an atomic editor snapshot and reconciles a rejected stale save', async () => {
+    const initial = { ...draftFixture, status: 1 }
+    let current = initial
+    let serverContent = '# Loaded raw content'
+    apiMocks.listDrafts.mockImplementation(async () => ({
+      items: [current],
+      total: 1,
+    }))
+    apiMocks.getDraftContent.mockImplementation(async () => ({
+      draft: current,
+      content: serverContent,
+      hash: current.revision,
+    }))
+    apiMocks.updateDraft.mockImplementation(
+      async (_project, _document, _id, payload) => {
+        if (payload.expected_revision !== current.revision) {
+          throw new VdocApiError({
+            code: 400,
+            status: 'FAILED_PRECONDITION',
+            message: 'draft changed since it was loaded',
+            timestamp: 0,
+          })
+        }
+        current = {
+          ...current,
+          revision: 'revision-3',
+          changelog: payload.changelog,
+        }
+        serverContent = payload.content
+        return current
+      }
+    )
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: 10_000 },
+        mutations: { retry: false },
+      },
+    })
+    const screen = renderPage(<DraftsPage />, queryClient)
+    const user = userEvent.setup()
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await waitFor(() =>
+      expect(screen.getByLabelText('Content')).toHaveValue(serverContent)
+    )
+    await user.clear(screen.getByLabelText('Changelog'))
+    await user.type(screen.getByLabelText('Changelog'), 'Editor B metadata')
+
+    // The list can refresh before the content request: it must not advance the editor revision.
+    current = {
+      ...initial,
+      revision: 'revision-2',
+      changelog: 'Editor A metadata',
+    }
+    serverContent = '# Editor A saved content'
+    await act(async () => {
+      queryClient.setQueriesData(
+        { queryKey: ['drafts', 'project-1', 'document-1'] },
+        { items: [current], total: 1 }
+      )
+    })
+    expect(screen.getByLabelText('Content')).toHaveValue('# Loaded raw content')
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+    await screen.findByText('This draft changed on the server')
+    expect(apiMocks.updateDraft).toHaveBeenCalledTimes(1)
+    expect(apiMocks.updateDraft.mock.calls[0]?.[3]).toEqual(
+      expect.objectContaining({
+        expected_revision: 'revision-1',
+        content: '# Loaded raw content',
+      })
+    )
+    expect(serverContent).toBe('# Editor A saved content')
+    expect(screen.getByLabelText('Changelog')).toHaveValue('Editor B metadata')
+    expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Keep my edits' }))
+    expect(screen.getByLabelText('Content')).toHaveValue(
+      '# Editor A saved content'
+    )
+    await user.click(screen.getByRole('button', { name: 'Update' }))
+    await waitFor(() => expect(apiMocks.updateDraft).toHaveBeenCalledTimes(2))
+    expect(apiMocks.updateDraft.mock.calls[1]?.[3]).toEqual(
+      expect.objectContaining({
+        expected_revision: 'revision-2',
+        content: '# Editor A saved content',
+        changelog: 'Editor B metadata',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Unsaved edits are kept/)
+      ).not.toBeInTheDocument()
+    )
+    expect(serverContent).toBe('# Editor A saved content')
+  })
+
+  it('does not save an editable draft without a coherent snapshot', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    apiMocks.getDraftContent.mockResolvedValue({
+      content: '# Content from an older server',
+      hash: 'old-hash',
+    })
+    const user = userEvent.setup()
+    const screen = renderDraftsPage()
+    await screen.findByRole('option', { name: 'draft v1' })
+    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await screen.findByText(
+      'The editable draft could not be loaded. Refresh the page before saving.'
+    )
+    expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled()
+    expect(apiMocks.updateDraft).not.toHaveBeenCalled()
+  })
 
   it('preserves edited draft input when the update request fails', async () => {
     apiMocks.listDrafts.mockResolvedValue({
@@ -3490,6 +3728,8 @@ const branchFixture = {
 
 const draftFixture = {
   id: 'draft-1',
+  revision: 'revision-1',
+  review_revision: 'review-1',
   project_id: 'project-1',
   document_id: 'document-1',
   branch_id: 'branch-1',

@@ -283,6 +283,14 @@ export function diffMessageLabel(
     'Response schema type changed':
       'admin.diff.messages.responseSchemaTypeChanged',
     'Enum value removed': 'admin.diff.messages.enumValueRemoved',
+    'Enum constraint added': 'admin.diff.messages.enumConstraintAdded',
+    'Enum constraint removed': 'admin.diff.messages.enumConstraintRemoved',
+    'Parameter field added': 'admin.diff.messages.parameterFieldAdded',
+    'Parameter field removed': 'admin.diff.messages.parameterFieldRemoved',
+    'Parameter field type changed':
+      'admin.diff.messages.parameterFieldTypeChanged',
+    'Parameter field required flag changed':
+      'admin.diff.messages.parameterFieldRequiredChanged',
     'Security requirements changed':
       'admin.diff.messages.securityRequirementsChanged',
     'Deprecated status changed': 'admin.diff.messages.deprecatedStatusChanged',

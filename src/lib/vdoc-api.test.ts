@@ -255,6 +255,7 @@ describe('vdoc-api', () => {
     vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
 
     await approveDraft('project-1', 'document-1', 'draft-1', {
+      expected_review_revision: 'review-1',
       comment: 'Looks good after content review.',
     })
 
@@ -262,7 +263,10 @@ describe('vdoc-api', () => {
       '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/approve'
     )
     expect(requests[0]?.data).toBe(
-      JSON.stringify({ comment: 'Looks good after content review.' })
+      JSON.stringify({
+        expected_review_revision: 'review-1',
+        comment: 'Looks good after content review.',
+      })
     )
   })
 
@@ -271,6 +275,7 @@ describe('vdoc-api', () => {
     vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
 
     await requestDraftChanges('project-1', 'document-1', 'draft-1', {
+      expected_review_revision: 'review-1',
       comment: 'Please add the missing agent setup section.',
     })
 
@@ -278,7 +283,10 @@ describe('vdoc-api', () => {
       '/api/v1/private/projects/project-1/documents/document-1/drafts/draft-1/request-changes'
     )
     expect(requests[0]?.data).toBe(
-      JSON.stringify({ comment: 'Please add the missing agent setup section.' })
+      JSON.stringify({
+        expected_review_revision: 'review-1',
+        comment: 'Please add the missing agent setup section.',
+      })
     )
   })
 
@@ -287,6 +295,7 @@ describe('vdoc-api', () => {
     vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, draftEnvelope())
 
     await rejectDraft('project-1', 'document-1', 'draft-1', {
+      expected_review_revision: 'review-1',
       comment: 'Rejecting until the source branch is corrected.',
     })
 
@@ -295,6 +304,7 @@ describe('vdoc-api', () => {
     )
     expect(requests[0]?.data).toBe(
       JSON.stringify({
+        expected_review_revision: 'review-1',
         comment: 'Rejecting until the source branch is corrected.',
       })
     )
@@ -546,6 +556,8 @@ function draftEnvelope(): VdocEnvelope<DraftDTO> {
     status: 'OK',
     timestamp: 1,
     detail: {
+      revision: 'revision-1',
+      review_revision: 'review-1',
       id: 'draft-1',
       project_id: 'project-1',
       document_id: 'document-1',

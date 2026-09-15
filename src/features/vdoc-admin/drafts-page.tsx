@@ -15,6 +15,7 @@ import {
   requestDraftChanges,
   submitDraft,
   updateDraft,
+  VdocApiError,
   type AISummaryTarget,
   type DraftReviewPayload,
   type BranchDTO,
@@ -95,9 +96,14 @@ type DraftActionRequest = {
   readonly projectId: string
   readonly documentId: string
   readonly draftId: string
-  readonly action: DraftAction
-  readonly comment?: string
-}
+} & (
+  | { readonly action: 'submit' }
+  | {
+      readonly action: DraftReviewAction
+      readonly reviewRevision: string
+      readonly comment?: string
+    }
+)
 
 function draftStatusLabel(
   status: number,
@@ -243,6 +249,7 @@ export function DraftsPage({
     draftId: string
     draftName: string
     action: DraftReviewAction
+    reviewRevision: string
     comment?: string
   }>()
   const reviewActionLockedRef = useRef(false)
@@ -284,12 +291,6 @@ export function DraftsPage({
   )
   const canDraft = canDraftForRole && activeDocumentContext
   const canPublish = canPublishForRole && activeDocumentContext
-  const canReviewSelectedDraft = Boolean(
-    canPublish &&
-    selectedDraft &&
-    activeBranchIds.has(selectedDraft.branch_id) &&
-    selectedDraft.status === DRAFT_STATUS_SUBMITTED
-  )
   const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
     ? {
         projectId,
@@ -324,6 +325,22 @@ export function DraftsPage({
       draftId.length > 0 &&
       draftExistsInDocument,
   })
+  const snapshot = contentQuery.data?.draft
+  const selectedSnapshot =
+    snapshot &&
+    snapshot.id === selectedDraft?.id &&
+    snapshot.project_id === projectId &&
+    snapshot.document_id === documentId &&
+    typeof contentQuery.data?.content === 'string'
+      ? snapshot
+      : undefined
+  const canReviewSelectedDraft = Boolean(
+    canPublish &&
+    selectedSnapshot?.review_revision &&
+    activeBranchIds.has(selectedSnapshot.branch_id) &&
+    selectedSnapshot.status === DRAFT_STATUS_SUBMITTED &&
+    !contentQuery.isError
+  )
   const editorRawContentQuery = useQuery({
     queryKey: ['draft-content', projectId, documentId, draftId, 'raw'],
     queryFn: ({ signal }) =>
@@ -382,6 +399,17 @@ export function DraftsPage({
         projectId: request.projectId,
         documentId: request.documentId,
       }),
+    onError: (error, request) => {
+      if (
+        error instanceof VdocApiError &&
+        error.status === 'FAILED_PRECONDITION'
+      )
+        return invalidate({
+          kind: 'document',
+          projectId: request.projectId,
+          documentId: request.documentId,
+        })
+    },
   })
   const promoteMutation = useMutation({
     mutationFn: (payload: Parameters<typeof promoteDraft>[2]) =>
@@ -406,6 +434,18 @@ export function DraftsPage({
         projectId: variables.projectId,
         documentId: variables.documentId,
       })
+    },
+    onError: (error, request) => {
+      if (
+        request.action !== 'submit' &&
+        error instanceof VdocApiError &&
+        error.status === 'FAILED_PRECONDITION'
+      )
+        return invalidate({
+          kind: 'document',
+          projectId: request.projectId,
+          documentId: request.documentId,
+        })
     },
     onSettled: () => {
       reviewActionLockedRef.current = false
@@ -447,6 +487,17 @@ export function DraftsPage({
   const reviewConfirmation = pendingReviewAction
     ? draftReviewConfirmation(pendingReviewAction, t)
     : undefined
+  const reviewConflict = Boolean(
+    pendingReviewAction &&
+    (!canReviewSelectedDraft ||
+      pendingReviewAction.projectId !== projectId ||
+      pendingReviewAction.documentId !== documentId ||
+      pendingReviewAction.draftId !== selectedSnapshot?.id ||
+      pendingReviewAction.reviewRevision !==
+        selectedSnapshot?.review_revision ||
+      (actionMutation.error instanceof VdocApiError &&
+        actionMutation.error.status === 'FAILED_PRECONDITION'))
+  )
   const selectedDraftContent = contentQuery.data?.content
   return (
     <PageChrome page='drafts'>
@@ -524,6 +575,7 @@ export function DraftsPage({
         <DraftEditorCard
           contextKey={`${authUser?.id ?? ''}:${projectId}:${documentId}:${draftId || 'new'}`}
           selectedDraft={selectedDraft}
+          snapshotDraft={editorRawContentQuery.data?.draft}
           rawContent={editorRawContentQuery.data?.content}
           rawContentState={{
             isLoading: editorRawContentQuery.isLoading,
@@ -633,26 +685,26 @@ export function DraftsPage({
             <AlertDescription>{actionMutation.error.message}</AlertDescription>
           </Alert>
         )}
-      {selectedDraft?.review_comment && (
+      {selectedSnapshot?.review_comment && (
         <Alert>
           <BookOpenText />
           <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
-          <AlertDescription>{selectedDraft.review_comment}</AlertDescription>
+          <AlertDescription>{selectedSnapshot.review_comment}</AlertDescription>
         </Alert>
       )}
-      {selectedDraft?.diff_preview && (
+      {selectedSnapshot?.diff_preview && (
         <CollectionCard
           title={t('admin.sections.diffPreview')}
-          count={selectedDraft.diff_preview.items.length}
+          count={selectedSnapshot.diff_preview.items.length}
         >
           <DiffSummaryCards
-            summary={selectedDraft.diff_preview.summary}
+            summary={selectedSnapshot.diff_preview.summary}
             isMarkdown={
               selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
             }
           />
           <DiffReviewList
-            items={selectedDraft.diff_preview.items}
+            items={selectedSnapshot.diff_preview.items}
             isMarkdown={
               selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
             }
@@ -672,6 +724,28 @@ export function DraftsPage({
         title={t('admin.sections.contentViewer')}
         content={selectedDraftContent}
       />
+      <LoadingErrorState state={contentQuery} />
+      {canPublish &&
+        selectedDraft?.status === DRAFT_STATUS_SUBMITTED &&
+        (!selectedSnapshot?.review_revision || contentQuery.isError) && (
+          <Alert aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>
+              {t('admin.review.snapshotUnavailableTitle')}
+            </AlertTitle>
+            <AlertDescription>
+              <p>{t('admin.review.snapshotUnavailableDescription')}</p>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={contentQuery.isFetching}
+                onClick={() => void contentQuery.refetch()}
+              >
+                {t('admin.review.reloadSnapshot')}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       {selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN &&
         selectedDraftContent && (
           <MarkdownPreview content={selectedDraftContent} />
@@ -683,21 +757,22 @@ export function DraftsPage({
       />
       {canPublish && (
         <ReviewNotePanel
-          selectedDraftName={selectedDraft?.version_name}
+          selectedDraftName={selectedSnapshot?.version_name}
           value={reviewNote}
           onChange={setReviewNote}
           pending={actionMutation.isPending}
           reviewable={canReviewSelectedDraft}
           onReview={(action) => {
-            if (!selectedDraft || !canReviewSelectedDraft) return
+            if (!selectedSnapshot || !canReviewSelectedDraft) return
             actionMutation.reset()
             setPendingReviewAction({
               projectId,
               documentId,
-              draftId: selectedDraft.id,
-              draftName: selectedDraft.version_name,
+              draftId: selectedSnapshot.id,
+              draftName: selectedSnapshot.version_name,
               action,
-              comment: reviewComment(reviewNote)?.comment,
+              reviewRevision: selectedSnapshot.review_revision,
+              comment: reviewNote.trim() || undefined,
             })
           }}
         />
@@ -712,10 +787,19 @@ export function DraftsPage({
         }}
         title={reviewConfirmation?.title ?? ''}
         desc={reviewConfirmation?.description ?? ''}
-        confirmText={reviewConfirmation?.confirmText}
+        confirmText={
+          reviewConflict
+            ? t('admin.review.returnToReview')
+            : reviewConfirmation?.confirmText
+        }
         destructive={reviewConfirmation?.destructive}
         isLoading={actionMutation.isPending}
         handleConfirm={() => {
+          if (reviewConflict) {
+            setPendingReviewAction(undefined)
+            actionMutation.reset()
+            return
+          }
           if (!pendingReviewAction || reviewActionLockedRef.current) return
           reviewActionLockedRef.current = true
           actionMutation.mutate({
@@ -723,20 +807,31 @@ export function DraftsPage({
             documentId: pendingReviewAction.documentId,
             draftId: pendingReviewAction.draftId,
             action: pendingReviewAction.action,
+            reviewRevision: pendingReviewAction.reviewRevision,
             comment: pendingReviewAction.comment,
           })
         }}
       >
-        {actionMutation.isError && (
+        {reviewConflict ? (
           <Alert variant='destructive' aria-live='polite'>
             <AlertCircle />
-            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertTitle>{t('admin.review.conflictTitle')}</AlertTitle>
             <AlertDescription>
-              {actionMutation.error instanceof Error
-                ? actionMutation.error.message
-                : t('toasts.somethingWrong')}
+              {t('admin.review.conflictDescription')}
             </AlertDescription>
           </Alert>
+        ) : (
+          actionMutation.isError && (
+            <Alert variant='destructive' aria-live='polite'>
+              <AlertCircle />
+              <AlertTitle>{t('admin.common.error')}</AlertTitle>
+              <AlertDescription>
+                {actionMutation.error instanceof Error
+                  ? actionMutation.error.message
+                  : t('toasts.somethingWrong')}
+              </AlertDescription>
+            </Alert>
+          )
         )}
       </ConfirmDialog>
     </PageChrome>
@@ -750,6 +845,7 @@ type UpdateDraftPayload = Parameters<typeof updateDraft>[3]
 function DraftEditorCard({
   contextKey,
   selectedDraft,
+  snapshotDraft,
   rawContent,
   rawContentState,
   branches,
@@ -761,6 +857,7 @@ function DraftEditorCard({
 }: {
   contextKey: string
   selectedDraft?: DraftDTO
+  snapshotDraft?: DraftDTO
   rawContent?: string
   rawContentState: QueryState
   branches: BranchDTO[]
@@ -771,7 +868,14 @@ function DraftEditorCard({
   onUpdate: (id: string, payload: UpdateDraftPayload) => Promise<unknown>
 }) {
   const { t } = useLanguage()
-  const editor = useDraftEditorState(contextKey, selectedDraft, rawContent)
+  const snapshotReady = Boolean(
+    snapshotDraft?.revision && snapshotDraft.id === selectedDraft?.id
+  )
+  const editor = useDraftEditorState(
+    contextKey,
+    snapshotReady ? snapshotDraft : undefined,
+    snapshotReady ? rawContent : undefined
+  )
   const [submitting, setSubmitting] = useState(false)
   const busy = pending || submitting
   const editable = Boolean(
@@ -825,7 +929,10 @@ function DraftEditorCard({
         !contextActive ||
         !selectedBranchActive ||
         editor.conflict ||
-        (editable && (rawContent === undefined || rawContentState.isError))
+        (editable &&
+          (!snapshotReady ||
+            rawContent === undefined ||
+            rawContentState.isError))
       }
       onSubmit={async () => {
         if (editor.conflict)
@@ -844,7 +951,10 @@ function DraftEditorCard({
             schema_content: content,
           }
           if (editable && selectedDraft) {
-            await onUpdate(selectedDraft.id, payload)
+            await onUpdate(selectedDraft.id, {
+              ...payload,
+              expected_revision: editor.revision,
+            })
           } else {
             await onCreate({
               ...payload,
@@ -852,6 +962,13 @@ function DraftEditorCard({
             })
           }
           editor.saved()
+        } catch (error) {
+          if (
+            error instanceof VdocApiError &&
+            error.status === 'FAILED_PRECONDITION'
+          )
+            error.message = t('admin.draftEditor.saveConflict')
+          throw error
         } finally {
           setSubmitting(false)
         }
@@ -877,6 +994,18 @@ function DraftEditorCard({
         </Alert>
       )}
       {rawContentState.isError && <LoadingErrorState state={rawContentState} />}
+      {editable &&
+        !rawContentState.isLoading &&
+        !rawContentState.isError &&
+        !snapshotReady && (
+          <Alert variant='destructive'>
+            <AlertCircle />
+            <AlertTitle>{t('admin.common.error')}</AlertTitle>
+            <AlertDescription>
+              {t('admin.draftEditor.snapshotUnavailable')}
+            </AlertDescription>
+          </Alert>
+        )}
       {editor.dirty && (
         <p role='status' className='text-sm text-muted-foreground'>
           {t('admin.draftEditor.unsavedDescription')}
@@ -995,16 +1124,14 @@ function DraftEditorCard({
   )
 }
 
-function reviewComment(value: string): DraftReviewPayload | undefined {
-  const comment = value.trim()
-  return comment.length > 0 ? { comment } : undefined
-}
-
 function runDraftAction(request: DraftActionRequest) {
   if (request.action === 'submit') {
     return submitDraft(request.projectId, request.documentId, request.draftId)
   }
-  const payload = reviewComment(request.comment ?? '')
+  const payload: DraftReviewPayload = {
+    expected_review_revision: request.reviewRevision,
+    ...(request.comment ? { comment: request.comment } : {}),
+  }
   if (request.action === 'approve') {
     return approveDraft(
       request.projectId,
@@ -1152,7 +1279,7 @@ function DraftsTable({
   drafts: DraftDTO[]
   selected: string
   onSelect: (id: string) => void
-  onAction: (id: string, action: DraftAction) => void
+  onAction: (id: string, action: 'submit') => void
   canDraft: boolean
   pending: boolean
   activeBranchIds: ReadonlySet<string>
