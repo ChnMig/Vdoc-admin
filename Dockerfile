@@ -27,6 +27,7 @@ ARG BUILD_TIME
 ARG GIT_COMMIT
 
 LABEL org.opencontainers.image.title="Vdoc Admin" \
+    org.opencontainers.image.source="https://github.com/ChnMig/Vdoc-admin" \
     org.opencontainers.image.version="$VERSION" \
     org.opencontainers.image.created="$BUILD_TIME" \
     org.opencontainers.image.revision="$GIT_COMMIT"
