@@ -1008,7 +1008,7 @@ export function DiffReviewList({
                       {t('admin.diff.oldValue')}
                     </p>
                     <pre className='max-h-72 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-xs leading-relaxed'>
-                      {jsonPreview(item.old_value)}
+                      {jsonPreview(item.old_value, item.old_value_json)}
                     </pre>
                   </div>
                   <div className='grid gap-2'>
@@ -1016,7 +1016,7 @@ export function DiffReviewList({
                       {t('admin.diff.newValue')}
                     </p>
                     <pre className='max-h-72 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-xs leading-relaxed'>
-                      {jsonPreview(item.new_value)}
+                      {jsonPreview(item.new_value, item.new_value_json)}
                     </pre>
                   </div>
                 </div>

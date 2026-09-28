@@ -20,9 +20,12 @@ import {
   type DraftReviewPayload,
   type BranchDTO,
   type DraftDTO,
+  type DraftListDTO,
 } from '@/lib/vdoc-api'
 import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageOffset } from '@/hooks/use-page-offset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -81,6 +84,7 @@ import {
   fieldValue,
   type QueryState,
 } from './page-utils'
+import { QueryPagination } from './query-pagination'
 
 const DRAFT_STATUS_DRAFT = 1
 
@@ -229,12 +233,34 @@ export function DraftsPage({
     (activeProjectRole(membersQuery.data?.items, authUser?.id) ?? 0) >=
       ROLE_WRITER
   )
+  const [draftSearch, setDraftSearch] = useState('')
+  const debouncedDraftSearch = useDebouncedValue(draftSearch.trim())
+  const [draftOffset, setDraftOffset] = usePageOffset(
+    JSON.stringify([projectId, documentId, branchFilter, debouncedDraftSearch])
+  )
+  const draftPage = {
+    page_size: 50,
+    offset: draftOffset,
+    search: debouncedDraftSearch,
+  }
   const draftsQuery = useQuery({
-    queryKey: ['drafts', projectId, documentId, branchFilter || 'all'],
+    queryKey: [
+      'drafts',
+      projectId,
+      documentId,
+      branchFilter || 'all',
+      draftPage,
+    ],
     queryFn: ({ signal }) =>
       branchFilter
-        ? listDrafts(projectId, documentId, branchFilter, { signal })
-        : listDrafts(projectId, documentId, undefined, { signal }),
+        ? listDrafts(projectId, documentId, branchFilter, {
+            signal,
+            page: draftPage,
+          })
+        : listDrafts(projectId, documentId, undefined, {
+            signal,
+            page: draftPage,
+          }),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
   const [draftId, setDraftId] = useRouteControlledString(
@@ -255,50 +281,6 @@ export function DraftsPage({
   const reviewActionLockedRef = useRef(false)
   const [promoteSourceBranchId, setPromoteSourceBranchId] = useState('')
   const [promoteTargetBranchId, setPromoteTargetBranchId] = useState('')
-  const draftExistsInDocument = (draftsQuery.data?.items ?? []).some(
-    (draft) => draft.id === draftId
-  )
-  const selectedDraft = draftsQuery.data?.items.find(
-    (draft) => draft.id === draftId
-  )
-  const selectedProject = projectsQuery.data?.items.find(
-    (project) => project.id === projectId
-  )
-  const activeBranches = (branchesQuery.data?.items ?? []).filter(
-    (branch) => branch.status === ACTIVE_STATUS
-  )
-  const activeBranchIds = new Set(activeBranches.map((branch) => branch.id))
-  const invalidBranchDeepLink = Boolean(
-    branchesQuery.data &&
-    search?.branch_id &&
-    !branchesQuery.data.items.some((branch) => branch.id === search.branch_id)
-  )
-  const invalidDraftDeepLink = Boolean(
-    !invalidBranchDeepLink &&
-    draftsQuery.data &&
-    search?.draft_id &&
-    !draftsQuery.data.items.some((draft) => draft.id === search.draft_id)
-  )
-  const activeDocumentContext = Boolean(
-    selectedProject?.status === ACTIVE_STATUS &&
-    selectedDocument?.status === ACTIVE_STATUS
-  )
-  const selectedDraftBranchActive = Boolean(
-    selectedDraft && activeBranchIds.has(selectedDraft.branch_id)
-  )
-  const selectedDraftAIInteractive = Boolean(
-    selectedDraft && activeDocumentContext && selectedDraftBranchActive
-  )
-  const canDraft = canDraftForRole && activeDocumentContext
-  const canPublish = canPublishForRole && activeDocumentContext
-  const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
-    ? {
-        projectId,
-        documentId,
-        ownerType: 'draft',
-        ownerId: selectedDraft.id,
-      }
-    : undefined
   const draftContentKindOptions = contentKindOptions(
     t,
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
@@ -320,11 +302,65 @@ export function DraftsPage({
         signal,
       }),
     enabled:
-      projectId.length > 0 &&
-      documentId.length > 0 &&
-      draftId.length > 0 &&
-      draftExistsInDocument,
+      projectId.length > 0 && documentId.length > 0 && draftId.length > 0,
   })
+  const listedDraft = draftsQuery.data?.items.find(
+    (draft) => draft.id === draftId
+  )
+  const loadedDraft = contentQuery.data?.draft
+  const selectedDraft =
+    loadedDraft?.id === draftId &&
+    loadedDraft.project_id === projectId &&
+    loadedDraft.document_id === documentId &&
+    (!branchFilter || loadedDraft.branch_id === branchFilter)
+      ? loadedDraft
+      : listedDraft
+  const draftExistsInDocument = Boolean(selectedDraft)
+  const draftChoices = [...(draftsQuery.data?.items ?? [])]
+  if (
+    selectedDraft &&
+    !draftChoices.some((item) => item.id === selectedDraft.id)
+  )
+    draftChoices.push(selectedDraft)
+  const selectedProject = projectsQuery.data?.items.find(
+    (project) => project.id === projectId
+  )
+  const activeBranches = (branchesQuery.data?.items ?? []).filter(
+    (branch) => branch.status === ACTIVE_STATUS
+  )
+  const activeBranchIds = new Set(activeBranches.map((branch) => branch.id))
+  const invalidBranchDeepLink = Boolean(
+    branchesQuery.data &&
+    search?.branch_id &&
+    !branchesQuery.data.items.some((branch) => branch.id === search.branch_id)
+  )
+  const invalidDraftDeepLink = Boolean(
+    !invalidBranchDeepLink &&
+    search?.draft_id &&
+    contentQuery.isError &&
+    contentQuery.error instanceof VdocApiError &&
+    contentQuery.error.status === 'NOT_FOUND'
+  )
+  const activeDocumentContext = Boolean(
+    selectedProject?.status === ACTIVE_STATUS &&
+    selectedDocument?.status === ACTIVE_STATUS
+  )
+  const selectedDraftBranchActive = Boolean(
+    selectedDraft && activeBranchIds.has(selectedDraft.branch_id)
+  )
+  const selectedDraftAIInteractive = Boolean(
+    selectedDraft && activeDocumentContext && selectedDraftBranchActive
+  )
+  const canDraft = canDraftForRole && activeDocumentContext
+  const canPublish = canPublishForRole && activeDocumentContext
+  const selectedDraftAITarget: AISummaryTarget | undefined = selectedDraft
+    ? {
+        projectId,
+        documentId,
+        ownerType: 'draft',
+        ownerId: selectedDraft.id,
+      }
+    : undefined
   const snapshot = contentQuery.data?.draft
   const selectedSnapshot =
     snapshot &&
@@ -498,7 +534,9 @@ export function DraftsPage({
       (actionMutation.error instanceof VdocApiError &&
         actionMutation.error.status === 'FAILED_PRECONDITION'))
   )
-  const selectedDraftContent = contentQuery.data?.content
+  const selectedDraftContent = selectedSnapshot
+    ? contentQuery.data?.content
+    : undefined
   return (
     <PageChrome page='drafts'>
       <DeepLinkAlert
@@ -564,7 +602,7 @@ export function DraftsPage({
           onChange={handleDraftSelect}
           placeholder={t('admin.fields.draft')}
           options={
-            draftsQuery.data?.items.map((draft) => ({
+            draftChoices.map((draft) => ({
               value: draft.id,
               label: draft.version_name,
             })) ?? []
@@ -661,7 +699,25 @@ export function DraftsPage({
           )}
         </>
       )}
+      <div className='grid gap-2'>
+        <Label htmlFor='draft-history-search'>
+          {t('admin.pagination.searchDrafts')}
+        </Label>
+        <Input
+          id='draft-history-search'
+          value={draftSearch}
+          onChange={(event) => setDraftSearch(event.currentTarget.value)}
+        />
+      </div>
+      <LoadingErrorState
+        state={{
+          isLoading: draftsQuery.isLoading,
+          isError: draftsQuery.isError,
+          error: draftsQuery.error,
+        }}
+      />
       <DraftsTable
+        total={draftsQuery.data?.total ?? 0}
         drafts={draftsQuery.data?.items ?? []}
         selected={draftId}
         onSelect={handleDraftSelect}
@@ -676,6 +732,19 @@ export function DraftsPage({
         canDraft={canDraft}
         pending={actionMutation.isPending}
         activeBranchIds={activeBranchIds}
+      />
+      <QueryPagination
+        label={t('admin.pagination.drafts')}
+        offset={draftOffset}
+        count={draftsQuery.data?.items.length ?? 0}
+        total={draftsQuery.data?.total}
+        hasMore={
+          draftOffset + (draftsQuery.data?.items.length ?? 0) <
+          (draftsQuery.data?.total ?? 0)
+        }
+        busy={draftsQuery.isFetching}
+        onPrevious={() => setDraftOffset(draftOffset - 50)}
+        onNext={() => setDraftOffset(draftOffset + 50)}
       />
       {actionMutation.isError &&
         actionMutation.variables?.action === 'submit' && (
@@ -856,7 +925,7 @@ function DraftEditorCard({
   onUpdate,
 }: {
   contextKey: string
-  selectedDraft?: DraftDTO
+  selectedDraft?: DraftListDTO
   snapshotDraft?: DraftDTO
   rawContent?: string
   rawContentState: QueryState
@@ -1268,6 +1337,7 @@ function ReviewNotePanel({
 }
 
 function DraftsTable({
+  total,
   drafts,
   selected,
   onSelect,
@@ -1276,7 +1346,8 @@ function DraftsTable({
   pending,
   activeBranchIds,
 }: {
-  drafts: DraftDTO[]
+  total: number
+  drafts: DraftListDTO[]
   selected: string
   onSelect: (id: string) => void
   onAction: (id: string, action: 'submit') => void
@@ -1286,7 +1357,7 @@ function DraftsTable({
 }) {
   const { t } = useLanguage()
   return (
-    <CollectionCard title={t('admin.sections.drafts')} count={drafts.length}>
+    <CollectionCard title={t('admin.sections.drafts')} count={total}>
       {drafts.length ? (
         <Table>
           <TableHeader>

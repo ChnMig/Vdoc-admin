@@ -34,10 +34,7 @@ const createFormSchema = (t: TFunction) =>
       error: (iss) =>
         iss.input === '' ? t('auth.validation.email') : undefined,
     }),
-    password: z
-      .string()
-      .min(1, t('auth.validation.password'))
-      .min(7, t('auth.validation.passwordLength')),
+    password: z.string().min(1, t('auth.validation.password')),
   })
 
 interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {

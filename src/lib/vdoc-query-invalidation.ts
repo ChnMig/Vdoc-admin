@@ -15,6 +15,7 @@ const documentQueries = new Set([
   'endpoints',
   'endpoint',
   'diffs',
+  'diff',
   'diff-summary',
   'document-shares',
   'document-overview',

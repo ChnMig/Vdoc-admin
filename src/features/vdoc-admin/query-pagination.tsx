@@ -2,6 +2,7 @@ import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 
 export function QueryPagination({
+  label,
   offset,
   count,
   total,
@@ -10,6 +11,7 @@ export function QueryPagination({
   onPrevious,
   onNext,
 }: {
+  label?: string
   offset: number
   count: number
   total?: number
@@ -21,13 +23,13 @@ export function QueryPagination({
   const { t } = useLanguage()
   return (
     <nav
-      aria-label={t('admin.pagination.label')}
+      aria-label={label ?? t('admin.pagination.label')}
       className='flex flex-wrap items-center justify-between gap-3 py-3'
     >
       <p role='status' className='text-sm text-muted-foreground'>
         {t('admin.pagination.range', {
           from: count ? offset + 1 : 0,
-          to: offset + count,
+          to: count ? offset + count : 0,
         })}
         {total !== undefined && ` · ${t('admin.pagination.total', { total })}`}
       </p>

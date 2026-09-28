@@ -18,7 +18,7 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#e148633a6e56ec233dcbb9be6e0108eabec93b61'
+  'github:ChnMig/Vdoc-mcp#7867a94e934e881716fc29bcd5d73fd3fc4ec59b'
 
 export const ACTIVE_STATUS = 1
 
@@ -203,7 +203,8 @@ export function accountStatusLabel(
   return `${t('admin.common.unknown')} ${status}`
 }
 
-export function jsonPreview(value: unknown) {
+export function jsonPreview(value: unknown, exactJSON?: string) {
+  if (exactJSON !== undefined && exactJSON !== '') return exactJSON
   if (value === undefined || value === null || value === '') return '-'
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2) ?? '-'
@@ -282,6 +283,12 @@ export function diffMessageLabel(
       'admin.diff.messages.responseFieldRequiredChanged',
     'Response schema type changed':
       'admin.diff.messages.responseSchemaTypeChanged',
+    'Enum value added': 'admin.diff.messages.enumValueAdded',
+    'Schema constraint changed': 'admin.diff.messages.schemaConstraintChanged',
+    'Schema alternatives changed':
+      'admin.diff.messages.schemaAlternativesChanged',
+    'Schema compatibility requires manual review':
+      'admin.diff.messages.schemaManualReview',
     'Enum value removed': 'admin.diff.messages.enumValueRemoved',
     'Enum constraint added': 'admin.diff.messages.enumConstraintAdded',
     'Enum constraint removed': 'admin.diff.messages.enumConstraintRemoved',

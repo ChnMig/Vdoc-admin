@@ -7,7 +7,6 @@ import { UserAuthForm } from './user-auth-form'
 const FORM_MESSAGES = {
   emailEmpty: 'Please enter your email.',
   passwordEmpty: 'Please enter your password.',
-  passwordShort: 'Password must be at least 7 characters long.',
 } as const
 
 const mocks = vi.hoisted(() => ({
@@ -96,6 +95,7 @@ describe('UserAuthForm', () => {
       expect(
         await screen.findByText(FORM_MESSAGES.passwordEmpty)
       ).toBeInTheDocument()
+      expect(mocks.login).not.toHaveBeenCalled()
     })
 
     it('authenticates through Vdoc and navigates to default route on success', async () => {
@@ -117,6 +117,33 @@ describe('UserAuthForm', () => {
       await waitFor(() =>
         expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
       )
+    })
+
+    it.each(['密码密码', '🔐🔑🗝'])(
+      'submits a valid UTF-8 password unchanged: %s',
+      async (password) => {
+        expect(new TextEncoder().encode(password).length).toBe(12)
+        await userEvent.type(emailInput, 'a@b.com')
+        await userEvent.type(passwordInput, password)
+        await userEvent.click(signInButton)
+
+        await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
+        expect(mocks.login).toHaveBeenCalledWith({ email: 'a@b.com', password })
+        expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
+      }
+    )
+
+    it('does not save a session or navigate when the server rejects credentials', async () => {
+      mocks.login.mockRejectedValueOnce(new Error('Invalid credentials'))
+      await userEvent.type(emailInput, 'a@b.com')
+      await userEvent.type(passwordInput, '密码密码')
+      await userEvent.click(signInButton)
+
+      await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
+      await waitFor(() => expect(signInButton).not.toBeDisabled())
+      expect(mocks.setUser).not.toHaveBeenCalled()
+      expect(mocks.setAccessToken).not.toHaveBeenCalled()
+      expect(mocks.navigate).not.toHaveBeenCalled()
     })
   })
 

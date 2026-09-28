@@ -735,23 +735,50 @@ function EndpointDetailPanel({ endpoint }: { endpoint: EndpointDTO }) {
         <EndpointJsonSection
           title={t('admin.fields.request')}
           rows={[
-            [t('admin.developerPortal.parameters'), endpoint.parameters],
-            [t('admin.developerPortal.requestBody'), endpoint.request_body],
+            [
+              t('admin.developerPortal.parameters'),
+              endpoint.parameters,
+              endpoint.json_preview?.parameters,
+            ],
+            [
+              t('admin.developerPortal.requestBody'),
+              endpoint.request_body,
+              endpoint.json_preview?.request_body,
+            ],
           ]}
         />
         <EndpointJsonSection
           title={t('admin.fields.response')}
-          rows={[[t('admin.developerPortal.responses'), endpoint.responses]]}
+          rows={[
+            [
+              t('admin.developerPortal.responses'),
+              endpoint.responses,
+              endpoint.json_preview?.responses,
+            ],
+          ]}
         />
         <EndpointJsonSection
           title={t('admin.developerPortal.runtime')}
           rows={[
-            [t('admin.developerPortal.security'), endpoint.security],
-            [t('admin.developerPortal.servers'), endpoint.servers],
-            [t('admin.developerPortal.schemaRefs'), endpoint.schema_refs],
+            [
+              t('admin.developerPortal.security'),
+              endpoint.security,
+              endpoint.json_preview?.security,
+            ],
+            [
+              t('admin.developerPortal.servers'),
+              endpoint.servers,
+              endpoint.json_preview?.servers,
+            ],
+            [
+              t('admin.developerPortal.schemaRefs'),
+              endpoint.schema_refs,
+              endpoint.json_preview?.schema_refs,
+            ],
             [
               t('admin.developerPortal.normalizedOperation'),
               endpoint.normalized_operation,
+              endpoint.json_preview?.normalized_operation,
             ],
           ]}
         />
@@ -765,17 +792,17 @@ function EndpointJsonSection({
   rows,
 }: {
   title: string
-  rows: Array<[string, unknown]>
+  rows: Array<[string, unknown, string?]>
 }) {
   return (
     <section className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
       <p className='font-medium'>{title}</p>
       <div className='grid gap-3'>
-        {rows.map(([label, value]) => (
+        {rows.map(([label, value, exactJSON]) => (
           <div key={label} className='grid gap-2'>
             <p className='text-xs font-medium text-muted-foreground'>{label}</p>
             <pre className='max-h-80 overflow-auto rounded-md border bg-background p-3 text-xs leading-relaxed'>
-              {jsonPreview(value)}
+              {jsonPreview(value, exactJSON)}
             </pre>
           </div>
         ))}

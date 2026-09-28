@@ -100,7 +100,7 @@ export function UsersPage() {
         submitLabel={t('admin.common.create')}
         pending={createMutation.isPending}
         onSubmit={(formData) => {
-          const password = fieldValue(formData, 'password')
+          const password = String(formData.get('password') ?? '')
           if (userPasswordError(password) !== undefined) {
             throw new Error(t('auth.validation.passwordPolicy'))
           }

@@ -4,15 +4,17 @@ import { AlertCircle, GitCompareArrows, SearchIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   compareDiff,
-  getDiffSummary,
+  getDiff,
   listBranches,
   listDiffs,
   listProjectMembers,
   type AISummaryTarget,
-  type DiffDTO,
+  type DiffListDTO,
 } from '@/lib/vdoc-api'
 import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageOffset } from '@/hooks/use-page-offset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -111,7 +113,7 @@ export function DiffsPage({
     queryFn: ({ signal }) => listProjectMembers(projectId, { signal }),
     enabled: projectId.length > 0 && !authUser?.is_super_admin,
   })
-  const [diff, setDiff] = useState<DiffDTO | null>(null)
+  const [diff, setDiff] = useState<DiffListDTO | null>(null)
   const [fromVersionId, setFromVersionId] = useRouteControlledString(
     search?.from_version_id,
     onSearchChange !== undefined
@@ -123,6 +125,22 @@ export function DiffsPage({
   const [diffSearch, setDiffSearch] = useState('')
   const [diffFilterValue, setDiffFilterValue] = useState<DiffFilter>('all')
   const resolveDiffById = Boolean(search?.diff_id)
+  const [historySearch, setHistorySearch] = useState('')
+  const debouncedHistorySearch = useDebouncedValue(historySearch.trim())
+  const [historyOffset, setHistoryOffset] = usePageOffset(
+    JSON.stringify([
+      projectId,
+      documentId,
+      resolveDiffById ? '' : fromVersionId,
+      resolveDiffById ? '' : toVersionId,
+      debouncedHistorySearch,
+    ])
+  )
+  const historyPage = {
+    page_size: 50,
+    offset: historyOffset,
+    search: debouncedHistorySearch,
+  }
   const diffHistoryQuery = useQuery({
     queryKey: [
       'diffs',
@@ -130,6 +148,7 @@ export function DiffsPage({
       documentId,
       resolveDiffById ? 'resolve-id' : fromVersionId,
       resolveDiffById ? search?.diff_id : toVersionId,
+      historyPage,
     ],
     queryFn: ({ signal }) =>
       listDiffs(
@@ -137,13 +156,22 @@ export function DiffsPage({
         documentId,
         resolveDiffById ? undefined : fromVersionId || undefined,
         resolveDiffById ? undefined : toVersionId || undefined,
-        { signal }
+        { signal, page: historyPage }
       ),
     enabled: projectId.length > 0 && documentId.length > 0,
   })
-  const requestedDiff = search?.diff_id
-    ? diffHistoryQuery.data?.items.find((item) => item.id === search.diff_id)
-    : undefined
+  const requestedDiffQuery = useQuery({
+    queryKey: ['diff', projectId, documentId, search?.diff_id],
+    queryFn: ({ signal }) =>
+      getDiff(projectId, documentId, search!.diff_id!, { signal }),
+    enabled: Boolean(projectId && documentId && search?.diff_id),
+    staleTime: 30_000,
+    retry: false,
+  })
+  const requestedDiff =
+    requestedDiffQuery.data?.document_id === documentId
+      ? requestedDiffQuery.data
+      : undefined
   const choices = useVersionChoices(projectId, documentId, [
     fromVersionId,
     toVersionId,
@@ -203,7 +231,7 @@ export function DiffsPage({
       onSearchChange?.({ diff_id: persistedDiff.id })
     }
   }, [onSearchChange, persistedDiff, search?.diff_id])
-  const activeDiff =
+  const activeDiffCandidate =
     search?.diff_id !== undefined
       ? (requestedDiff ?? null)
       : diff?.document_id === documentId &&
@@ -211,6 +239,17 @@ export function DiffsPage({
           diff.to_version_id === selectedToVersionId
         ? diff
         : (persistedDiff ?? null)
+  const activeDiffQuery = useQuery({
+    queryKey: ['diff', projectId, documentId, activeDiffCandidate?.id],
+    queryFn: ({ signal }) =>
+      getDiff(projectId, documentId, activeDiffCandidate!.id, { signal }),
+    enabled: Boolean(projectId && documentId && activeDiffCandidate?.id),
+    staleTime: 30_000,
+  })
+  const activeDiff =
+    activeDiffQuery.data?.document_id === documentId
+      ? activeDiffQuery.data
+      : undefined
   const invalidFromVersionDeepLink = Boolean(
     versionsQuery.data &&
     !choices.isResolving &&
@@ -224,7 +263,7 @@ export function DiffsPage({
     !validVersionIds.has(search.to_version_id)
   )
   const invalidDiffDeepLink = Boolean(
-    diffHistoryQuery.data && search?.diff_id && !requestedDiff
+    search?.diff_id && requestedDiffQuery.isError
   )
   const activeDiffAITarget: AISummaryTarget | undefined = activeDiff
     ? {
@@ -294,6 +333,10 @@ export function DiffsPage({
     onSuccess: (result, request) => {
       // 切换文档、版本或离开页面后，旧请求只刷新其所属文档的缓存。
       if (activeComparisonTarget.current === request) {
+        queryClient.setQueryData(
+          ['diff', request.projectId, request.documentId, result.id],
+          result
+        )
         setDiff(result)
         onSearchChange?.({
           from_version_id: result.from_version_id || undefined,
@@ -307,13 +350,7 @@ export function DiffsPage({
     },
   })
   const comparisonIsCurrent = diffMutation.variables === comparisonTarget
-  const summaryQuery = useQuery({
-    queryKey: ['diff-summary', projectId, documentId, activeDiff?.id],
-    queryFn: ({ signal }) =>
-      getDiffSummary(projectId, documentId, activeDiff?.id ?? '', { signal }),
-    enabled: Boolean(activeDiff?.id),
-  })
-  const summary = summaryQuery.data ?? activeDiff?.summary
+  const summary = activeDiff?.summary
   const searchText = diffSearch.trim().toLowerCase()
   const visibleItems = (activeDiff?.items ?? []).filter((item) => {
     const matchesSearch =
@@ -483,6 +520,16 @@ export function DiffsPage({
         description={t('admin.diff.historyDescription')}
         count={diffHistoryQuery.data?.total ?? 0}
       >
+        <div className='mb-4 grid gap-2'>
+          <Label htmlFor='diff-history-search'>
+            {t('admin.pagination.searchDiffs')}
+          </Label>
+          <Input
+            id='diff-history-search'
+            value={historySearch}
+            onChange={(event) => setHistorySearch(event.currentTarget.value)}
+          />
+        </div>
         {diffHistoryQuery.data?.items.length ? (
           <div className='grid gap-2'>
             {diffHistoryQuery.data.items.map((item) => {
@@ -530,7 +577,29 @@ export function DiffsPage({
         ) : (
           <EmptyState preset='diffs' />
         )}
+        <QueryPagination
+          label={t('admin.pagination.diffs')}
+          offset={historyOffset}
+          count={diffHistoryQuery.data?.items.length ?? 0}
+          total={diffHistoryQuery.data?.total}
+          hasMore={
+            historyOffset + (diffHistoryQuery.data?.items.length ?? 0) <
+            (diffHistoryQuery.data?.total ?? 0)
+          }
+          busy={diffHistoryQuery.isFetching}
+          onPrevious={() => setHistoryOffset(historyOffset - 50)}
+          onNext={() => setHistoryOffset(historyOffset + 50)}
+        />
       </CollectionCard>
+      <LoadingErrorState
+        state={{
+          isLoading: search?.diff_id
+            ? requestedDiffQuery.isLoading
+            : Boolean(activeDiffCandidate) && activeDiffQuery.isLoading,
+          isError: requestedDiffQuery.isError || activeDiffQuery.isError,
+          error: requestedDiffQuery.error ?? activeDiffQuery.error,
+        }}
+      />
       <CollectionCard
         title={t('admin.sections.diffResult')}
         description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}

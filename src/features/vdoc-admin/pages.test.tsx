@@ -56,6 +56,7 @@ const apiMocks = vi.hoisted(() => ({
   getDocumentMCPReadiness: vi.fn(),
   getAIChatSession: vi.fn(),
   getDiffSummary: vi.fn(),
+  getDiff: vi.fn(),
   getDraftContent: vi.fn(),
   getEndpoint: vi.fn(),
   getHealth: vi.fn(),
@@ -119,6 +120,7 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     getDocumentMCPReadiness: apiMocks.getDocumentMCPReadiness,
     getAIChatSession: apiMocks.getAIChatSession,
     getDiffSummary: apiMocks.getDiffSummary,
+    getDiff: apiMocks.getDiff,
     getDraftContent: apiMocks.getDraftContent,
     getEndpoint: apiMocks.getEndpoint,
     getHealth: apiMocks.getHealth,
@@ -590,6 +592,33 @@ describe('UsersPage password boundaries', () => {
       status: 2,
     })
   })
+
+  it.each([
+    ' password123456 ',
+    '\u00a0password123456\u00a0',
+    '\tpassword123456\t',
+  ])(
+    'rejects boundary whitespace without changing the password: %j',
+    async (rawPassword) => {
+      const user = userEvent.setup()
+      const screen = renderUsersPage()
+      await screen.findByText('admin@example.com')
+      await user.type(screen.getByLabelText('Email'), 'created@example.com')
+      await user.type(screen.getByLabelText('Name'), 'Created user')
+      const password = screen.getByLabelText('Password')
+      fireEvent.change(password, { target: { value: rawPassword } })
+      await user.click(screen.getByRole('button', { name: 'Create' }))
+
+      expect(
+        await screen.findByText(
+          'Use 12–72 UTF-8 bytes with no leading or trailing whitespace.',
+          { selector: '[data-slot="alert-description"]' }
+        )
+      ).toBeInTheDocument()
+      expect(apiMocks.createUser).not.toHaveBeenCalled()
+      expect(password).toHaveValue(rawPassword)
+    }
+  )
 
   it('shares the UTF-8 byte password policy with registration', async () => {
     const user = userEvent.setup()
@@ -1542,6 +1571,12 @@ describe('MCPTokensPage secret lifecycle', () => {
 })
 
 function mockWorkspaceQueries() {
+  apiMocks.getDiff.mockImplementation(async (_project, document, id) => {
+    const result = await apiMocks.listDiffs(_project, document)
+    const item = result?.items.find((item: { id: string }) => item.id === id)
+    if (!item) throw new Error('Diff not found')
+    return item
+  })
   apiMocks.listProjects.mockResolvedValue({ items: [projectFixture], total: 1 })
   apiMocks.listBranches.mockResolvedValue({ items: [], total: 0 })
   apiMocks.listDocuments.mockResolvedValue({
@@ -2302,7 +2337,9 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Branch')).toHaveValue(branchFixture.id)
+      expect(screen.getByRole('combobox', { name: 'Branch' })).toHaveValue(
+        branchFixture.id
+      )
       expect(screen.getByLabelText('Draft')).toHaveValue(draftFixture.id)
     })
     expect(apiMocks.listDrafts).toHaveBeenCalledWith(

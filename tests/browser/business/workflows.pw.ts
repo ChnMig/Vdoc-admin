@@ -418,7 +418,10 @@ test('diff version pagination retains selected historical versions', async ({
   )
   const from = page.getByLabel('From version', { exact: true })
   await expect(from).toHaveValue(previousVersionId)
-  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Pagination', exact: true })
+    .getByRole('button', { name: 'Next', exact: true })
+    .click()
   await expect.poll(() => offsets.includes('50')).toBe(true)
   await expect(from).toHaveValue(previousVersionId)
   await expect(page.getByLabel('To version', { exact: true })).toHaveValue(
@@ -477,6 +480,13 @@ test('a comparison completed after document navigation stays in its original his
       await fulfillEnvelope(route, comparisonFinished ? [result] : [], {
         total: comparisonFinished ? 1 : 0,
       })
+      return
+    }
+    if (
+      method === 'GET' &&
+      path === `${documentPath}/${documentId}/diffs/${result.id}`
+    ) {
+      await fulfillEnvelope(route, result)
       return
     }
     if (
@@ -1020,3 +1030,309 @@ test('public share erases the fragment, unlocks, and switches history', async ({
   expect(unlockBodyMatched).toBe(true)
   expect(unlockProofObserved).toBe(true)
 })
+
+for (const size of [
+  { name: 'desktop', width: 1280, height: 900 },
+  { name: 'mobile', width: 390, height: 844 },
+]) {
+  test(`draft history pagination keeps an off-page review on ${size.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: size.width, height: size.height })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    const offsets: string[] = []
+    await page.route('**/drafts?*', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await fulfillOptions(route)
+        return
+      }
+      const params = new URL(route.request().url()).searchParams
+      expect(params.get('page_size')).toBe('50')
+      const offset = Number(params.get('offset') ?? '0')
+      offsets.push(String(offset))
+      const rows = Array.from({ length: 50 }, (_, i) => ({
+        ...editableDraft,
+        id: `history-${offset + i}`,
+        version_name: `draft-${offset + i}`,
+      }))
+      await fulfillEnvelope(route, rows, { total: 120 })
+    })
+    await page.goto(
+      `/drafts/?project_id=${projectId}&document_id=${documentId}&branch_id=${branchId}&draft_id=${submittedDraftId}`
+    )
+    await expect(page.getByLabel('Draft', { exact: true })).toHaveValue(
+      submittedDraftId
+    )
+    await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
+    await page
+      .getByRole('navigation', { name: 'Draft pages' })
+      .getByRole('button', { name: 'Next', exact: true })
+      .click()
+    await expect.poll(() => offsets.includes('50')).toBe(true)
+    await expect(page.getByLabel('Draft', { exact: true })).toHaveValue(
+      submittedDraftId
+    )
+    await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Approve', exact: true }).click()
+    await expect(page.getByRole('alertdialog')).toContainText('Publish 2.0.0?')
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click()
+    await page
+      .getByRole('navigation', { name: 'Draft pages' })
+      .scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: `../.artifacts/project-optimization-20260928/drafts-after-${size.name}.png`,
+    })
+  })
+  test(`diff history pagination loads details outside the page on ${size.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: size.width, height: size.height })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    const selected = {
+      id: 'diff-selected',
+      document_id: documentId,
+      from_version_id: previousVersionId,
+      to_version_id: latestVersionId,
+      diff_status: 1,
+      summary: {
+        added_endpoints: 0,
+        removed_endpoints: 0,
+        modified_endpoints: 1,
+        breaking_changes: 0,
+      },
+      items: [
+        {
+          id: 'manual',
+          change_type: 7,
+          severity: 2,
+          message: 'Schema compatibility requires manual review',
+          is_breaking: false,
+          must_handle: true,
+          sort_order: 1,
+        },
+      ],
+      created_at: timestamp,
+      updated_at: timestamp,
+    }
+    const offsets: string[] = []
+    await page.route('**/diffs?*', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await fulfillOptions(route)
+        return
+      }
+      const params = new URL(route.request().url()).searchParams
+      expect(params.get('page_size')).toBe('50')
+      const offset = Number(params.get('offset') ?? '0')
+      offsets.push(String(offset))
+      const rows = Array.from({ length: 50 }, (_, i) => ({
+        id: `history-${offset + i}`,
+        document_id: documentId,
+        from_version_id: previousVersionId,
+        to_version_id: latestVersionId,
+        diff_status: 1,
+        created_at: timestamp,
+        updated_at: timestamp,
+      }))
+      await fulfillEnvelope(route, rows, { total: 120 })
+    })
+    await page.route('**/diffs/diff-selected', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await fulfillOptions(route)
+        return
+      }
+      await fulfillEnvelope(route, selected)
+    })
+    await page.route('**/diffs/diff-selected/summary', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await fulfillOptions(route)
+        return
+      }
+      await fulfillEnvelope(route, selected.summary)
+    })
+    await page.goto(
+      `/diffs/?project_id=${projectId}&document_id=${documentId}&diff_id=diff-selected`
+    )
+    await expect(page.getByLabel('From version', { exact: true })).toHaveValue(
+      previousVersionId
+    )
+    await expect(
+      page
+        .getByText('Schema compatibility requires manual review', {
+          exact: true,
+        })
+        .first()
+    ).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Diff history pages' })
+      .getByRole('button', { name: 'Next', exact: true })
+      .click()
+    await expect.poll(() => offsets.includes('50')).toBe(true)
+    await expect(page.getByLabel('From version', { exact: true })).toHaveValue(
+      previousVersionId
+    )
+    await expect(
+      page
+        .getByText('Schema compatibility requires manual review', {
+          exact: true,
+        })
+        .first()
+    ).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Diff history pages' })
+      .scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: `../.artifacts/project-optimization-20260928/diffs-after-${size.name}.png`,
+    })
+  })
+}
+
+for (const width of [1280, 390]) {
+  test(`exact contract numbers survive API decoding and render at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installAdminSession(page)
+    await installAdminApi(page)
+    const responsesJSON =
+      '{"200":{"content":{"application/json":{"schema":{"enum":[9007199254740993,0.123456789012345678901,1e131071,1e-16383,"9007199254740993"]}}}}}'
+    const endpoint = {
+      id: 'endpoint-precision',
+      version_id: latestVersionId,
+      method: 'GET',
+      path: '/precision',
+      operation_id: 'exactNumbers',
+      deprecated: false,
+      hash: 'exact-hash',
+      created_at: timestamp,
+      updated_at: timestamp,
+      responses: 'RAW_RESPONSES',
+      json_preview: { responses: responsesJSON },
+    }
+    const diff = {
+      id: 'diff-precision',
+      document_id: documentId,
+      from_version_id: previousVersionId,
+      to_version_id: latestVersionId,
+      diff_status: 1,
+      summary: {
+        added_endpoints: 0,
+        removed_endpoints: 0,
+        modified_endpoints: 1,
+        breaking_changes: 1,
+        document_format: 1,
+      },
+      items: [
+        {
+          id: 'number-change',
+          change_type: 7,
+          severity: 3,
+          method: 'GET',
+          path: '/precision',
+          message: 'Schema constraint changed',
+          is_breaking: true,
+          must_handle: true,
+          sort_order: 1,
+          old_value: 'RAW_OLD',
+          new_value: 'RAW_NEW',
+          old_value_json: '9007199254740992',
+          new_value_json: '9007199254740993',
+        },
+      ],
+      created_at: timestamp,
+      updated_at: timestamp,
+    }
+    await page.route('**/api/v1/private/**', async (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (route.request().method() === 'OPTIONS') {
+        await fulfillOptions(route)
+        return
+      }
+      if (path.endsWith('/documents')) {
+        await fulfillEnvelope(
+          route,
+          [{ ...document, document_type: 1, relative_path: 'api.json' }],
+          { total: 1 }
+        )
+        return
+      }
+      if (path.endsWith('/versions')) {
+        await fulfillEnvelope(
+          route,
+          [
+            { ...latestVersion, document_format: 1 },
+            { ...previousVersion, document_format: 1 },
+          ],
+          { total: 2 }
+        )
+        return
+      }
+      if (path.endsWith(`/versions/${latestVersionId}`)) {
+        await fulfillEnvelope(route, { ...latestVersion, document_format: 1 })
+        return
+      }
+      if (path.endsWith('/endpoints')) {
+        await fulfillEnvelope(route, [endpoint], { total: 1 })
+        return
+      }
+      if (path.endsWith('/content/raw')) {
+        await fulfillEnvelope(route, {
+          owner_type: 'version',
+          owner_id: latestVersionId,
+          kind: 'raw',
+          content_kind: 'openapi',
+          content: '{}',
+          hash: 'content-hash',
+        })
+        return
+      }
+      if (
+        path.endsWith('/diffs/diff-precision') ||
+        path.endsWith('/endpoints/endpoint-precision')
+      ) {
+        const detail = path.endsWith('/diffs/diff-precision') ? diff : endpoint
+        const body = JSON.stringify({ code: 200, status: 'OK', detail })
+          .replace('"RAW_OLD"', '9007199254740992')
+          .replace('"RAW_NEW"', '9007199254740993')
+          .replace('"RAW_RESPONSES"', responsesJSON)
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: responseHeaders(),
+          body,
+        })
+        return
+      }
+      await route.fallback()
+    })
+    await page.goto(
+      `/diffs/?project_id=${projectId}&document_id=${documentId}&diff_id=diff-precision`
+    )
+    await expect(
+      page.locator('pre').filter({ hasText: /^9007199254740992$/ })
+    ).toBeVisible()
+    await expect(
+      page.locator('pre').filter({ hasText: /^9007199254740993$/ })
+    ).toBeVisible()
+    await page
+      .locator('article')
+      .filter({ hasText: '9007199254740993' })
+      .scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath('exact-diff.png') })
+    await page.goto(
+      `/versions/?project_id=${projectId}&document_id=${documentId}&version_id=${latestVersionId}&endpoint_id=endpoint-precision`
+    )
+    const preview = page
+      .locator('pre')
+      .filter({ hasText: '0.123456789012345678901' })
+    await expect(preview).toBeVisible()
+    await expect(preview).toHaveText(responsesJSON)
+    await expect(preview).not.toContainText('9007199254740992')
+    await preview.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath('exact-endpoint.png') })
+  })
+}

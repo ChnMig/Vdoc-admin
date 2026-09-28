@@ -200,6 +200,10 @@ const en = {
   admin: {
     pagination: {
       label: 'Pagination',
+      drafts: 'Draft pages',
+      diffs: 'Diff history pages',
+      searchDrafts: 'Search draft versions',
+      searchDiffs: 'Search history by version',
       previous: 'Previous',
       next: 'Next',
       range: 'Showing {from}–{to}',
@@ -848,6 +852,10 @@ const en = {
         responseFieldRequiredChanged: 'Response field required flag changed',
         responseSchemaTypeChanged: 'Response schema type changed',
         enumValueRemoved: 'Enum value removed',
+        enumValueAdded: 'Enum value added',
+        schemaConstraintChanged: 'Schema constraint changed',
+        schemaAlternativesChanged: 'Schema alternatives changed',
+        schemaManualReview: 'Schema compatibility requires manual review',
         enumConstraintAdded: 'Enum constraint added',
         enumConstraintRemoved: 'Enum constraint removed',
         parameterFieldAdded: 'Parameter field added',
@@ -1421,6 +1429,10 @@ const zhCN = {
   },
   admin: {
     pagination: {
+      drafts: '草稿分页',
+      diffs: '差异历史分页',
+      searchDrafts: '搜索草稿版本',
+      searchDiffs: '按版本搜索比较历史',
       label: '分页',
       previous: '上一页',
       next: '下一页',
@@ -2035,6 +2047,10 @@ const zhCN = {
         responseFieldTypeChanged: '响应字段类型已变更',
         responseFieldRequiredChanged: '响应字段必填状态已变更',
         responseSchemaTypeChanged: '响应 Schema 类型已变更',
+        enumValueAdded: '枚举值已新增',
+        schemaConstraintChanged: 'Schema 约束已变更',
+        schemaAlternativesChanged: 'Schema 可选分支已变更',
+        schemaManualReview: 'Schema 兼容性需要人工检查',
         enumValueRemoved: '枚举值已删除',
         enumConstraintAdded: '新增枚举限制',
         enumConstraintRemoved: '取消枚举限制',

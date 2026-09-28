@@ -135,7 +135,9 @@ export type DiffItemDTO = {
   operation_id?: string
   location?: string
   old_value?: unknown
+  old_value_json?: string
   new_value?: unknown
+  new_value_json?: string
   message: string
   frontend_impact?: string
   is_breaking: boolean
@@ -188,6 +190,13 @@ export type MCPUsageQuery = {
   token_id?: string
   limit?: number
 }
+
+export type DraftListDTO = Omit<
+  DraftDTO,
+  'revision' | 'review_revision' | 'diff_preview'
+>
+
+export type DiffListDTO = Omit<DiffDTO, 'summary' | 'items' | 'diff_hash'>
 
 export type DraftDTO = {
   id: string
@@ -293,6 +302,18 @@ export type EndpointSummaryDTO = {
 }
 
 export type EndpointDTO = EndpointSummaryDTO & {
+  json_preview?: Partial<
+    Record<
+      | 'parameters'
+      | 'request_body'
+      | 'responses'
+      | 'security'
+      | 'servers'
+      | 'normalized_operation'
+      | 'schema_refs',
+      string
+    >
+  >
   parameters?: unknown
   request_body?: unknown
   responses?: unknown
@@ -877,12 +898,16 @@ export function listDrafts(
   branchId?: string,
   options?: RequestOptions
 ) {
-  return unwrapListEnvelope<DraftDTO>(
+  return unwrapListEnvelope<DraftListDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts`,
       {
         signal: options?.signal,
-        params: branchId ? { branch_id: branchId } : undefined,
+        params: options?.page
+          ? { branch_id: branchId, ...options.page }
+          : branchId
+            ? { branch_id: branchId }
+            : undefined,
       }
     )
   )
@@ -1091,12 +1116,13 @@ export function listDiffs(
   toVersionId?: string,
   options?: RequestOptions
 ) {
-  return unwrapListEnvelope<DiffDTO>(
+  return unwrapListEnvelope<DiffListDTO>(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs`,
       {
         signal: options?.signal,
         params: {
+          ...options?.page,
           from_version_id: fromVersionId || undefined,
           to_version_id: toVersionId || undefined,
         },
@@ -1333,5 +1359,19 @@ export function getMCPToken(tokenId: string, options?: RequestOptions) {
 export function revokeMCPToken(tokenId: string) {
   return unwrapEnvelope<MCPTokenDTO>(
     vdocApi.post(`/api/v1/private/mcp-tokens/${tokenId}/revoke`)
+  )
+}
+
+export function getDiff(
+  projectId: string,
+  documentId: string,
+  diffId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<DiffDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}`,
+      { signal: options?.signal }
+    )
   )
 }

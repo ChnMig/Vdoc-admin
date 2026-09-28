@@ -9,6 +9,8 @@ type MainProps = React.HTMLAttributes<HTMLElement> & {
 export function Main({ fixed, className, fluid, ...props }: MainProps) {
   return (
     <main
+      id='content'
+      tabIndex={-1}
       data-layout={fixed ? 'fixed' : 'auto'}
       className={cn(
         'px-4 py-5 sm:px-5 lg:px-6',
