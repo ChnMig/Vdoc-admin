@@ -17,7 +17,7 @@ The v0.1 surface is responsible for more than CRUD administration: it guides fir
 
 ## Vdoc Backend Expectations
 
-Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin during local development, for example `http://127.0.0.1:8080`. Both authenticated requests and anonymous public-share API requests use this backend origin. Public share browser links use the current Admin origin by default; set `VITE_VDOC_PUBLIC_SHARE_BASE_URL` only when `/share/*` is intentionally hosted elsewhere. The production Docker image is configured at container startup instead: set `VDOC_ADMIN_API_BASE_URL` to write `/runtime-config.js` before Caddy serves the Vite bundle as static files. `VITE_VDOC_API_BASE_URL` remains supported as a container startup fallback for compatibility. The Admin/public-share browser origins must be listed exactly in backend `VDOC_SERVER_CORS_ALLOWED_ORIGINS`; wildcard CORS is rejected.
+Set `VITE_VDOC_API_BASE_URL` to the Vdoc API origin during local development, for example `http://127.0.0.1:8080`. Both authenticated requests and anonymous public-share API requests use this backend origin. Public share browser links use the current Admin origin by default; set `VITE_VDOC_PUBLIC_SHARE_BASE_URL` only when `/share/*` is intentionally hosted elsewhere. The production Docker image is configured at container startup instead: set `VDOC_ADMIN_API_BASE_URL` to write `/runtime-config.js` before Caddy serves the Vite bundle as static files. `VITE_VDOC_API_BASE_URL` remains supported as a container startup fallback for compatibility. Standalone deployments use backend `VDOC_SERVER_CORS_ALLOWED_ORIGINS="*"` to allow any browser origin, without credentialed cookies. Exact origin allowlists remain available for restricted deployments. Account, MCP and share authorization are still required.
 
 Authentication uses the Vdoc backend directly:
 
@@ -76,7 +76,7 @@ pnpm test:browser
 
 Push a version tag such as `v0.1.1` or `v0.1.1-rc.1` after committing the release changes. CI completes its build, lint, unit, container-entrypoint, and browser checks, then packages the verified `dist/` as `vdoc-admin_<tag>.tar.gz` with licenses and `SHA256SUMS`. A separate job creates the [GitHub Release](https://github.com/ChnMig/Vdoc-admin/releases) from those artifacts; prerelease tags create prereleases. Ordinary branch pushes and pull requests run checks only. Existing releases are not overwritten.
 
-For local packaging, run `pnpm build` followed by `pnpm release:package v0.3.2`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
+For local packaging, run `pnpm build` followed by `pnpm release:package v0.3.3`, substituting the intended version. Generated archives stay in the ignored `.artifacts/release/` directory.
 
 Extract the release archive and serve its contents with SPA fallback to `index.html`. Before serving, configure the included `runtime-config.js` for your backend:
 
@@ -86,7 +86,7 @@ window.__VDOC_ADMIN_CONFIG__ = {
 }
 ```
 
-Allow the Admin origin in the backend's `VDOC_SERVER_CORS_ALLOWED_ORIGINS`. The release workflow publishes the static package; hosting configuration and deployment are separate.
+Use backend `VDOC_SERVER_CORS_ALLOWED_ORIGINS="*"`, or include the Admin origin when choosing a restricted allowlist. The release workflow publishes the static package; hosting configuration and deployment are separate.
 
 ## Attribution
 

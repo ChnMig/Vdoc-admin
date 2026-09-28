@@ -55,6 +55,9 @@ jobs:
       - name: Test browser safety paths
         run: pnpm test:browser
 
+      - name: Test stable image promotion
+        run: bash scripts/test-promote-latest-image.sh
+
       - name: Package tagged release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
@@ -115,7 +118,7 @@ jobs:
       contents: write
       packages: write
     concurrency:
-      group: admin-release-${{ github.ref }}
+      group: admin-release
       cancel-in-progress: false
     steps:
       - name: Checkout publishing tools
@@ -157,3 +160,9 @@ jobs:
           fi
           gh release create "$RELEASE_TAG" release/* \
             --verify-tag --generate-notes --title "$RELEASE_TAG" "${options[@]}"
+
+      - name: Point latest at the newest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/promote-latest-image.sh "$RELEASE_TAG"
