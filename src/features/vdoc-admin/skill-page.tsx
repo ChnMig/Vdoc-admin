@@ -5,13 +5,23 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
-import { vdocMcpSource } from './page-utils'
+import { vdocMcpReleaseVersion } from './page-utils'
 
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
-VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
-npm install --global ${vdocMcpSource}
-vdoc-mcp skill install --directory "$VDOC_SKILL_DIR"
-test -f "$VDOC_SKILL_DIR/SKILL.md"`
+(
+  set -eu
+  VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
+  VDOC_MCP_VERSION=${vdocMcpReleaseVersion}
+  VDOC_MCP_PACKAGE_DIR="$(mktemp -d)"
+  trap 'rm -rf -- "$VDOC_MCP_PACKAGE_DIR"' EXIT
+  VDOC_MCP_RELEASE="https://github.com/ChnMig/Vdoc-mcp/releases/download/v$VDOC_MCP_VERSION"
+  curl -fsSL "$VDOC_MCP_RELEASE/vdoc-mcp-$VDOC_MCP_VERSION.tgz" -o "$VDOC_MCP_PACKAGE_DIR/vdoc-mcp-$VDOC_MCP_VERSION.tgz"
+  curl -fsSL "$VDOC_MCP_RELEASE/SHA256SUMS" -o "$VDOC_MCP_PACKAGE_DIR/SHA256SUMS"
+  (cd "$VDOC_MCP_PACKAGE_DIR" && shasum -a 256 -c SHA256SUMS)
+  npm install --global "$VDOC_MCP_PACKAGE_DIR/vdoc-mcp-$VDOC_MCP_VERSION.tgz"
+  vdoc-mcp skill install --directory "$VDOC_SKILL_DIR"
+  test -f "$VDOC_SKILL_DIR/SKILL.md"
+)`
 
 export function SkillPage() {
   const { t } = useLanguage()
