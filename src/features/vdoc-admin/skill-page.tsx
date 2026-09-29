@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
 
-const vdocSkillCommit = 'f1398b391c9b3f087474dcc9d92e454ca33c319c'
+const vdocSkillCommit = '920c2a0c93b2541db78d3953518c4ce0b82d2069'
 
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
 VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"

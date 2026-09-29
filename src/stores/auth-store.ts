@@ -50,6 +50,7 @@ interface AuthState {
     user: AuthUser | null
     setUser: (user: AuthUser | null) => void
     accessToken: string
+    sessionVersion: number
     setAccessToken: (accessToken: string) => void
     resetAccessToken: () => void
     reset: () => void
@@ -67,16 +68,31 @@ export const useAuthStore = create<AuthState>()((set) => {
       setUser: (user) =>
         set((state) => ({ ...state, auth: { ...state.auth, user } })),
       accessToken: initToken,
+      sessionVersion: 0,
       setAccessToken: (accessToken) =>
         set((state) => {
           writeAccessToken(accessToken)
-          return { ...state, auth: { ...state.auth, accessToken } }
+          return {
+            ...state,
+            auth: {
+              ...state.auth,
+              accessToken,
+              sessionVersion: state.auth.sessionVersion + 1,
+            },
+          }
         }),
       resetAccessToken: () =>
         set((state) => {
           clearAccessToken()
           useVdocContextStore.getState().reset()
-          return { ...state, auth: { ...state.auth, accessToken: '' } }
+          return {
+            ...state,
+            auth: {
+              ...state.auth,
+              accessToken: '',
+              sessionVersion: state.auth.sessionVersion + 1,
+            },
+          }
         }),
       reset: () =>
         set((state) => {
@@ -84,7 +100,12 @@ export const useAuthStore = create<AuthState>()((set) => {
           useVdocContextStore.getState().reset()
           return {
             ...state,
-            auth: { ...state.auth, user: null, accessToken: '' },
+            auth: {
+              ...state.auth,
+              user: null,
+              accessToken: '',
+              sessionVersion: state.auth.sessionVersion + 1,
+            },
           }
         }),
     },
