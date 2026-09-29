@@ -756,7 +756,7 @@ const en = {
       installDescription:
         'The Vdoc Skill teaches agents to query reviewed facts, compare versions, and submit drafts without bypassing human publication.',
       stepPackage:
-        'Clone the public Vdoc-skill repository into a Codex user or repository Skill directory.',
+        'Install the MCP package, then link its bundled Skill into your agent directory. Existing Skill files are preserved.',
       stepMcp:
         'Run the Vdoc MCP stdio adapter with the backend URL and an appropriately scoped active token in environment variables.',
       stepVerify:
@@ -1955,7 +1955,7 @@ const zhCN = {
       installDescription:
         'Vdoc Skill 指导智能体查询已审阅事实、比较版本并提交草稿，同时不绕过人工发布。',
       stepPackage:
-        '把公开 Vdoc-skill 仓库克隆到 Codex 用户级或仓库级 Skill 目录。',
+        '安装 MCP 包，再将随包提供的 Skill 链接到 Agent 目录；已有 Skill 文件不会被覆盖。',
       stepMcp:
         '运行 Vdoc MCP stdio 适配器，并通过环境变量配置后端地址和限定范围的有效令牌。',
       stepVerify:

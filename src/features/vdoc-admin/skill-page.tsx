@@ -5,19 +5,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
-
-const vdocSkillCommit = 'bf5f77435612410d63dcb14c85a14521f1e606ba'
+import { vdocMcpSource } from './page-utils'
 
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
 VDOC_SKILL_DIR="$HOME/.agents/skills/vdoc"
-VDOC_SKILL_COMMIT=${vdocSkillCommit}
-test ! -e "$VDOC_SKILL_DIR"
-mkdir -p "$(dirname -- "$VDOC_SKILL_DIR")"
-git init "$VDOC_SKILL_DIR"
-git -C "$VDOC_SKILL_DIR" remote add origin https://github.com/ChnMig/Vdoc-skill.git
-git -C "$VDOC_SKILL_DIR" fetch --depth 1 origin "$VDOC_SKILL_COMMIT"
-git -C "$VDOC_SKILL_DIR" checkout --detach FETCH_HEAD
-test "$(git -C "$VDOC_SKILL_DIR" rev-parse HEAD)" = "$VDOC_SKILL_COMMIT"
+npm install --global ${vdocMcpSource}
+vdoc-mcp skill install --directory "$VDOC_SKILL_DIR"
 test -f "$VDOC_SKILL_DIR/SKILL.md"`
 
 export function SkillPage() {
