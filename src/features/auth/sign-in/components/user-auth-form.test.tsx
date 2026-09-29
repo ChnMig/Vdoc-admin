@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { render, type RenderResult, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '@/stores/auth-store'
 import { UserAuthForm } from './user-auth-form'
 
 const FORM_MESSAGES = {
@@ -11,18 +12,7 @@ const FORM_MESSAGES = {
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  setUser: vi.fn(),
-  setAccessToken: vi.fn(),
   login: vi.fn(),
-}))
-
-vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: () => ({
-    auth: {
-      setUser: mocks.setUser,
-      setAccessToken: mocks.setAccessToken,
-    },
-  }),
 }))
 
 vi.mock('@/lib/vdoc-api', async (importOriginal) => ({
@@ -55,6 +45,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 describe('UserAuthForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAuthStore.getState().auth.reset()
     mocks.login.mockResolvedValue({
       token: 'vdoc-session-token',
       user: {
@@ -62,6 +53,7 @@ describe('UserAuthForm', () => {
         email: 'a@b.com',
         name: 'Vdoc User',
         is_super_admin: true,
+        can_access_audit: true,
         status: 1,
       },
     })
@@ -105,14 +97,19 @@ describe('UserAuthForm', () => {
       await userEvent.click(signInButton)
 
       await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
-      expect(mocks.login).toHaveBeenCalledWith({
-        email: 'a@b.com',
-        password: '1234567',
-      })
-      expect(mocks.setUser).toHaveBeenCalledWith(
+      expect(mocks.login).toHaveBeenCalledWith(
+        {
+          email: 'a@b.com',
+          password: '1234567',
+        },
+        { signal: expect.any(AbortSignal) }
+      )
+      expect(useAuthStore.getState().auth.user).toEqual(
         expect.objectContaining({ email: 'a@b.com' })
       )
-      expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
+      expect(useAuthStore.getState().auth.accessToken).toBe(
+        'vdoc-session-token'
+      )
 
       await waitFor(() =>
         expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
@@ -128,8 +125,13 @@ describe('UserAuthForm', () => {
         await userEvent.click(signInButton)
 
         await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
-        expect(mocks.login).toHaveBeenCalledWith({ email: 'a@b.com', password })
-        expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
+        expect(mocks.login).toHaveBeenCalledWith(
+          { email: 'a@b.com', password },
+          { signal: expect.any(AbortSignal) }
+        )
+        expect(useAuthStore.getState().auth.accessToken).toBe(
+          'vdoc-session-token'
+        )
       }
     )
 
@@ -141,8 +143,8 @@ describe('UserAuthForm', () => {
 
       await waitFor(() => expect(mocks.login).toHaveBeenCalledOnce())
       await waitFor(() => expect(signInButton).not.toBeDisabled())
-      expect(mocks.setUser).not.toHaveBeenCalled()
-      expect(mocks.setAccessToken).not.toHaveBeenCalled()
+      expect(useAuthStore.getState().auth.user).toBeNull()
+      expect(useAuthStore.getState().auth.accessToken).toBe('')
       expect(mocks.navigate).not.toHaveBeenCalled()
     })
   })
@@ -157,8 +159,10 @@ describe('UserAuthForm', () => {
 
     await userEvent.click(getByRole('button', { name: /Sign in/i }))
 
-    await waitFor(() => expect(mocks.setUser).toHaveBeenCalledOnce())
-    expect(mocks.setAccessToken).toHaveBeenCalledOnce()
+    await waitFor(() =>
+      expect(useAuthStore.getState().auth.user?.email).toBe('a@b.com')
+    )
+    expect(useAuthStore.getState().auth.accessToken).toBe('vdoc-session-token')
 
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenCalledWith({

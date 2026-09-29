@@ -20,7 +20,7 @@ export type VdocEnvelope<T> = {
   next_cursor?: string
 }
 
-type VdocSession = {
+export type VdocSession = {
   user: AuthUser
   token: string
 }
@@ -634,15 +634,19 @@ export async function unwrapListEnvelope<T>(
   }
 }
 
-export function login(payload: LoginPayload) {
+export function login(payload: LoginPayload, options?: RequestOptions) {
   return unwrapEnvelope<VdocSession>(
-    vdocApi.post('/api/v1/open/auth/login', payload)
+    vdocApi.post('/api/v1/open/auth/login', payload, {
+      signal: options?.signal,
+    })
   )
 }
 
-export function register(payload: RegisterPayload) {
+export function register(payload: RegisterPayload, options?: RequestOptions) {
   return unwrapEnvelope<VdocSession>(
-    vdocApi.post('/api/v1/open/auth/register', payload)
+    vdocApi.post('/api/v1/open/auth/register', payload, {
+      signal: options?.signal,
+    })
   )
 }
 

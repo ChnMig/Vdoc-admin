@@ -1,6 +1,7 @@
 import { render, type RenderResult, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '@/stores/auth-store'
 import { SignUpForm } from './sign-up-form'
 
 const FORM_MESSAGES = {
@@ -15,21 +16,10 @@ const FORM_MESSAGES = {
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   register: vi.fn(),
-  setUser: vi.fn(),
-  setAccessToken: vi.fn(),
   toastSuccess: vi.fn(),
 }))
 
 vi.mock('sonner', () => ({ toast: { success: mocks.toastSuccess } }))
-
-vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: () => ({
-    auth: {
-      setUser: mocks.setUser,
-      setAccessToken: mocks.setAccessToken,
-    },
-  }),
-}))
 
 vi.mock('@/lib/vdoc-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/vdoc-api')>()),
@@ -50,6 +40,7 @@ describe('SignUpForm', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    useAuthStore.getState().auth.reset()
     mocks.register.mockResolvedValue({
       token: 'vdoc-session-token',
       user: {
@@ -57,6 +48,7 @@ describe('SignUpForm', () => {
         email: 'a@b.com',
         name: 'Vdoc User',
         is_super_admin: true,
+        can_access_audit: true,
         status: 1,
       },
     })
@@ -127,15 +119,18 @@ describe('SignUpForm', () => {
     await userEvent.click(submitButton)
 
     await waitFor(() => expect(mocks.register).toHaveBeenCalledOnce())
-    expect(mocks.register).toHaveBeenCalledWith({
-      name: '',
-      email: 'a@b.com',
-      password: 'correct horse battery',
-    })
-    expect(mocks.setUser).toHaveBeenCalledWith(
+    expect(mocks.register).toHaveBeenCalledWith(
+      {
+        name: '',
+        email: 'a@b.com',
+        password: 'correct horse battery',
+      },
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(useAuthStore.getState().auth.user).toEqual(
       expect.objectContaining({ email: 'a@b.com' })
     )
-    expect(mocks.setAccessToken).toHaveBeenCalledWith('vdoc-session-token')
+    expect(useAuthStore.getState().auth.accessToken).toBe('vdoc-session-token')
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Vdoc account created.')
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/', replace: true })
   })

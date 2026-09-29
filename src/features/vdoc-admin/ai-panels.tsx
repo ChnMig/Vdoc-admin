@@ -1,6 +1,7 @@
 import { useRef, useState, type MutableRefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Bot, MessageSquare } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   createAIChatSession,
   getAIChatSession,
@@ -92,11 +93,14 @@ function AIContextPanelContent({
     enabled: target !== undefined && activeSessionId.length > 0,
   })
   const regenerateMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!target || !canRegenerate) throw new Error('AI summary is read-only.')
-      return regenerateAISummary(target)
+      const sessionVersion = useAuthStore.getState().auth.sessionVersion
+      const summary = await regenerateAISummary(target)
+      return { summary, sessionVersion }
     },
-    onSuccess: (summary) => {
+    onSuccess: ({ summary, sessionVersion }) => {
+      if (useAuthStore.getState().auth.sessionVersion !== sessionVersion) return
       queryClient.setQueryData(['ai-summary', target], summary)
       return queryClient.invalidateQueries({ queryKey: ['ai-summary', target] })
     },

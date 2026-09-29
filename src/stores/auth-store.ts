@@ -51,6 +51,7 @@ interface AuthState {
     setUser: (user: AuthUser | null) => void
     accessToken: string
     sessionVersion: number
+    setSession: (user: AuthUser, accessToken: string) => void
     setAccessToken: (accessToken: string) => void
     resetAccessToken: () => void
     reset: () => void
@@ -69,6 +70,19 @@ export const useAuthStore = create<AuthState>()((set) => {
         set((state) => ({ ...state, auth: { ...state.auth, user } })),
       accessToken: initToken,
       sessionVersion: 0,
+      setSession: (user, accessToken) =>
+        set((state) => {
+          writeAccessToken(accessToken)
+          return {
+            ...state,
+            auth: {
+              ...state.auth,
+              user,
+              accessToken,
+              sessionVersion: state.auth.sessionVersion + 1,
+            },
+          }
+        }),
       setAccessToken: (accessToken) =>
         set((state) => {
           writeAccessToken(accessToken)

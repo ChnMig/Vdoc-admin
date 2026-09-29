@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { Loader2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import { handleServerError } from '@/lib/handle-server-error'
 import { type TFunction } from '@/lib/i18n'
 import { userPasswordError } from '@/lib/user-password'
 import { cn } from '@/lib/utils'
@@ -24,6 +22,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
+import { useAuthSubmission } from '../../use-auth-submission'
 
 type SignUpFormValues = {
   name?: string
@@ -62,9 +61,8 @@ export function SignUpForm({
   className,
   ...props
 }: React.HTMLAttributes<HTMLFormElement>) {
-  const [isLoading, setIsLoading] = useState(false)
+  const { isLoading, submit } = useAuthSubmission()
   const navigate = useNavigate()
-  const { auth } = useAuthStore()
   const { t } = useLanguage()
   const formSchema = useMemo(() => createFormSchema(t), [t])
 
@@ -79,23 +77,21 @@ export function SignUpForm({
   })
 
   async function onSubmit(data: SignUpFormValues) {
-    setIsLoading(true)
-
-    try {
-      const session = await register({
-        name: data.name,
-        email: data.email,
-        password: data.password,
-      })
-      auth.setUser(session.user)
-      auth.setAccessToken(session.token)
-      toast.success(t('auth.signUp.created'))
-      await navigate({ to: '/', replace: true })
-    } catch (error) {
-      handleServerError(error)
-    } finally {
-      setIsLoading(false)
-    }
+    await submit(
+      (signal) =>
+        register(
+          {
+            name: data.name,
+            email: data.email,
+            password: data.password,
+          },
+          { signal }
+        ),
+      async () => {
+        toast.success(t('auth.signUp.created'))
+        await navigate({ to: '/', replace: true })
+      }
+    )
   }
 
   return (

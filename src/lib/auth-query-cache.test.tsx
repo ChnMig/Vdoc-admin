@@ -69,6 +69,20 @@ it('cancels an old request even when its transport ignores AbortSignal', async (
   }
 })
 
+it('clears the cache when a new session reuses the same JWT', () => {
+  const client = new QueryClient()
+  const unbind = bindQueryCacheToAuth(client)
+  try {
+    useAuthStore.getState().auth.setAccessToken('same-token')
+    client.setQueryData(['projects'], ['old-session-data'])
+    useAuthStore.getState().auth.setAccessToken('same-token')
+    expect(client.getQueryData(['projects'])).toBeUndefined()
+  } finally {
+    unbind()
+    client.clear()
+  }
+})
+
 it('clears data for an identity change but retains it for a same-user profile refresh', () => {
   const client = new QueryClient()
   const unbind = bindQueryCacheToAuth(client)

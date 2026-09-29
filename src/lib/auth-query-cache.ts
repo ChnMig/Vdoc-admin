@@ -5,6 +5,7 @@ export function bindQueryCacheToAuth(queryClient: QueryClient): () => void {
   return useAuthStore.subscribe((state, previous) => {
     if (
       state.auth.accessToken === previous.auth.accessToken &&
+      state.auth.sessionVersion === previous.auth.sessionVersion &&
       state.auth.user?.id === previous.auth.user?.id
     ) {
       return

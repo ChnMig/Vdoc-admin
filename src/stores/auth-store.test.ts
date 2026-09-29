@@ -61,6 +61,29 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().auth.user).toEqual(sampleUser)
   })
 
+  it('commits user and token atomically, including a new session with the same token', async () => {
+    const useAuthStore = await importAuthStore()
+    const listener = vi.fn()
+    const unsubscribe = useAuthStore.subscribe(listener)
+    try {
+      for (const sessionVersion of [1, 2]) {
+        useAuthStore.getState().auth.setSession(sampleUser, 'same-token')
+        expect(listener).toHaveBeenCalledTimes(sessionVersion)
+        expect(listener.mock.lastCall![0].auth).toMatchObject({
+          user: sampleUser,
+          accessToken: 'same-token',
+          sessionVersion,
+        })
+        expect(window.sessionStorage.getItem('vdoc_admin_access_token')).toBe(
+          'same-token'
+        )
+      }
+      expect(document.cookie).not.toContain('vdoc_admin_access_token')
+    } finally {
+      unsubscribe()
+    }
+  })
+
   it('reset clears user and access token and drops persistence', async () => {
     const useAuthStore = await importAuthStore()
     const { useVdocContextStore } = await import('./vdoc-context-store')

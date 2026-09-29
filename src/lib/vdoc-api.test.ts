@@ -10,6 +10,8 @@ import {
   approveDraft,
   createAIChatSession,
   getIdentity,
+  login,
+  register,
   getSystemAIProvider,
   getAISummary,
   listSystemAIPrompts,
@@ -127,6 +129,33 @@ describe('vdoc-api', () => {
 
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBeUndefined()
   })
+
+  it.each([login, register])(
+    'forwards cancellation to an authentication request',
+    async (authenticate) => {
+      const requests: InternalAxiosRequestConfig[] = []
+      vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+        code: 200,
+        status: 'OK',
+        timestamp: 1,
+        detail: { user: sampleUser, token: 'session' },
+      })
+      const controller = new AbortController()
+      await authenticate(
+        { email: 'a@example.test', password: 'valid-password' },
+        { signal: controller.signal }
+      )
+      expect(requests[0]?.signal).toBe(controller.signal)
+      controller.abort()
+      await expect(
+        authenticate(
+          { email: 'a@example.test', password: 'valid-password' },
+          { signal: controller.signal }
+        )
+      ).rejects.toMatchObject({ code: 'ERR_CANCELED' })
+      expect(requests).toHaveLength(1)
+    }
+  )
 
   it('throws VdocApiError for non-OK envelopes', async () => {
     await expect(

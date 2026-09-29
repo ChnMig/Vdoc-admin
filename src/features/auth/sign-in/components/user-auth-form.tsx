@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
-import { handleServerError } from '@/lib/handle-server-error'
 import { type TFunction } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { login } from '@/lib/vdoc-api'
@@ -22,6 +20,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
+import { useAuthSubmission } from '../../use-auth-submission'
 
 type UserAuthFormValues = {
   email: string
@@ -46,9 +45,8 @@ export function UserAuthForm({
   redirectTo,
   ...props
 }: UserAuthFormProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const { isLoading, submit } = useAuthSubmission()
   const navigate = useNavigate()
-  const { auth } = useAuthStore()
   const { t } = useLanguage()
   const formSchema = useMemo(() => createFormSchema(t), [t])
 
@@ -61,23 +59,17 @@ export function UserAuthForm({
   })
 
   async function onSubmit(data: UserAuthFormValues) {
-    setIsLoading(true)
-
-    try {
-      const session = await login(data)
-      auth.setUser(session.user)
-      auth.setAccessToken(session.token)
-      toast.success(
-        t('auth.signIn.welcomeBack', {
-          name: session.user.name || session.user.email,
-        })
-      )
-      await navigate({ to: redirectTo || '/', replace: true })
-    } catch (error) {
-      handleServerError(error)
-    } finally {
-      setIsLoading(false)
-    }
+    await submit(
+      (signal) => login(data, { signal }),
+      async (session) => {
+        toast.success(
+          t('auth.signIn.welcomeBack', {
+            name: session.user.name || session.user.email,
+          })
+        )
+        await navigate({ to: redirectTo || '/', replace: true })
+      }
+    )
   }
 
   return (
