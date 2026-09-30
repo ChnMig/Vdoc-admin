@@ -332,4 +332,61 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
     )
     expect(screen.container.textContent).toContain(secret)
   })
+
+  it.each([
+    ['revoked', { status: 2 }, false],
+    ['expired status', { status: 3 }, false],
+    ['elapsed expiry', { expires_at: '2020-01-01T00:00:00Z' }, false],
+    ['active control', { status: 1 }, true],
+    ['absent control', null, true],
+  ] as const)(
+    'checks known %s list evidence before accepting a late creation response',
+    async (_label, lifecycle, shouldReveal) => {
+      const creation = deferred<MCPTokenDTO>()
+      const newToken = { ...token, id: 'token-new', name: 'New agent' }
+      const listedToken = lifecycle ? { ...newToken, ...lifecycle } : null
+      api.createMCPToken.mockReturnValueOnce(creation.promise)
+      const { user, client, screen } = setup()
+      await screen.findByRole('button', { name: 'View' })
+      await user.type(screen.getByLabelText('Name'), newToken.name)
+      await user.click(screen.getByRole('button', { name: 'Create' }))
+      await waitFor(() => expect(api.createMCPToken).toHaveBeenCalledOnce())
+
+      // The server has committed creation, but this POST response is delayed.
+      // A later GET can already contain lifecycle changes from another client.
+      api.listMCPTokens.mockResolvedValueOnce({
+        items: listedToken ? [token, listedToken] : [token],
+        total: listedToken ? 2 : 1,
+      })
+      await refresh(client)
+      api.listMCPTokens.mockRejectedValue(new Error('Later refresh failed'))
+      await act(async () => {
+        creation.resolve({ ...newToken, token: secret })
+        await creation.promise
+      })
+      await screen.findByText('Later refresh failed')
+
+      expect(screen.container.textContent).toContain('"id": "token-new"')
+      if (shouldReveal) {
+        expect(screen.container.textContent).toContain(secret)
+        expect(screen.getByRole('button', { name: 'Copy token' })).toBeEnabled()
+      } else {
+        expect(screen.container.textContent).not.toContain(secret)
+        expect(
+          screen.queryByRole('button', { name: 'Copy token' })
+        ).not.toBeInTheDocument()
+        expect(screen.container.textContent).toContain(
+          '<YOUR_ACTIVE_VDOC_TOKEN>'
+        )
+        expect(screen.container.textContent).toContain(
+          `"status": ${listedToken?.status}`
+        )
+        if (listedToken?.expires_at) {
+          expect(screen.container.textContent).toContain(
+            `"expires_at": "${listedToken.expires_at}"`
+          )
+        }
+      }
+    }
+  )
 })

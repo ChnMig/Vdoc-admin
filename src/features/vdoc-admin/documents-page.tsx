@@ -396,6 +396,12 @@ export function DocumentsPage({
           title={t('admin.sections.createBranch')}
           submitLabel={t('admin.common.create')}
           pending={createBranchMutation.isPending}
+          submissionScope={JSON.stringify([
+            authSessionVersion,
+            authUser?.id,
+            projectId,
+            documentId,
+          ])}
           onSubmit={(formData) =>
             createBranchMutation.mutateAsync({
               name: fieldValue(formData, 'name'),

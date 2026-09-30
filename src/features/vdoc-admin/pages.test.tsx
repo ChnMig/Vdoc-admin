@@ -1226,6 +1226,10 @@ describe('MCPTokensPage secret lifecycle', () => {
     const screen = renderMCPTokensPage()
 
     await user.click(await screen.findByRole('button', { name: 'View' }))
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [token, { ...token, id: 'token-new', name: 'New token' }],
+      total: 2,
+    })
     const createTokenTitle = screen.getByText('Create MCP token')
     const createTokenCard = createTokenTitle.closest('[data-slot="card"]')
     if (!(createTokenCard instanceof HTMLElement)) {

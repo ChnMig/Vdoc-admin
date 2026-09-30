@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   getDraftContent: vi.fn(),
   getDocumentOverview: vi.fn(),
   createDocument: vi.fn(),
+  createBranch: vi.fn(),
   createDraft: vi.fn(),
   updateDraft: vi.fn(),
   promoteDraft: vi.fn(),
@@ -78,10 +79,12 @@ const overview = { published_branch_ids: [branch.id], latest_version: null }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((finish) => {
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((finish, fail) => {
     resolve = finish
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 function renderPage(
@@ -156,6 +159,99 @@ describe('document create completion', () => {
       view.client.clear()
     }
   )
+})
+
+describe('branch create completion', () => {
+  it.each([
+    'normal-success',
+    'document-switch-success',
+    'document-switch-error',
+    'returned-document-error',
+    'settled-error-roundtrip',
+  ])('keeps the original form ownership: %s', async (scenario) => {
+    api.listDocuments.mockResolvedValue({
+      items: [documentA, documentB],
+      total: 2,
+    })
+    api.listBranches.mockResolvedValue({ items: [], total: 0 })
+    const request = deferred<unknown>()
+    api.createBranch.mockImplementation(() => request.promise)
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    for (const document of [documentA, documentB]) {
+      client.setQueryData(['branches', project.id, document.id], {
+        items: [],
+        total: 0,
+      })
+      client.setQueryData(
+        ['document-overview', project.id, document.id],
+        overview
+      )
+    }
+    const view = renderPage(<DocumentsPage />, client)
+    const user = userEvent.setup()
+    const document = await view.findByLabelText('Document')
+    await waitFor(() => expect(document).toHaveValue(documentA.id))
+    const form = view
+      .getAllByRole('button', { name: 'Create' })[1]
+      .closest('form')!
+    const name = within(form).getByLabelText('Name')
+    await user.type(name, 'feature/from-a')
+    await user.click(within(form).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createBranch).toHaveBeenCalledOnce())
+    expect(api.createBranch.mock.calls[0].slice(0, 2)).toEqual([
+      project.id,
+      documentA.id,
+    ])
+    if (scenario === 'settled-error-roundtrip') {
+      await act(async () =>
+        request.reject(new Error('Document A request failed'))
+      )
+      expect(
+        await within(form).findByText('Document A request failed')
+      ).toBeInTheDocument()
+    }
+    if (scenario !== 'normal-success') {
+      await user.selectOptions(document, documentB.id)
+      if (
+        scenario === 'returned-document-error' ||
+        scenario === 'settled-error-roundtrip'
+      )
+        await user.selectOptions(document, documentA.id)
+      expect(
+        view.getAllByRole('button', { name: 'Create' })[1].closest('form')
+      ).toBe(form)
+    }
+    if (scenario.endsWith('error')) {
+      fireEvent.change(name, { target: { value: 'feature/current-unsaved' } })
+      await act(async () =>
+        request.reject(new Error('Document A request failed'))
+      )
+      await waitFor(() => expect(client.isMutating()).toBe(0))
+      expect(name).toHaveValue('feature/current-unsaved')
+      expect(
+        within(form).queryByText('Document A request failed')
+      ).not.toBeInTheDocument()
+    } else if (scenario === 'settled-error-roundtrip') {
+      expect(
+        within(form).queryByText('Document A request failed')
+      ).not.toBeInTheDocument()
+    } else {
+      await act(async () =>
+        request.resolve({ id: 'created-branch', document_id: documentA.id })
+      )
+      await waitFor(() => expect(client.isMutating()).toBe(0))
+      expect(name).toHaveValue(
+        scenario === 'normal-success' ? '' : 'feature/from-a'
+      )
+    }
+    view.unmount()
+    client.clear()
+  })
 })
 
 describe('delayed draft file uploads', () => {

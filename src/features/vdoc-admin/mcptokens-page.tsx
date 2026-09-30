@@ -295,15 +295,26 @@ export function MCPTokensPage({
         await queryClient.cancelQueries({ queryKey: ['mcp-tokens'] })
       }
       if (variables.requestId === latestTokenOperationRequestId.current) {
+        const listState = queryClient.getQueryState<
+          Awaited<ReturnType<typeof listMCPTokens>>
+        >(['mcp-tokens'])
+        const listedToken = listState?.data?.items.find(
+          (item) => item.id === token.id
+        )
+        // The POST response may arrive after a GET has already observed this
+        // new token being revoked or expiring. Keep that known lifecycle.
+        const currentToken = listedToken ? { ...token, ...listedToken } : token
         activeTokenSelectionRef.current = token.id
         setTokenSelection((current) => ({
           ...current,
           token: {
-            ...token,
-            token: tokenIsActive(token) ? token.token : undefined,
+            ...currentToken,
+            token:
+              tokenIsActive(token) && tokenIsActive(currentToken)
+                ? token.token
+                : undefined,
           },
-          listUpdateCount:
-            queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ?? 0,
+          listUpdateCount: listState?.dataUpdateCount ?? 0,
           copyStatus: undefined,
         }))
         onSearchChange?.({ token_id: token.id })
