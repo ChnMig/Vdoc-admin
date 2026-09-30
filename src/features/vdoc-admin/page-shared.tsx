@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { withNativeSelectPlaceholder } from '@/lib/native-select-options'
@@ -337,12 +337,35 @@ export function StatCard({
   )
 }
 
+function sameFormValues(left: FormData, right: FormData) {
+  const leftEntries = [...left.entries()]
+  const rightEntries = [...right.entries()]
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(([name, value], index) => {
+      const [rightName, rightValue] = rightEntries[index]
+      return (
+        name === rightName &&
+        (typeof value === 'string'
+          ? value === rightValue
+          : rightValue instanceof File &&
+            value.name === rightValue.name &&
+            value.size === rightValue.size &&
+            value.type === rightValue.type &&
+            value.lastModified === rightValue.lastModified)
+      )
+    })
+  )
+}
+
 export function FormCard({
   title,
   children,
   submitLabel,
   pending,
   onSubmit,
+  onSuccess,
+  submissionScope = '',
   resetOnSuccess = true,
   disabled = false,
 }: {
@@ -351,12 +374,31 @@ export function FormCard({
   submitLabel: string
   pending: boolean
   onSubmit: (formData: FormData) => Promise<unknown>
+  onSuccess?: () => void
+  submissionScope?: string
   resetOnSuccess?: boolean
   disabled?: boolean
 }) {
   const { t } = useLanguage()
-  const [submitError, setSubmitError] = useState<Error | null>(null)
+  const [submitError, setSubmitError] = useState<{
+    owner: object
+    error: Error
+  } | null>(null)
   const submitLockedRef = useRef(false)
+  const editVersionRef = useRef(0)
+  const submissionOwner = useMemo(
+    () => ({ scope: submissionScope }),
+    [submissionScope]
+  )
+  const currentOwnerRef = useRef<object | null>(null)
+  useLayoutEffect(() => {
+    currentOwnerRef.current = submissionOwner
+    return () => {
+      currentOwnerRef.current = null
+    }
+  }, [submissionOwner])
+  const currentError =
+    submitError?.owner === submissionOwner ? submitError.error : null
   return (
     <Card className='border-primary/25'>
       <CardHeader className='border-b pb-5'>
@@ -374,32 +416,46 @@ export function FormCard({
       <CardContent>
         <form
           className='grid gap-4'
+          onInputCapture={() => editVersionRef.current++}
+          onChangeCapture={() => editVersionRef.current++}
           onSubmit={async (event) => {
             event.preventDefault()
             if (submitLockedRef.current || pending || disabled) return
             submitLockedRef.current = true
             const form = event.currentTarget
+            const submittedValues = new FormData(form)
+            const submittedEditVersion = editVersionRef.current
             setSubmitError(null)
             try {
-              await onSubmit(new FormData(form))
-              if (resetOnSuccess) form.reset()
+              await onSubmit(submittedValues)
+              if (
+                currentOwnerRef.current === submissionOwner &&
+                editVersionRef.current === submittedEditVersion &&
+                sameFormValues(submittedValues, new FormData(form))
+              ) {
+                if (resetOnSuccess) form.reset()
+                onSuccess?.()
+              }
             } catch (error) {
-              setSubmitError(
-                error instanceof Error
-                  ? error
-                  : new Error(t('toasts.somethingWrong'))
-              )
+              if (currentOwnerRef.current === submissionOwner)
+                setSubmitError({
+                  owner: submissionOwner,
+                  error:
+                    error instanceof Error
+                      ? error
+                      : new Error(t('toasts.somethingWrong')),
+                })
             } finally {
               submitLockedRef.current = false
             }
           }}
         >
           {children}
-          {submitError && (
+          {currentError && (
             <Alert variant='destructive' aria-live='polite'>
               <AlertCircle />
               <AlertTitle>{t('admin.common.error')}</AlertTitle>
-              <AlertDescription>{submitError.message}</AlertDescription>
+              <AlertDescription>{currentError.message}</AlertDescription>
             </Alert>
           )}
           <Button

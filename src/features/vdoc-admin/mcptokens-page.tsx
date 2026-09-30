@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   Copy,
@@ -69,6 +69,7 @@ export function MCPTokensPage({
   onSearchChange,
 }: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
+  const queryClient = useQueryClient()
   const invalidateResources = useInvalidateResources()
   const invalidate = () => invalidateResources({ kind: 'tokens' })
   const tokensQuery = useQuery({
@@ -98,6 +99,7 @@ export function MCPTokensPage({
   const [tokenSelection, setTokenSelection] = useState<{
     routeTokenId: string
     token: MCPTokenDTO | null
+    listUpdateCount?: number
     copyStatus?: 'success' | 'failure'
   }>(() => ({ routeTokenId: selectedTokenId, token: null }))
   if (tokenSelection.routeTokenId !== selectedTokenId) {
@@ -107,6 +109,7 @@ export function MCPTokensPage({
         tokenSelection.token?.id === selectedTokenId
           ? tokenSelection.token
           : null,
+      listUpdateCount: tokenSelection.listUpdateCount,
       copyStatus: undefined,
     })
   }
@@ -127,9 +130,56 @@ export function MCPTokensPage({
     useState(0)
   const latestTokenCopyRequestId = useRef(0)
   const activeTokenSelectionRef = useRef(selectedTokenId)
+  const pendingRevealTokenRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     activeTokenSelectionRef.current = selectedTokenId
   }, [selectedTokenId])
+  useEffect(() => {
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type !== 'updated' ||
+        event.action.type !== 'success' ||
+        event.query.queryKey.length !== 1 ||
+        event.query.queryKey[0] !== 'mcp-tokens'
+      )
+        return
+      const list = event.query.state.data as
+        Awaited<ReturnType<typeof listMCPTokens>> | undefined
+      if (!list) return
+      const activeToken = list.items.find(
+        (token) => token.id === activeTokenSelectionRef.current
+      )
+      if (!activeToken || !tokenIsActive(activeToken)) {
+        latestTokenCopyRequestId.current += 1
+        if (pendingRevealTokenRef.current === activeTokenSelectionRef.current) {
+          latestTokenOperationRequestId.current += 1
+          pendingRevealTokenRef.current = undefined
+          setActiveTokenOperationRequestId(0)
+        }
+      }
+      const listUpdateCount = event.query.state.dataUpdateCount
+      setTokenSelection((current) => {
+        // A creation response is newer than the list it started with.
+        if (!current.token || (current.listUpdateCount ?? 0) >= listUpdateCount)
+          return current
+        const listedToken = list.items.find(
+          (token) => token.id === current.token?.id
+        )
+        const active = listedToken && tokenIsActive(listedToken)
+        return {
+          ...current,
+          token: listedToken
+            ? {
+                ...listedToken,
+                token: active ? current.token.token : undefined,
+              }
+            : null,
+          listUpdateCount,
+          copyStatus: active ? current.copyStatus : undefined,
+        }
+      })
+    })
+  }, [queryClient])
   const invalidTokenDeepLink = Boolean(
     tokensQuery.data && selectedTokenId && !selectedTokenExists
   )
@@ -162,17 +212,44 @@ export function MCPTokensPage({
     }))
   }
   const getMutation = useMutation({
-    mutationFn: ({ tokenId }: { tokenId: string; requestId: number }) =>
-      getMCPToken(tokenId),
+    mutationFn: ({
+      tokenId,
+    }: {
+      tokenId: string
+      requestId: number
+      listUpdateCount: number
+    }) => getMCPToken(tokenId),
     onSuccess: (token, variables) => {
       if (
         variables.requestId !== latestTokenOperationRequestId.current ||
         activeTokenSelectionRef.current !== variables.tokenId
       )
         return
+      const listState = queryClient.getQueryState<
+        Awaited<ReturnType<typeof listMCPTokens>>
+      >(['mcp-tokens'])
+      const listedToken = listState?.data?.items.find(
+        (item) => item.id === variables.tokenId
+      )
+      if (
+        (listState?.dataUpdateCount ?? 0) > variables.listUpdateCount &&
+        (!listedToken || !tokenIsActive(listedToken))
+      )
+        return
+      pendingRevealTokenRef.current = undefined
+      const currentToken =
+        listedToken &&
+        (listState?.dataUpdateCount ?? 0) > variables.listUpdateCount &&
+        tokenIsActive(token)
+          ? { ...token, ...listedToken }
+          : token
       setTokenSelection((current) => ({
         ...current,
-        token,
+        token: {
+          ...currentToken,
+          token: tokenIsActive(currentToken) ? token.token : undefined,
+        },
+        listUpdateCount: listState?.dataUpdateCount ?? 0,
         copyStatus: undefined,
       }))
       latestTokenCopyRequestId.current += 1
@@ -188,7 +265,9 @@ export function MCPTokensPage({
       ) {
         setTokenSelection((current) => ({
           ...current,
-          token,
+          token: { ...token, token: undefined },
+          listUpdateCount:
+            queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ?? 0,
           copyStatus: undefined,
         }))
       }
@@ -203,17 +282,28 @@ export function MCPTokensPage({
       requestId: number
     }) => createMCPToken(payload),
     onMutate: () => {
+      pendingRevealTokenRef.current = undefined
       latestTokenCopyRequestId.current += 1
       clearTokenInteraction()
       getMutation.reset()
       revokeMutation.reset()
     },
-    onSuccess: (token, variables) => {
+    onSuccess: async (token, variables) => {
+      if (variables.requestId === latestTokenOperationRequestId.current) {
+        // Also cancel lists started while creation was pending: they may
+        // contain a snapshot taken before the new token existed.
+        await queryClient.cancelQueries({ queryKey: ['mcp-tokens'] })
+      }
       if (variables.requestId === latestTokenOperationRequestId.current) {
         activeTokenSelectionRef.current = token.id
         setTokenSelection((current) => ({
           ...current,
-          token,
+          token: {
+            ...token,
+            token: tokenIsActive(token) ? token.token : undefined,
+          },
+          listUpdateCount:
+            queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ?? 0,
           copyStatus: undefined,
         }))
         onSearchChange?.({ token_id: token.id })
@@ -399,12 +489,19 @@ export function MCPTokensPage({
           revokeMutation.reset()
           getMutation.reset()
           const requestId = beginTokenOperation()
-          getMutation.mutate({ tokenId, requestId })
+          pendingRevealTokenRef.current = tokenId
+          getMutation.mutate({
+            tokenId,
+            requestId,
+            listUpdateCount:
+              queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ?? 0,
+          })
         }}
         onRevoke={async (tokenId) => {
           activeTokenSelectionRef.current = tokenId
           onSearchChange?.({ token_id: tokenId })
           const requestId = beginTokenOperation()
+          pendingRevealTokenRef.current = undefined
           latestTokenCopyRequestId.current += 1
           clearTokenInteraction()
           getMutation.reset()

@@ -433,6 +433,28 @@ function DocumentSharePanelContent({
           </Alert>
         )}
 
+        {sharesQuery.isLoading && (
+          <p role='status' className='text-sm text-muted-foreground'>
+            {t('publicShare.listLoading')}
+          </p>
+        )}
+        {sharesQuery.isError && (
+          <Alert variant='destructive' aria-live='polite'>
+            <AlertCircle />
+            <AlertTitle>{t('publicShare.listError')}</AlertTitle>
+            <AlertDescription>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={sharesQuery.isFetching}
+                onClick={() => void sharesQuery.refetch()}
+              >
+                {t('publicShare.retry')}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {sharesQuery.data?.items.length ? (
           <Table>
             <TableHeader>
@@ -555,11 +577,11 @@ function DocumentSharePanelContent({
               })}
             </TableBody>
           </Table>
-        ) : (
+        ) : sharesQuery.isSuccess ? (
           <p className='rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground'>
             {t('publicShare.noShares')}
           </p>
-        )}
+        ) : null}
 
         <ConfirmDialog
           open={pendingRevokeShare !== undefined}

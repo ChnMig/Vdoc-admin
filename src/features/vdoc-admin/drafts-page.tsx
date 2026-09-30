@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertCircle, BookOpenText, Route } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -169,6 +169,7 @@ export function DraftsPage({
   const { t } = useLanguage()
   const invalidate = useInvalidateResources()
   const authUser = useAuthStore((state) => state.auth.user)
+  const authSessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const {
     projectsQuery,
     projectId,
@@ -448,14 +449,16 @@ export function DraftsPage({
     },
   })
   const promoteMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof promoteDraft>[2]) =>
-      promoteDraft(projectId, documentId, payload),
-    onMutate: () => ({ projectId, documentId }),
-    onSuccess: (_result, _variables, context) =>
+    mutationFn: (request: {
+      projectId: string
+      documentId: string
+      payload: Parameters<typeof promoteDraft>[2]
+    }) => promoteDraft(request.projectId, request.documentId, request.payload),
+    onSuccess: (_result, request) =>
       invalidate({
         kind: 'document',
-        projectId: context?.projectId ?? projectId,
-        documentId: context?.documentId ?? documentId,
+        projectId: request.projectId,
+        documentId: request.documentId,
       }),
   })
   const actionMutation = useMutation({
@@ -640,13 +643,25 @@ export function DraftsPage({
               title={t('admin.sections.promoteDraft')}
               submitLabel={t('admin.common.createPromotionDraft')}
               pending={promoteMutation.isPending}
-              onSubmit={async (formData) => {
-                await promoteMutation.mutateAsync({
-                  source_branch_id: fieldValue(formData, 'source_branch_id'),
-                  target_branch_id: fieldValue(formData, 'target_branch_id'),
-                  version_name: fieldValue(formData, 'version_name'),
-                  changelog: fieldValue(formData, 'changelog'),
+              submissionScope={JSON.stringify([
+                authSessionVersion,
+                authUser?.id,
+                projectId,
+                documentId,
+              ])}
+              onSubmit={(formData) =>
+                promoteMutation.mutateAsync({
+                  projectId,
+                  documentId,
+                  payload: {
+                    source_branch_id: fieldValue(formData, 'source_branch_id'),
+                    target_branch_id: fieldValue(formData, 'target_branch_id'),
+                    version_name: fieldValue(formData, 'version_name'),
+                    changelog: fieldValue(formData, 'changelog'),
+                  },
                 })
+              }
+              onSuccess={() => {
                 setPromoteSourceBranchId('')
                 setPromoteTargetBranchId('')
               }}
@@ -946,6 +961,13 @@ function DraftEditorCard({
     snapshotReady ? rawContent : undefined
   )
   const [submitting, setSubmitting] = useState(false)
+  const mountedRef = useRef(false)
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   const busy = pending || submitting
   const editable = Boolean(
     selectedDraft &&
@@ -1007,10 +1029,21 @@ function DraftEditorCard({
         if (editor.conflict)
           throw new Error(t('admin.draftEditor.conflictDescription'))
         setSubmitting(true)
+        const submittingAuth = useAuthStore.getState().auth
+        const ownsSubmission = () => {
+          const currentAuth = useAuthStore.getState().auth
+          return (
+            mountedRef.current &&
+            currentAuth.sessionVersion === submittingAuth.sessionVersion &&
+            currentAuth.accessToken === submittingAuth.accessToken &&
+            currentAuth.user?.id === submittingAuth.user?.id
+          )
+        }
         try {
           const file = editor.values.file
           const uploadedContent =
             file instanceof File && file.size > 0 ? await file.text() : ''
+          if (!ownsSubmission()) return
           const content = uploadedContent || editor.values.content
           const payload = {
             version_name: editor.values.version_name,
@@ -1030,8 +1063,9 @@ function DraftEditorCard({
               branch_id: editor.values.branch_id,
             })
           }
-          editor.saved()
+          if (ownsSubmission()) editor.saved()
         } catch (error) {
+          if (!ownsSubmission()) return
           if (
             error instanceof VdocApiError &&
             error.status === 'FAILED_PRECONDITION'
@@ -1039,7 +1073,7 @@ function DraftEditorCard({
             error.message = t('admin.draftEditor.saveConflict')
           throw error
         } finally {
-          setSubmitting(false)
+          if (mountedRef.current) setSubmitting(false)
         }
       }}
     >

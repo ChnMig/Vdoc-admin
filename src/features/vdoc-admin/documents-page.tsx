@@ -82,6 +82,7 @@ export function DocumentsPage({
   const { t } = useLanguage()
   const invalidate = useInvalidateResources()
   const authUser = useAuthStore((state) => state.auth.user)
+  const authSessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const [documentTypeFilter, setDocumentTypeFilter] = useState(0)
   const {
     projectsQuery,
@@ -159,13 +160,14 @@ export function DocumentsPage({
   })
   const latestDocumentVersion = overviewQuery.data?.latest_version
   const createDocumentMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof createDocument>[1]) =>
-      createDocument(projectId, payload),
-    onMutate: () => ({ projectId, documentId }),
-    onSuccess: (result, _variables, context) =>
+    mutationFn: (request: {
+      projectId: string
+      payload: Parameters<typeof createDocument>[1]
+    }) => createDocument(request.projectId, request.payload),
+    onSuccess: (result, request) =>
       invalidate({
         kind: 'document',
-        projectId: context?.projectId ?? projectId,
+        projectId: request.projectId,
         documentId: result.id,
       }),
   })
@@ -285,16 +287,24 @@ export function DocumentsPage({
           title={t('admin.sections.createDocument')}
           submitLabel={t('admin.common.create')}
           pending={createDocumentMutation.isPending}
+          submissionScope={JSON.stringify([
+            authSessionVersion,
+            authUser?.id,
+            projectId,
+          ])}
           onSubmit={(formData) =>
             createDocumentMutation.mutateAsync({
-              name: fieldValue(formData, 'name'),
-              description: fieldValue(formData, 'description'),
-              relative_path: fieldValue(formData, 'relative_path'),
-              document_type: numberValue(
-                formData,
-                'document_type',
-                DOCUMENT_TYPE_OPENAPI
-              ),
+              projectId,
+              payload: {
+                name: fieldValue(formData, 'name'),
+                description: fieldValue(formData, 'description'),
+                relative_path: fieldValue(formData, 'relative_path'),
+                document_type: numberValue(
+                  formData,
+                  'document_type',
+                  DOCUMENT_TYPE_OPENAPI
+                ),
+              },
             })
           }
         >
@@ -689,6 +699,12 @@ function BranchEditForm({
 }) {
   const { t } = useLanguage()
   const [error, setError] = useState<Error>()
+  // Untouched fields follow the latest server data after a branch refetch.
+  const [edits, setEdits] = useState<
+    Partial<
+      Pick<BranchDTO, 'name' | 'description' | 'is_default' | 'is_protected'>
+    >
+  >({})
   const submitLockedRef = useRef(false)
   return (
     <form
@@ -697,16 +713,30 @@ function BranchEditForm({
         event.preventDefault()
         if (submitLockedRef.current) return
         submitLockedRef.current = true
-        const formData = new FormData(event.currentTarget)
+        const submittedEdits = edits
         setError(undefined)
         try {
           await onUpdate({
             ...branch,
-            name: fieldValue(formData, 'name'),
-            description: fieldValue(formData, 'description'),
-            is_default:
-              branch.is_default || formData.get('is_default') === 'on',
-            is_protected: formData.get('is_protected') === 'on',
+            name: (edits.name ?? branch.name).trim(),
+            description: (edits.description ?? branch.description ?? '').trim(),
+            is_default: branch.is_default || (edits.is_default ?? false),
+            is_protected: edits.is_protected ?? branch.is_protected,
+          })
+          setEdits((current) => {
+            // Keep changes made while this save was pending.
+            const remaining = { ...current }
+            for (const field of [
+              'name',
+              'description',
+              'is_default',
+              'is_protected',
+            ] as const) {
+              if (current[field] === submittedEdits[field]) {
+                delete remaining[field]
+              }
+            }
+            return remaining
           })
         } catch (cause) {
           setError(
@@ -721,13 +751,21 @@ function BranchEditForm({
     >
       <Input
         name='name'
-        defaultValue={branch.name}
+        value={edits.name ?? branch.name}
+        onChange={(event) => {
+          const name = event.target.value
+          setEdits((current) => ({ ...current, name }))
+        }}
         aria-label={t('admin.fields.name')}
         required
       />
       <Input
         name='description'
-        defaultValue={branch.description ?? ''}
+        value={edits.description ?? branch.description ?? ''}
+        onChange={(event) => {
+          const description = event.target.value
+          setEdits((current) => ({ ...current, description }))
+        }}
         aria-label={t('admin.fields.description')}
       />
       <div className='flex flex-wrap items-center gap-3 xl:col-span-2'>
@@ -735,7 +773,11 @@ function BranchEditForm({
           <input
             type='checkbox'
             name='is_default'
-            defaultChecked={branch.is_default}
+            checked={branch.is_default || (edits.is_default ?? false)}
+            onChange={(event) => {
+              const is_default = event.target.checked
+              setEdits((current) => ({ ...current, is_default }))
+            }}
             disabled={branch.is_default}
           />
           {t('admin.fields.defaultBranch')}
@@ -744,7 +786,11 @@ function BranchEditForm({
           <input
             type='checkbox'
             name='is_protected'
-            defaultChecked={branch.is_protected}
+            checked={edits.is_protected ?? branch.is_protected}
+            onChange={(event) => {
+              const is_protected = event.target.checked
+              setEdits((current) => ({ ...current, is_protected }))
+            }}
           />
           {t('admin.fields.protectedBranch')}
         </label>

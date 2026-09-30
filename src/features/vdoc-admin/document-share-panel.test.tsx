@@ -122,6 +122,86 @@ describe('DocumentSharePanel', () => {
     })
   })
 
+  it('shows loading before an empty share list has been confirmed', async () => {
+    const list = deferred<{ items: (typeof activeShare)[]; total: number }>()
+    shareApiMocks.listDocumentShares.mockReturnValueOnce(list.promise)
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Loading public links…'
+    )
+    expect(
+      screen.queryByText('No public links have been created for this document.')
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      list.resolve({ items: [], total: 0 })
+      await list.promise
+    })
+    expect(
+      await screen.findByText(
+        'No public links have been created for this document.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading public links…')).not.toBeInTheDocument()
+  })
+
+  it('shows a list failure and retries without claiming there are no shares', async () => {
+    shareApiMocks.listDocumentShares.mockRejectedValueOnce(
+      new Error('Network unavailable')
+    )
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+
+    expect(
+      await screen.findByText('Public links could not be loaded.')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('No public links have been created for this document.')
+    ).not.toBeInTheDocument()
+    shareApiMocks.listDocumentShares.mockResolvedValueOnce({
+      items: [activeShare],
+      total: 1,
+    })
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Show link' })
+    ).toBeEnabled()
+    expect(shareApiMocks.listDocumentShares).toHaveBeenCalledTimes(2)
+    expect(
+      screen.queryByText('Public links could not be loaded.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the last loaded list visible when a background refresh fails', async () => {
+    shareApiMocks.listDocumentShares.mockResolvedValueOnce({
+      items: [activeShare],
+      total: 1,
+    })
+    const { queryClient, wrap } = createHarness()
+    const screen = render(wrap(panel()))
+    await screen.findByRole('button', { name: 'Show link' })
+    shareApiMocks.listDocumentShares.mockRejectedValueOnce(
+      new Error('Network unavailable')
+    )
+
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: ['document-shares', 'project-1', 'document-1'],
+      })
+    })
+
+    expect(
+      await screen.findByText('Public links could not be loaded.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show link' })).toBeEnabled()
+    expect(
+      screen.queryByText('No public links have been created for this document.')
+    ).not.toBeInTheDocument()
+  })
+
   it('creates a share with the three-month default and a valid CJK byte password', async () => {
     const user = userEvent.setup()
     const { wrap } = createHarness()
