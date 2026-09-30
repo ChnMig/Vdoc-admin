@@ -9,26 +9,43 @@ export function filenameFromContentDisposition(
   mimeType: string
 ): string {
   if (isAttachmentContentDisposition(disposition)) {
-    const extended = disposition?.match(/;\s*filename\*\s*=\s*([^;]*)/i)?.[1]
+    const parameters = filenameParameters(disposition ?? '')
+    const extended = parameters.get('filename*')
     const extendedFilename = decodeExtendedFilename(extended)
     const safeExtendedFilename = sanitizeFilename(extendedFilename)
     if (safeExtendedFilename !== undefined) return safeExtendedFilename
 
-    const quoted = disposition?.match(/;\s*filename\s*=\s*"([^"]*)"/i)?.[1]
-    const safeQuotedFilename = sanitizeFilename(quoted)
-    if (safeQuotedFilename !== undefined) return safeQuotedFilename
+    const safeFilename = sanitizeFilename(parameters.get('filename'))
+    if (safeFilename !== undefined) return safeFilename
   }
 
-  if (mimeType === 'application/json') return 'document.json'
-  if (mimeType === 'application/yaml') return 'document.yaml'
-  if (mimeType === 'text/markdown; charset=utf-8') return 'document.md'
+  const mediaType = mimeType.split(';', 1)[0].trim().toLowerCase()
+  if (mediaType === 'application/json') return 'document.json'
+  if (mediaType === 'application/yaml') return 'document.yaml'
+  if (mediaType === 'text/markdown') return 'document.md'
   return 'download.bin'
 }
 
+function filenameParameters(disposition: string): Map<string, string> {
+  const parameters = new Map<string, string>()
+  const pattern =
+    /;\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|([!#$%&'*+.^_`|~0-9A-Za-z-]+))\s*(?=;|$)/gi
+  for (const match of disposition.matchAll(pattern)) {
+    const name = match[1].toLowerCase()
+    if (name !== 'filename' && name !== 'filename*') continue
+    if (parameters.has(name)) continue
+    // Accept raw Windows path separators as well as escaped quotes/backslashes.
+    const value = match[2]?.replace(/\\(["\\])/g, '$1') ?? match[3]
+    parameters.set(name, value)
+  }
+  return parameters
+}
+
 function decodeExtendedFilename(value: string | undefined): string | undefined {
-  if (value === undefined || !/^UTF-8''/i.test(value)) return undefined
+  const encoded = value?.match(/^UTF-8'[^']*'(.*)$/i)?.[1]
+  if (encoded === undefined) return undefined
   try {
-    return decodeURIComponent(value.slice(7))
+    return decodeURIComponent(encoded)
   } catch (error) {
     if (error instanceof URIError) return undefined
     throw error

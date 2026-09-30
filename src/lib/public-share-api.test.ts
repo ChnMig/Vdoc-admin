@@ -29,6 +29,37 @@ afterEach(() => {
 })
 
 describe('public share API', () => {
+  it.each([
+    ['api.yaml', 'application/yaml; charset=utf-8'],
+    ['api.json', 'application/json; charset=utf-8'],
+    ['guide.md', 'text/markdown; charset=utf-8'],
+  ])(
+    'preserves the actual backend filename %s through download',
+    async (filename, mimeType) => {
+      const body = 'original document bytes'
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          new Response(body, {
+            headers: {
+              'Content-Disposition': `attachment; filename=${filename}`,
+              'Content-Type': mimeType,
+            },
+          })
+        )
+      )
+      const result = await downloadPublicShareVersion({
+        baseUrl,
+        shareId,
+        versionId,
+        secret,
+        signal: new AbortController().signal,
+      })
+      expect(result.filename).toBe(filename)
+      await expect(result.blob.text()).resolves.toBe(body)
+    }
+  )
+
   it('uses the configured backend origin instead of the public page origin', async () => {
     window.__VDOC_ADMIN_CONFIG__ = {
       apiBaseUrl: 'https://api.example.test',

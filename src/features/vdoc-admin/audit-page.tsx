@@ -39,8 +39,22 @@ import { QueryPagination } from './query-pagination'
 export function AuditPage() {
   const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
-  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection()
+  const [allProjectsSelection, setAllProjectsSelection] = useState<{
+    userId: string | undefined
+    sessionVersion: number
+  }>()
+  const { projectId, setProjectId, projectOptions } = useProjectsAndSelection(
+    undefined,
+    undefined,
+    {
+      allowEmptySelection:
+        isSuperAdmin &&
+        allProjectsSelection?.userId === authUser?.id &&
+        allProjectsSelection?.sessionVersion === sessionVersion,
+    }
+  )
   const membersQuery = useQuery({
     queryKey: ['project-members', projectId],
     queryFn: ({ signal }) => listProjectMembers(projectId, { signal }),
@@ -94,7 +108,14 @@ export function AuditPage() {
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
-          onChange={setProjectId}
+          onChange={(value) => {
+            setAllProjectsSelection(
+              value === ''
+                ? { userId: authUser?.id, sessionVersion }
+                : undefined
+            )
+            setProjectId(value)
+          }}
           placeholder={
             isSuperAdmin
               ? t('admin.audit.allProjects')

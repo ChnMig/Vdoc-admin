@@ -18,9 +18,9 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#26a1c9ce908d8215d374a9418aac9ec46f015ccc'
+  'github:ChnMig/Vdoc-mcp#b305fdee748ea59aa681835d1b0bf7ea8069f50c'
 
-export const vdocMcpReleaseVersion = '0.3.8'
+export const vdocMcpReleaseVersion = '0.3.9'
 
 export const ACTIVE_STATUS = 1
 
@@ -332,7 +332,8 @@ export function useRouteControlledString(
 
 export function useProjectsAndSelection(
   preferredProjectId?: string,
-  onProjectChange?: (projectId: string) => void
+  onProjectChange?: (projectId: string) => void,
+  { allowEmptySelection = false }: { allowEmptySelection?: boolean } = {}
 ) {
   const { t } = useLanguage()
   const projectsQuery = useQuery({
@@ -357,7 +358,8 @@ export function useProjectsAndSelection(
     ? preferredProjectExists
       ? preferredProjectId
       : ''
-    : projectOptions.some((project) => project.value === projectId)
+    : (allowEmptySelection && projectId === '') ||
+        projectOptions.some((project) => project.value === projectId)
       ? projectId
       : activeFirstId(projectsQuery.data?.items ?? [])
   const onProjectChangeRef = useRef(onProjectChange)

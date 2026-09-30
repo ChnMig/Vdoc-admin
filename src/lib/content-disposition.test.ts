@@ -2,6 +2,77 @@ import { describe, expect, it } from 'vitest'
 import { filenameFromContentDisposition } from './content-disposition'
 
 describe('Content-Disposition filenames', () => {
+  it.each(['api.yaml', 'api.json', 'guide.md'])(
+    'preserves the backend token filename %s',
+    (filename) => {
+      expect(
+        filenameFromContentDisposition(
+          `attachment; filename=${filename}`,
+          'application/octet-stream'
+        )
+      ).toBe(filename)
+    }
+  )
+
+  it('handles quoted semicolons and escaped quotes', () => {
+    expect(
+      filenameFromContentDisposition(
+        'attachment; filename="API; \\"notes\\".yaml"',
+        'application/yaml'
+      )
+    ).toBe('API; "notes".yaml')
+  })
+
+  it('decodes an extended filename with a language tag', () => {
+    expect(
+      filenameFromContentDisposition(
+        "attachment; filename=guide.md; filename*=UTF-8'zh'%E6%8C%87%E5%8D%97.md",
+        'text/markdown'
+      )
+    ).toBe('指南.md')
+  })
+
+  it('ignores filename-looking text inside other quoted parameters', () => {
+    expect(
+      filenameFromContentDisposition(
+        'attachment; note="; filename=wrong.json;"; filename=api.yaml',
+        'application/yaml'
+      )
+    ).toBe('api.yaml')
+  })
+
+  it.each([
+    [
+      'attachment; filename=api.yaml',
+      'application/yaml; charset=utf-8',
+      'api.yaml',
+    ],
+    ['attachment', 'APPLICATION/JSON; charset=UTF-8', 'document.json'],
+    [null, 'application/yaml; charset=utf-8', 'document.yaml'],
+    ['attachment', 'text/markdown', 'document.md'],
+    [
+      'attachment; filename=invalid name.json',
+      'application/json',
+      'document.json',
+    ],
+    ['attachment; filename="broken.json', 'application/json', 'document.json'],
+    [
+      'attachment; filename="safe.json"suffix',
+      'application/json',
+      'document.json',
+    ],
+    [
+      "attachment; filename*=UTF-8''..%2Ffolder%2Fapi.json",
+      'application/json',
+      'api.json',
+    ],
+  ])(
+    'falls back by media type and rejects malformed names',
+    (header, mimeType, filename) => {
+      expect(filenameFromContentDisposition(header, mimeType)).toBe(filename)
+    }
+  )
+
   it('prefers a strictly decoded UTF-8 filename* over filename', () => {
     expect(
       filenameFromContentDisposition(
