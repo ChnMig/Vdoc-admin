@@ -24,6 +24,14 @@
 		X-Robots-Tag "noindex, nofollow, noarchive"
 	}
 
-	try_files {path} {path}/ /index.html
-	file_server
+	# Keep browser API requests on the workbench origin, including Authorization.
+	# DNS is resolved when a request arrives; static image checks need no backend.
+	handle /api/* {
+		reverse_proxy {$VDOC_ADMIN_API_UPSTREAM:backend:8080}
+	}
+
+	handle {
+		try_files {path} {path}/ /index.html
+		file_server
+	}
 }

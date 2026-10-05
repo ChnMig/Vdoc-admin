@@ -43,6 +43,14 @@ run_valid 'http://127.0.0.1:8080' 'http://127.0.0.1:8080'
 run_valid 'http://preview.localhost:8080' 'http://preview.localhost:8080'
 run_valid 'http://[::1]:8080' 'http://[::1]:8080'
 
+PATH="$tmp_dir:$PATH" \
+  VDOC_ADMIN_RUNTIME_CONFIG_PATH="$tmp_dir/same-origin-runtime-config.js" \
+  VDOC_ADMIN_API_BASE_URL=same-origin \
+  VDOC_ENTRYPOINT_CAPTURE="$tmp_dir/same-origin-connect-src.txt" \
+  sh "$root_dir/docker-entrypoint.sh"
+grep -Fq 'apiBaseUrl: window.location.origin' "$tmp_dir/same-origin-runtime-config.js" || fail 'same-origin config must follow the browser origin'
+[ ! -s "$tmp_dir/same-origin-connect-src.txt" ] || fail 'same-origin CSP must not allow an additional origin'
+
 newline='
 '
 carriage_return=$(printf '\r')
@@ -58,5 +66,7 @@ assert_rejected 'https://api.example.test:0'
 assert_rejected 'https://api.example.test:65536'
 assert_rejected 'http://api.example.test'
 assert_rejected 'http://127.example.test'
+assert_rejected 'same-origin?query=1'
+assert_rejected "same-origin${newline}injected.example.test"
 
 printf 'ok\n'

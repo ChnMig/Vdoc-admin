@@ -1883,6 +1883,32 @@ describe('VersionsPage', () => {
     expect(listDocuments).not.toHaveBeenCalled()
   })
 
+  it('reports a version deep link that belongs to a different branch', async () => {
+    const linkedVersion = {
+      ...markdownVersionFixture,
+      id: 'version-other-branch',
+      branch_id: 'branch-other',
+      version_name: 'Other branch version',
+    }
+    apiMocks.getVersion.mockResolvedValue(linkedVersion)
+    const screen = renderPage(
+      <VersionsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          branch_id: branchFixture.id,
+          version_id: linkedVersion.id,
+        }}
+      />
+    )
+
+    expect(
+      await screen.findByText('Linked entity is unavailable')
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Version')).toHaveValue('')
+    expect(getVersionContent).not.toHaveBeenCalled()
+  })
+
   it('labels archived branches in the historical version filter', async () => {
     apiMocks.listBranches.mockResolvedValue({
       items: [

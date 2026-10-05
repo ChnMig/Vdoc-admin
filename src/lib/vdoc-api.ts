@@ -590,18 +590,25 @@ export const vdocApi = axios.create({
   },
 })
 
-vdocApi.interceptors.request.use((config) => {
-  if (
-    config.method !== 'get' &&
-    (config.url?.includes('/ai/') || config.url?.includes('/ai-summary/'))
-  )
-    config.timeout = 160_000
-  const token = useAuthStore.getState().auth.accessToken
-  if (token) {
-    config.headers.Authorization = token
-  }
-  return config
-})
+vdocApi.interceptors.request.use(
+  (config) => {
+    if (
+      config.method !== 'get' &&
+      (config.url?.includes('/ai/') || config.url?.includes('/ai-summary/'))
+    )
+      config.timeout = 160_000
+    const token = useAuthStore.getState().auth.accessToken
+    if (token) {
+      config.headers.Authorization = token
+    }
+    return config
+  },
+  (error) => {
+    throw error
+  },
+  // Capture credentials at request creation, before a later session can replace them.
+  { synchronous: true }
+)
 
 export async function unwrapEnvelope<T>(
   request: Promise<{ data: VdocEnvelope<T> }>

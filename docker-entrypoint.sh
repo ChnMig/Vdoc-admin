@@ -14,7 +14,7 @@ while [ "${api_base_url%/}" != "$api_base_url" ]; do
 done
 
 reject_api_base_url() {
-  printf '%s\n' "VDOC_ADMIN_API_BASE_URL must be an exact HTTPS origin (HTTP is allowed only for localhost/loopback development) without credentials, path, query, fragment, or control characters." >&2
+  printf '%s\n' "VDOC_ADMIN_API_BASE_URL must be same-origin or an exact HTTPS origin (HTTP is allowed only for localhost/loopback development) without credentials, path, query, fragment, or control characters." >&2
   exit 1
 }
 
@@ -28,43 +28,51 @@ if printf '%s' "$api_base_url" | LC_ALL=C grep -q '[[:cntrl:]]'; then
   reject_api_base_url
 fi
 
-if ! printf '%s\n' "$api_base_url" | grep -Eq '^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]{1,5})?$'; then
-  reject_api_base_url
-fi
+if [ "$api_base_url" != "same-origin" ]; then
+  if ! printf '%s\n' "$api_base_url" | grep -Eq '^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]{1,5})?$'; then
+    reject_api_base_url
+  fi
 
-authority="${api_base_url#*://}"
-scheme="${api_base_url%%://*}"
-port=""
-case "$authority" in
-  \[*\]:*) port="${authority##*:}" ;;
-  \[*\]) ;;
-  *:*) port="${authority##*:}" ;;
-esac
-if [ -n "$port" ] && { [ "$port" -eq 0 ] || [ "$port" -gt 65535 ]; }; then
-  reject_api_base_url
-fi
-
-host="$authority"
-case "$host" in
-  \[*\]:*) host="${host%:*}" ;;
-  \[*\]) ;;
-  *:*) host="${host%:*}" ;;
-esac
-if [ "$scheme" = "http" ]; then
-  case "$host" in
-    localhost|*.localhost|127.0.0.1|\[::1\]) ;;
-    *) reject_api_base_url ;;
+  authority="${api_base_url#*://}"
+  scheme="${api_base_url%%://*}"
+  port=""
+  case "$authority" in
+    \[*\]:*) port="${authority##*:}" ;;
+    \[*\]) ;;
+    *:*) port="${authority##*:}" ;;
   esac
+  if [ -n "$port" ] && { [ "$port" -eq 0 ] || [ "$port" -gt 65535 ]; }; then
+    reject_api_base_url
+  fi
+
+  host="$authority"
+  case "$host" in
+    \[*\]:*) host="${host%:*}" ;;
+    \[*\]) ;;
+    *:*) host="${host%:*}" ;;
+  esac
+  if [ "$scheme" = "http" ]; then
+    case "$host" in
+      localhost|*.localhost|127.0.0.1|\[::1\]) ;;
+      *) reject_api_base_url ;;
+    esac
+  fi
 fi
 
-export VDOC_PUBLIC_SHARE_CONNECT_SRC="$api_base_url"
+if [ "$api_base_url" = "same-origin" ]; then
+  export VDOC_PUBLIC_SHARE_CONNECT_SRC=""
+  api_base_expression='window.location.origin'
+else
+  export VDOC_PUBLIC_SHARE_CONNECT_SRC="$api_base_url"
+  escaped_api_base_url=$(printf '%s' "$api_base_url" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  api_base_expression="\"${escaped_api_base_url}\""
+fi
 
-escaped_api_base_url=$(printf '%s' "$api_base_url" | sed 's/\\/\\\\/g; s/"/\\"/g')
 tmp_file="${config_file}.tmp"
 
 {
   printf '%s\n' 'window.__VDOC_ADMIN_CONFIG__ = {'
-  printf '  apiBaseUrl: "%s"\n' "$escaped_api_base_url"
+  printf '  apiBaseUrl: %s\n' "$api_base_expression"
   printf '%s\n' '};'
 } > "$tmp_file"
 

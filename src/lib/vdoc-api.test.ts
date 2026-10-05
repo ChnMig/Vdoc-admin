@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import {
   approveDraft,
   createAIChatSession,
+  createTeam,
   getIdentity,
   login,
   register,
@@ -129,6 +130,33 @@ describe('vdoc-api', () => {
 
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBeUndefined()
   })
+
+  it.each(['switch', 'logout'] as const)(
+    'keeps a request bound to the session that started it before %s',
+    async (boundary) => {
+      const requests: InternalAxiosRequestConfig[] = []
+      vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+        code: 200,
+        status: 'OK',
+        timestamp: 1,
+        detail: { id: 'team-1', name: 'Alice team' },
+      })
+      useAuthStore.getState().auth.setAccessToken('alice.jwt')
+
+      const payload = { name: 'Alice team', description: 'Private team' }
+      const request = createTeam(payload)
+      useAuthStore.getState().auth.reset()
+      if (boundary === 'switch')
+        useAuthStore.getState().auth.setAccessToken('bob.jwt')
+      await request
+
+      expect(requests).toHaveLength(1)
+      expect(headerValue(requests[0]?.headers, 'Authorization')).toBe(
+        'alice.jwt'
+      )
+      expect(JSON.parse(requests[0]!.data)).toEqual(payload)
+    }
+  )
 
   it.each([login, register])(
     'forwards cancellation to an authentication request',

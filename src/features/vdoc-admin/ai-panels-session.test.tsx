@@ -7,9 +7,12 @@ import { LanguageProvider } from '@/context/language-provider'
 import { AIContextPanel } from './ai-panels'
 
 const api = vi.hoisted(() => ({
+  createAIChatSession: vi.fn(),
+  getAIChatSession: vi.fn(),
   getAISummary: vi.fn(),
   listAIChatSessions: vi.fn(),
   regenerateAISummary: vi.fn(),
+  sendAIChatMessage: vi.fn(),
 }))
 vi.mock('@/lib/vdoc-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/vdoc-api')>()),
@@ -127,6 +130,197 @@ it.each([
           'old AI task metadata must not repopulate the signed-out/new-account cache'
         ).toBeUndefined()
         expect(invalidate).not.toHaveBeenCalled()
+      }
+    } finally {
+      view.unmount()
+      unbind()
+      client.clear()
+    }
+  }
+)
+
+it.each(['creation', 'reply'])(
+  'ignores a delayed AI %s failure after the account changes',
+  async (stage) => {
+    const mutationError = vi.fn()
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false, onError: mutationError },
+      },
+    })
+    const unbind = bindQueryCacheToAuth(client)
+    const user = {
+      id: 'alice',
+      name: 'Alice',
+      email: 'alice@example.test',
+      status: 1,
+      is_super_admin: false,
+      can_access_audit: false,
+    }
+    act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+    let fail!: (error: Error) => void
+    api.getAISummary.mockResolvedValue(null)
+    api.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
+    api.getAIChatSession.mockResolvedValue({ messages: [] })
+    const request = new Promise((_resolve, reject) => {
+      fail = reject
+    })
+    api.createAIChatSession.mockImplementation(() =>
+      stage === 'creation' ? request : Promise.resolve({ id: 'session-a' })
+    )
+    api.sendAIChatMessage.mockReturnValue(request)
+    const view = render(
+      <QueryClientProvider client={client}>
+        <LanguageProvider>
+          <AIContextPanel target={target} />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    try {
+      const input = await view.findByLabelText('AI chat message')
+      fireEvent.change(input, { target: { value: 'Private Alice prompt' } })
+      fireEvent.submit(input.closest('form')!)
+      await waitFor(() =>
+        expect(
+          stage === 'creation' ? api.createAIChatSession : api.sendAIChatMessage
+        ).toHaveBeenCalledOnce()
+      )
+      act(() =>
+        useAuthStore
+          .getState()
+          .auth.setSession({ ...user, id: 'bob' }, 'bob-token')
+      )
+      await act(async () => {
+        fail(new Error('Private Alice provider error'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(mutationError).not.toHaveBeenCalled()
+      expect(
+        view.queryByText('Private Alice provider error')
+      ).not.toBeInTheDocument()
+    } finally {
+      view.unmount()
+      unbind()
+      client.clear()
+    }
+  }
+)
+
+it.each(
+  ['creation', 'reply'].flatMap((stage) =>
+    [
+      'sign-out',
+      'switch-user',
+      'same-token session',
+      'unmount',
+      'target-switch',
+      'same-session control',
+    ].map((scenario) => ({ stage, scenario }))
+  )
+)(
+  'keeps delayed AI $stage inside its originating session: $scenario',
+  async ({ stage, scenario }) => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const unbind = bindQueryCacheToAuth(client)
+    const user = {
+      id: 'alice',
+      name: 'Alice',
+      email: 'alice@example.test',
+      status: 1,
+      is_super_admin: false,
+      can_access_audit: false,
+    }
+    act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+    let finishCreation!: (value: { id: string }) => void
+    const message = {
+      id: 'message-a',
+      session_id: 'session-a',
+      role: 'assistant',
+      content: 'Private Alice response',
+      created_at: '2026-10-05T00:00:00Z',
+    }
+    let finishReply!: (value: typeof message) => void
+    api.getAISummary.mockResolvedValue(null)
+    api.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
+    api.getAIChatSession.mockResolvedValue({ messages: [] })
+    if (stage === 'creation') {
+      api.createAIChatSession.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishCreation = resolve
+          })
+      )
+      api.sendAIChatMessage.mockResolvedValue(message)
+    } else {
+      api.createAIChatSession.mockResolvedValue({ id: 'session-a' })
+      api.sendAIChatMessage.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishReply = resolve
+          })
+      )
+    }
+    const panel = (ownerId = target.ownerId) => (
+      <QueryClientProvider client={client}>
+        <LanguageProvider>
+          <AIContextPanel target={{ ...target, ownerId }} />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    const view = render(panel())
+    try {
+      const input = await view.findByLabelText('AI chat message')
+      fireEvent.change(input, { target: { value: 'Private Alice prompt' } })
+      fireEvent.submit(input.closest('form')!)
+      await waitFor(() =>
+        expect(api.createAIChatSession).toHaveBeenCalledOnce()
+      )
+      if (stage === 'reply')
+        await waitFor(() =>
+          expect(api.sendAIChatMessage).toHaveBeenCalledOnce()
+        )
+      if (scenario === 'unmount') view.unmount()
+      if (scenario === 'target-switch') view.rerender(panel('version-b'))
+      if (scenario === 'sign-out')
+        act(() => useAuthStore.getState().auth.reset())
+      if (scenario === 'switch-user')
+        act(() =>
+          useAuthStore
+            .getState()
+            .auth.setSession({ ...user, id: 'bob' }, 'bob-token')
+        )
+      if (scenario === 'same-token session')
+        act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      await act(async () => {
+        if (stage === 'creation') finishCreation({ id: 'session-a' })
+        else finishReply(message)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      if (scenario === 'same-session control') {
+        expect(api.sendAIChatMessage).toHaveBeenCalledWith(
+          target.projectId,
+          'session-a',
+          'Private Alice prompt'
+        )
+        expect(
+          await view.findByText('Private Alice response')
+        ).toBeInTheDocument()
+        expect(input).toHaveValue('')
+      } else {
+        if (stage === 'creation')
+          expect(api.sendAIChatMessage).not.toHaveBeenCalled()
+        else expect(api.sendAIChatMessage).toHaveBeenCalledOnce()
+        expect(invalidate).not.toHaveBeenCalled()
+        expect(
+          view.queryByText('Private Alice response')
+        ).not.toBeInTheDocument()
       }
     } finally {
       view.unmount()

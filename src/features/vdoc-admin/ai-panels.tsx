@@ -1,4 +1,4 @@
-import { useRef, useState, type MutableRefObject } from 'react'
+import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Bot, MessageSquare } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -39,10 +39,11 @@ export function AIContextPanel({
   canRegenerate = interactive,
 }: AIContextPanelProps) {
   const targetKey = targetIdentityKey(target)
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
 
   return (
     <AIContextPanelContent
-      key={targetKey}
+      key={`${sessionVersion}:${targetKey}`}
       target={target}
       targetKey={targetKey}
       interactive={interactive}
@@ -63,6 +64,13 @@ function AIContextPanelContent({
   const [messages, setMessages] = useState<readonly AIChatMessageDTO[]>([])
   const sessionCreationRef = useRef<Promise<string> | null>(null)
   const sendLockedRef = useRef(false)
+  const mountedRef = useRef(false)
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const summaryQuery = useQuery<AISummaryDTO | null>({
     queryKey: ['ai-summary', target],
@@ -106,22 +114,47 @@ function AIContextPanelContent({
     },
   })
   const sendMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async ({
+      content,
+      sessionVersion,
+    }: {
+      content: string
+      sessionVersion: number
+    }) => {
       if (!target || !interactive) throw new Error('AI chat is read-only.')
-      const targetSessionId = await ensureSession(
-        target,
-        activeSessionId,
-        setSessionId,
-        sessionCreationRef
-      )
-      const message = await sendAIChatMessage(
-        target.projectId,
-        targetSessionId,
-        content
-      )
-      return { message, sessionId: targetSessionId }
+      const ownsSubmission = () =>
+        mountedRef.current &&
+        useAuthStore.getState().auth.sessionVersion === sessionVersion
+      if (!ownsSubmission()) return
+      try {
+        const targetSessionId = await ensureSession(
+          target,
+          activeSessionId,
+          setSessionId,
+          sessionCreationRef,
+          ownsSubmission
+        )
+        // Session creation can outlive the originating page or account.
+        if (!ownsSubmission()) return
+        const message = await sendAIChatMessage(
+          target.projectId,
+          targetSessionId,
+          content
+        )
+        if (!ownsSubmission()) return
+        return { message, sessionId: targetSessionId, sessionVersion }
+      } catch (error) {
+        if (ownsSubmission()) throw error
+      }
     },
-    onSuccess: ({ message, sessionId: targetSessionId }) => {
+    onSuccess: (result) => {
+      if (
+        !result ||
+        !mountedRef.current ||
+        useAuthStore.getState().auth.sessionVersion !== result.sessionVersion
+      )
+        return
+      const { message, sessionId: targetSessionId } = result
       setMessages((current) => [...current, message])
       void queryClient.invalidateQueries({
         queryKey: [
@@ -254,12 +287,26 @@ function AIContextPanelContent({
               const content = String(formData.get('message') ?? '').trim()
               if (content.length === 0 || sendLockedRef.current) return
               sendLockedRef.current = true
-              sendMutation.mutate(content, {
-                onSuccess: () => form.reset(),
-                onSettled: () => {
-                  sendLockedRef.current = false
+              sendMutation.mutate(
+                {
+                  content,
+                  sessionVersion: useAuthStore.getState().auth.sessionVersion,
                 },
-              })
+                {
+                  onSuccess: (result) => {
+                    if (
+                      result &&
+                      mountedRef.current &&
+                      useAuthStore.getState().auth.sessionVersion ===
+                        result.sessionVersion
+                    )
+                      form.reset()
+                  },
+                  onSettled: () => {
+                    sendLockedRef.current = false
+                  },
+                }
+              )
             }}
           >
             <Label htmlFor='ai-chat-message'>{t('admin.ai.chatMessage')}</Label>
@@ -373,7 +420,8 @@ async function ensureSession(
   target: AISummaryTarget,
   sessionId: string,
   setSessionId: (sessionId: string) => void,
-  sessionCreationRef: MutableRefObject<Promise<string> | null>
+  sessionCreationRef: MutableRefObject<Promise<string> | null>,
+  ownsSubmission: () => boolean
 ) {
   if (sessionId.length > 0) return sessionId
   if (sessionCreationRef.current) return sessionCreationRef.current
@@ -385,7 +433,7 @@ async function ensureSession(
     title: `AI chat for ${target.ownerType} ${target.ownerId}`,
   })
     .then((session) => {
-      setSessionId(session.id)
+      if (ownsSubmission()) setSessionId(session.id)
       return session.id
     })
     .finally(() => {
