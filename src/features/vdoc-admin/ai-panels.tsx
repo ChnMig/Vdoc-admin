@@ -101,14 +101,25 @@ function AIContextPanelContent({
     enabled: target !== undefined && activeSessionId.length > 0,
   })
   const regenerateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (sessionVersion: number) => {
       if (!target || !canRegenerate) throw new Error('AI summary is read-only.')
-      const sessionVersion = useAuthStore.getState().auth.sessionVersion
-      const summary = await regenerateAISummary(target)
-      return { summary, sessionVersion }
+      const ownsSession = () =>
+        useAuthStore.getState().auth.sessionVersion === sessionVersion
+      if (!mountedRef.current || !ownsSession()) return
+      try {
+        const summary = await regenerateAISummary(target)
+        if (ownsSession()) return { summary, sessionVersion }
+      } catch (error) {
+        if (ownsSession()) throw error
+      }
     },
-    onSuccess: ({ summary, sessionVersion }) => {
-      if (useAuthStore.getState().auth.sessionVersion !== sessionVersion) return
+    onSuccess: (result) => {
+      if (
+        !result ||
+        useAuthStore.getState().auth.sessionVersion !== result.sessionVersion
+      )
+        return
+      const { summary } = result
       queryClient.setQueryData(['ai-summary', target], summary)
       return queryClient.invalidateQueries({ queryKey: ['ai-summary', target] })
     },
@@ -223,7 +234,11 @@ function AIContextPanelContent({
                 regenerateMutation.isPending ||
                 summaryQuery.data?.status === 'pending'
               }
-              onClick={() => regenerateMutation.mutate()}
+              onClick={() =>
+                regenerateMutation.mutate(
+                  useAuthStore.getState().auth.sessionVersion
+                )
+              }
             >
               {t('admin.ai.regenerateSummary')}
             </Button>

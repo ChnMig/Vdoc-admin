@@ -47,6 +47,140 @@ it.each([
   'sign-out',
   'switch-user',
   'same-token session',
+  'unmount',
+  'same-session control',
+])(
+  'binds summary intent to its originating session before dispatch: %s',
+  async (scenario) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const unbind = bindQueryCacheToAuth(client)
+    const user = {
+      id: 'alice',
+      name: 'Alice',
+      email: 'alice@example.test',
+      status: 1,
+      is_super_admin: false,
+      can_access_audit: false,
+    }
+    act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+    api.getAISummary.mockResolvedValue(null)
+    api.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
+    api.regenerateAISummary.mockResolvedValue(summary)
+    const view = render(
+      <QueryClientProvider client={client}>
+        <LanguageProvider>
+          <AIContextPanel target={target} />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    try {
+      const button = await view.findByRole('button', {
+        name: 'Regenerate AI summary',
+      })
+      await act(async () => {
+        // MutationObserver dispatches after the synchronous click callback.
+        fireEvent.click(button)
+        if (scenario === 'sign-out') useAuthStore.getState().auth.reset()
+        if (scenario === 'switch-user')
+          useAuthStore
+            .getState()
+            .auth.setSession({ ...user, id: 'bob' }, 'bob-token')
+        if (scenario === 'same-token session')
+          useAuthStore.getState().auth.setSession(user, 'alice-token')
+        if (scenario === 'unmount') view.unmount()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      if (scenario === 'same-session control')
+        expect(api.regenerateAISummary).toHaveBeenCalledWith(target)
+      else expect(api.regenerateAISummary).not.toHaveBeenCalled()
+    } finally {
+      view.unmount()
+      unbind()
+      client.clear()
+    }
+  }
+)
+
+it.each(['switch-user', 'same-token session', 'same-session control'])(
+  'keeps delayed summary errors inside their originating session: %s',
+  async (scenario) => {
+    const mutationError = vi.fn()
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false, onError: mutationError },
+      },
+    })
+    const unbind = bindQueryCacheToAuth(client)
+    const user = {
+      id: 'alice',
+      name: 'Alice',
+      email: 'alice@example.test',
+      status: 1,
+      is_super_admin: false,
+      can_access_audit: false,
+    }
+    act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+    api.getAISummary.mockResolvedValue(null)
+    api.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
+    let fail!: (error: Error) => void
+    api.regenerateAISummary.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    const view = render(
+      <QueryClientProvider client={client}>
+        <LanguageProvider>
+          <AIContextPanel target={target} />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    try {
+      fireEvent.click(
+        await view.findByRole('button', { name: 'Regenerate AI summary' })
+      )
+      await waitFor(() =>
+        expect(api.regenerateAISummary).toHaveBeenCalledOnce()
+      )
+      if (scenario === 'switch-user')
+        act(() =>
+          useAuthStore
+            .getState()
+            .auth.setSession({ ...user, id: 'bob' }, 'bob-token')
+        )
+      if (scenario === 'same-token session')
+        act(() => useAuthStore.getState().auth.setSession(user, 'alice-token'))
+      await act(async () => {
+        fail(new Error('Private Alice summary failure'))
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      if (scenario === 'same-session control') {
+        expect(mutationError).toHaveBeenCalledOnce()
+        expect(
+          view.getByText('Private Alice summary failure')
+        ).toBeInTheDocument()
+      } else {
+        expect(mutationError).not.toHaveBeenCalled()
+        expect(
+          view.queryByText('Private Alice summary failure')
+        ).not.toBeInTheDocument()
+      }
+    } finally {
+      view.unmount()
+      unbind()
+      client.clear()
+    }
+  }
+)
+
+it.each([
+  'sign-out',
+  'switch-user',
+  'same-token session',
   'same-session control',
 ])(
   'keeps an in-flight AI mutation inside its originating session: %s',
