@@ -58,7 +58,7 @@ export function UsersPage() {
   const userTokenQuery = useQuery({
     queryKey: ['user-mcp-tokens', selectedUserId],
     queryFn: ({ signal }) => listUserMCPTokens(selectedUserId, { signal }),
-    enabled: selectedUserId.length > 0,
+    enabled: isSuperAdmin && selectedUserId.length > 0,
   })
   const createMutation = useMutation({
     mutationFn: createUser,
@@ -256,6 +256,26 @@ export function UsersPage() {
         description={selectedUser?.email ?? t('admin.placeholders.selectUser')}
         tokens={userTokenQuery.data?.items ?? []}
         emptyPreset='userTokens'
+        emptyContent={
+          selectedUserId ? (
+            <p role='status' className='text-sm text-muted-foreground'>
+              {t('admin.userTokens.noneIssued', {
+                user: selectedUser?.email ?? selectedUserId,
+              })}
+            </p>
+          ) : undefined
+        }
+        queryState={
+          selectedUserId
+            ? {
+                isLoading: userTokenQuery.isLoading,
+                isError: userTokenQuery.isError,
+                error: userTokenQuery.error,
+              }
+            : undefined
+        }
+        onRetry={() => void userTokenQuery.refetch()}
+        refreshing={userTokenQuery.isFetching}
         onRevoke={(tokenId) =>
           revokeMutation.mutateAsync({ userId: selectedUserId, tokenId })
         }

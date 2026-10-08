@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -55,9 +55,11 @@ export function ProjectsPage() {
   const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const invalidate = useInvalidateResources()
   const { projectsQuery, projectId, setProjectId, projectOptions } =
     useProjectsAndSelection()
+  const memberScope = `${sessionVersion}:${projectId}`
   const teamsQuery = useQuery({
     queryKey: ['teams'],
     queryFn: ({ signal }) => listTeams({ signal }),
@@ -122,33 +124,59 @@ export function ProjectsPage() {
       invalidate({ kind: 'project', projectId: result.id }),
   })
   const addMemberMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: number }) =>
-      addProjectMember(projectId, { user_id: userId, role }),
-    onMutate: () => ({ projectId }),
-    onSuccess: (_result, _variables, context) =>
-      invalidate({
-        kind: 'project',
-        projectId: context?.projectId ?? projectId,
-      }),
+    mutationFn: async (request: MemberChange & { role: number }) => {
+      if (!ownsSession(request.sessionVersion)) return
+      try {
+        const member = await addProjectMember(request.projectId, {
+          user_id: request.userId,
+          role: request.role,
+        })
+        if (ownsSession(request.sessionVersion)) return member
+      } catch (error) {
+        if (ownsSession(request.sessionVersion)) throw error
+      }
+    },
+    onSuccess: (_result, request) => {
+      if (ownsSession(request.sessionVersion))
+        return invalidate({ kind: 'project', projectId: request.projectId })
+    },
   })
   const roleMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: number }) =>
-      patchProjectMemberRole(projectId, userId, { role }),
-    onMutate: () => ({ projectId }),
-    onSuccess: (_result, _variables, context) =>
-      invalidate({
-        kind: 'project',
-        projectId: context?.projectId ?? projectId,
-      }),
+    mutationFn: async (request: MemberChange & { role: number }) => {
+      if (!ownsSession(request.sessionVersion)) return
+      try {
+        const member = await patchProjectMemberRole(
+          request.projectId,
+          request.userId,
+          { role: request.role }
+        )
+        if (ownsSession(request.sessionVersion)) return member
+      } catch (error) {
+        if (ownsSession(request.sessionVersion)) throw error
+      }
+    },
+    onSuccess: (_result, request) => {
+      if (ownsSession(request.sessionVersion))
+        return invalidate({ kind: 'project', projectId: request.projectId })
+    },
   })
   const removeMutation = useMutation({
-    mutationFn: (userId: string) => removeProjectMember(projectId, userId),
-    onMutate: () => ({ projectId }),
-    onSuccess: (_result, _variables, context) =>
-      invalidate({
-        kind: 'project',
-        projectId: context?.projectId ?? projectId,
-      }),
+    mutationFn: async (request: MemberChange) => {
+      if (!ownsSession(request.sessionVersion)) return
+      try {
+        const member = await removeProjectMember(
+          request.projectId,
+          request.userId
+        )
+        if (ownsSession(request.sessionVersion)) return member
+      } catch (error) {
+        if (ownsSession(request.sessionVersion)) throw error
+      }
+    },
+    onSuccess: (_result, request) => {
+      if (ownsSession(request.sessionVersion))
+        return invalidate({ kind: 'project', projectId: request.projectId })
+    },
   })
   const teamOptions =
     teamsQuery.data?.items.map((team) => ({
@@ -261,60 +289,20 @@ export function ProjectsPage() {
               }}
             />
             {memberCandidateOptions.length ? (
-              <form
-                className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  const form = event.currentTarget
-                  const formData = new FormData(form)
-                  addMemberMutation.mutate(
-                    {
-                      userId: fieldValue(formData, 'user_id'),
-                      role: numberValue(formData, 'role', ROLE_READER),
-                    },
-                    { onSuccess: () => form.reset() }
-                  )
-                }}
-              >
-                <NativeSelect
-                  name='user_id'
-                  label={t('admin.fields.user')}
-                  placeholder={t('admin.placeholders.selectUser')}
-                  options={memberCandidateOptions}
-                  required
-                />
-                <NativeSelect
-                  name='role'
-                  label={t('admin.fields.role')}
-                  placeholder={t('admin.roles.reader')}
-                  options={roleOptions(t)}
-                  defaultValue={String(ROLE_READER)}
-                />
-                <Button
-                  type='submit'
-                  className='self-end'
-                  disabled={
-                    !projectId ||
-                    memberCandidatesLoading ||
-                    addMemberMutation.isPending
-                  }
-                >
-                  {t('admin.common.add')}
-                </Button>
-                {addMemberMutation.isError && (
-                  <Alert
-                    className='md:col-span-3'
-                    variant='destructive'
-                    aria-live='polite'
-                  >
-                    <AlertCircle />
-                    <AlertTitle>{t('admin.common.error')}</AlertTitle>
-                    <AlertDescription>
-                      {addMemberMutation.error.message}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </form>
+              <MemberAddForm
+                key={memberScope}
+                options={memberCandidateOptions}
+                pending={addMemberMutation.isPending}
+                disabled={!projectId || memberCandidatesLoading}
+                onSubmit={(formData) =>
+                  addMemberMutation.mutateAsync({
+                    projectId,
+                    sessionVersion,
+                    userId: fieldValue(formData, 'user_id'),
+                    role: numberValue(formData, 'role', ROLE_READER),
+                  })
+                }
+              />
             ) : (
               !memberCandidatesLoading && (
                 <p className='text-sm text-muted-foreground'>
@@ -325,18 +313,129 @@ export function ProjectsPage() {
           </>
         )}
         <MembersTable
+          key={memberScope}
           members={membersQuery.data?.items ?? []}
           users={[
             ...(usersQuery.data?.items ?? []),
             ...(memberCandidatesQuery.data?.items ?? []),
           ]}
-          onRole={(userId, role) => roleMutation.mutateAsync({ userId, role })}
-          onRemove={(userId) => removeMutation.mutateAsync(userId)}
+          onRole={(userId, role) =>
+            roleMutation.mutateAsync({
+              projectId,
+              sessionVersion,
+              userId,
+              role,
+            })
+          }
+          onRemove={(userId) =>
+            removeMutation.mutateAsync({ projectId, sessionVersion, userId })
+          }
           pending={roleMutation.isPending || removeMutation.isPending}
           readOnly={!canManageSelectedProject}
         />
       </CollectionCard>
     </PageChrome>
+  )
+}
+
+type MemberChange = {
+  projectId: string
+  userId: string
+  sessionVersion: number
+}
+
+function ownsSession(sessionVersion: number) {
+  return useAuthStore.getState().auth.sessionVersion === sessionVersion
+}
+
+function MemberAddForm({
+  options,
+  pending,
+  disabled,
+  onSubmit,
+}: {
+  options: Array<{ value: string; label: string }>
+  pending: boolean
+  disabled: boolean
+  onSubmit: (formData: FormData) => Promise<unknown>
+}) {
+  const { t } = useLanguage()
+  const [error, setError] = useState<Error>()
+  const mountedRef = useRef(false)
+  const editVersionRef = useRef(0)
+  const submitLockedRef = useRef(false)
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  return (
+    <form
+      className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
+      onInputCapture={() => editVersionRef.current++}
+      onChangeCapture={() => editVersionRef.current++}
+      onSubmit={async (event) => {
+        event.preventDefault()
+        if (submitLockedRef.current || pending || disabled) return
+        submitLockedRef.current = true
+        const form = event.currentTarget
+        const values = new FormData(form)
+        const submittedEditVersion = editVersionRef.current
+        setError(undefined)
+        try {
+          await onSubmit(values)
+          if (
+            mountedRef.current &&
+            editVersionRef.current === submittedEditVersion &&
+            fieldValue(values, 'user_id') ===
+              fieldValue(new FormData(form), 'user_id') &&
+            fieldValue(values, 'role') ===
+              fieldValue(new FormData(form), 'role')
+          )
+            form.reset()
+        } catch (cause) {
+          if (mountedRef.current)
+            setError(
+              cause instanceof Error
+                ? cause
+                : new Error(t('toasts.somethingWrong'))
+            )
+        } finally {
+          submitLockedRef.current = false
+        }
+      }}
+    >
+      <NativeSelect
+        name='user_id'
+        label={t('admin.fields.user')}
+        placeholder={t('admin.placeholders.selectUser')}
+        options={options}
+        required
+      />
+      <NativeSelect
+        name='role'
+        label={t('admin.fields.role')}
+        placeholder={t('admin.roles.reader')}
+        options={roleOptions(t)}
+        defaultValue={String(ROLE_READER)}
+      />
+      <Button type='submit' className='self-end' disabled={disabled || pending}>
+        {t('admin.common.add')}
+      </Button>
+      {error && (
+        <Alert
+          className='md:col-span-3'
+          variant='destructive'
+          aria-live='polite'
+        >
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
+      )}
+    </form>
   )
 }
 

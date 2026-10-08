@@ -1093,6 +1093,10 @@ export function TokenTable({
   title,
   description,
   emptyPreset = 'tokens',
+  emptyContent,
+  queryState,
+  onRetry,
+  refreshing = false,
   pending = false,
 }: {
   tokens: MCPTokenDTO[]
@@ -1102,6 +1106,10 @@ export function TokenTable({
   title?: string
   description?: string
   emptyPreset?: EmptyStatePreset
+  emptyContent?: React.ReactNode
+  queryState?: QueryState
+  onRetry?: () => void
+  refreshing?: boolean
   pending?: boolean
 }) {
   const { t } = useLanguage()
@@ -1109,8 +1117,37 @@ export function TokenTable({
     <CollectionCard
       title={title ?? t('nav.mcpTokens')}
       description={description}
-      count={tokens.length}
+      count={
+        tokens.length || (!queryState?.isLoading && !queryState?.isError)
+          ? tokens.length
+          : undefined
+      }
     >
+      {queryState?.isLoading && (
+        <p role='status' className='text-sm text-muted-foreground'>
+          {t('admin.common.loading')}
+        </p>
+      )}
+      {queryState?.isError && (
+        <Alert variant='destructive' aria-live='polite'>
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription className='grid gap-3'>
+            <p>{queryState.error?.message ?? t('toasts.somethingWrong')}</p>
+            {onRetry && (
+              <Button
+                type='button'
+                variant='outline'
+                className='w-fit'
+                disabled={refreshing}
+                onClick={onRetry}
+              >
+                {t('errors.retry')}
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
       {tokens.length ? (
         <Table>
           <TableHeader>
@@ -1169,9 +1206,9 @@ export function TokenTable({
             ))}
           </TableBody>
         </Table>
-      ) : (
-        <EmptyState preset={emptyPreset} />
-      )}
+      ) : !queryState?.isLoading && !queryState?.isError ? (
+        (emptyContent ?? <EmptyState preset={emptyPreset} />)
+      ) : null}
     </CollectionCard>
   )
 }

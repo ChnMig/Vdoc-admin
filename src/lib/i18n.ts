@@ -200,6 +200,9 @@ const en = {
     },
   },
   admin: {
+    userTokens: {
+      noneIssued: 'No MCP tokens have been issued for {user}.',
+    },
     pagination: {
       label: 'Pagination',
       drafts: 'Draft pages',
@@ -1432,6 +1435,9 @@ const zhCN = {
     },
   },
   admin: {
+    userTokens: {
+      noneIssued: '{user} 尚未签发 MCP 令牌。',
+    },
     pagination: {
       drafts: '草稿分页',
       diffs: '差异历史分页',

@@ -99,6 +99,7 @@ function PublicDocumentShareSession({
   const { t } = useLanguage()
   const sessionRef = useRef<PublicShareSession | null>(null)
   const versionRequestIdRef = useRef(0)
+  const unlockGenerationRef = useRef(0)
   const unlockLockedRef = useRef(false)
   const downloadLockedRef = useRef(false)
   const [loadState, setLoadState] = useState<LoadState>(() =>
@@ -129,29 +130,55 @@ function PublicDocumentShareSession({
         signal: session.controller.signal,
         unlockProof: proof,
       }
+      let requestStage: 'metadata' | 'versions' | 'content' = 'metadata'
       try {
-        const nextMetadata = await getPublicShareMetadata(request)
-        if (!requestIsCurrent()) return
-        const nextVersions =
-          nextMetadata.version_scope === 2
-            ? await listPublicShareVersions(request)
-            : [nextMetadata.current_version]
-        if (!requestIsCurrent()) return
-        const selected = nextMetadata.current_version.id
-        if (!nextVersions.some((version) => version.id === selected))
-          throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
-        const nextContent = await getPublicShareContent({
-          ...request,
-          versionId: parsePublicVersionId(selected),
-        })
-        if (nextContent.version_id !== selected)
-          throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
-        if (!requestIsCurrent()) return
-        setMetadata(nextMetadata)
-        setVersions(nextVersions)
-        setVersionId(selected)
-        setContent(nextContent)
-        setLoadState('ready')
+        let missingVersionId: string | undefined
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          requestStage = 'metadata'
+          const nextMetadata = await getPublicShareMetadata(request)
+          if (!requestIsCurrent()) return
+          const selected = nextMetadata.current_version.id
+          if (selected === missingVersionId) {
+            requestStage = 'content'
+            throw new PublicShareRequestError(404, 'NOT_FOUND')
+          }
+          requestStage = 'versions'
+          const nextVersions =
+            nextMetadata.version_scope === 2
+              ? await listPublicShareVersions(request)
+              : [nextMetadata.current_version]
+          if (!requestIsCurrent()) return
+          if (!nextVersions.some((version) => version.id === selected))
+            throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
+          requestStage = 'content'
+          let nextContent: PublicShareContentDTO
+          try {
+            nextContent = await getPublicShareContent({
+              ...request,
+              versionId: parsePublicVersionId(selected),
+            })
+          } catch (error) {
+            if (!requestIsCurrent()) return
+            if (
+              attempt === 0 &&
+              nextMetadata.version_scope === 1 &&
+              hasPublicShareStatus(error, 'NOT_FOUND')
+            ) {
+              missingVersionId = selected
+              continue
+            }
+            throw error
+          }
+          if (nextContent.version_id !== selected)
+            throw new PublicShareRequestError(200, 'INVALID_RESPONSE')
+          if (!requestIsCurrent()) return
+          setMetadata(nextMetadata)
+          setVersions(nextVersions)
+          setVersionId(selected)
+          setContent(nextContent)
+          setLoadState('ready')
+          return
+        }
       } catch (error) {
         if (!requestIsCurrent() || isAbortError(error)) return
         if (hasPublicShareStatus(error, 'PASSWORD_REQUIRED')) {
@@ -159,7 +186,10 @@ function PublicDocumentShareSession({
           setMessage(proof ? 'publicShare.sessionExpired' : undefined)
           return
         }
-        if (hasPublicShareStatus(error, 'NOT_FOUND')) {
+        if (
+          requestStage === 'metadata' &&
+          hasPublicShareStatus(error, 'NOT_FOUND')
+        ) {
           setLoadState('unavailable')
           setMessage(undefined)
           return
@@ -194,6 +224,13 @@ function PublicDocumentShareSession({
     void loadShare(session, unlockProof)
   }
 
+  function updateUnlockProof(proof?: string) {
+    unlockGenerationRef.current += 1
+    downloadLockedRef.current = false
+    setDownloading(false)
+    setUnlockProof(proof)
+  }
+
   async function handleUnlock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const session = sessionRef.current
@@ -212,7 +249,7 @@ function PublicDocumentShareSession({
         signal: session.controller.signal,
         password,
       })
-      setUnlockProof(unlocked.unlock_proof)
+      updateUnlockProof(unlocked.unlock_proof)
       setPassword('')
       setLoadState('loading')
       setFailedVersionId('')
@@ -282,7 +319,7 @@ function PublicDocumentShareSession({
 
   function handleReauthenticate() {
     versionRequestIdRef.current += 1
-    setUnlockProof(undefined)
+    updateUnlockProof(undefined)
     setPassword('')
     setMessage(undefined)
     setFailedVersionId('')
@@ -292,6 +329,10 @@ function PublicDocumentShareSession({
   async function handleDownload() {
     const session = sessionRef.current
     if (!session || !versionId || downloadLockedRef.current) return
+    const unlockGeneration = unlockGenerationRef.current
+    const requestIsCurrent = () =>
+      sessionRef.current === session &&
+      unlockGenerationRef.current === unlockGeneration
     downloadLockedRef.current = true
     setDownloading(true)
     setMessage(undefined)
@@ -303,10 +344,10 @@ function PublicDocumentShareSession({
         unlockProof,
         versionId: parsePublicVersionId(versionId),
       })
-      if (sessionRef.current !== session) return
+      if (!requestIsCurrent()) return
       savePublicShareDownload(download)
     } catch (error) {
-      if (isAbortError(error)) return
+      if (!requestIsCurrent() || isAbortError(error)) return
       if (hasPublicShareStatus(error, 'PASSWORD_REQUIRED')) {
         setMessage('publicShare.sessionExpired')
         if (!unlockProof) setLoadState('locked')
@@ -314,8 +355,10 @@ function PublicDocumentShareSession({
       }
       setMessage('publicShare.downloadFailed')
     } finally {
-      downloadLockedRef.current = false
-      setDownloading(false)
+      if (requestIsCurrent()) {
+        downloadLockedRef.current = false
+        setDownloading(false)
+      }
     }
   }
 

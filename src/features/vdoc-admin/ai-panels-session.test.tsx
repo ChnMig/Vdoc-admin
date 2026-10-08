@@ -161,7 +161,7 @@ it.each(['switch-user', 'same-token session', 'same-session control'])(
       if (scenario === 'same-session control') {
         expect(mutationError).toHaveBeenCalledOnce()
         expect(
-          view.getByText('Private Alice summary failure')
+          await view.findByText('Private Alice summary failure')
         ).toBeInTheDocument()
       } else {
         expect(mutationError).not.toHaveBeenCalled()
