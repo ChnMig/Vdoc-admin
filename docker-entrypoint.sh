@@ -3,6 +3,15 @@ set -eu
 
 config_file="${VDOC_ADMIN_RUNTIME_CONFIG_PATH:-/usr/share/caddy/runtime-config.js}"
 api_base_url="${VDOC_ADMIN_API_BASE_URL:-${VITE_VDOC_API_BASE_URL:-}}"
+release_channel="${VDOC_ADMIN_RELEASE_CHANNEL-release}"
+
+case "$release_channel" in
+  beta|release) ;;
+  *)
+    printf '%s\n' 'VDOC_ADMIN_RELEASE_CHANNEL must be beta or release.' >&2
+    exit 1
+    ;;
+esac
 
 if [ -z "$api_base_url" ]; then
   api_base_url="http://127.0.0.1:8080"
@@ -72,7 +81,8 @@ tmp_file="${config_file}.tmp"
 
 {
   printf '%s\n' 'window.__VDOC_ADMIN_CONFIG__ = {'
-  printf '  apiBaseUrl: %s\n' "$api_base_expression"
+  printf '  apiBaseUrl: %s,\n' "$api_base_expression"
+  printf '  releaseChannel: "%s"\n' "$release_channel"
   printf '%s\n' '};'
 } > "$tmp_file"
 

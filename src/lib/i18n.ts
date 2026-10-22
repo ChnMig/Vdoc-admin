@@ -728,6 +728,12 @@ const en = {
         'Add this section to your personal configuration, save it, and restart the Vdoc MCP server or open a new Codex session. Use /mcp to check the connection.',
       cursorSteps:
         'Merge this entry into your personal MCP configuration, save it, then enable or restart Vdoc in Cursor Settings → Tools & MCP.',
+      betaClientSetup:
+        'Install the beta adapter from the Vdoc Skill page first. Replace <ABSOLUTE_BETA_MCP_PATH> with the absolute command path printed by the installer. The beta adapter uses its own directory at ~/.local/share/vdoc/mcp/beta.',
+      betaCodexSteps:
+        'Add vdoc_beta alongside your existing server configuration. Use the backend URL and token from this beta environment, then restart vdoc_beta or open a new Codex session and check /mcp.',
+      betaCursorSteps:
+        'Merge vdoc_beta alongside your existing MCP entries. Use the backend URL and token from this beta environment, then enable or restart vdoc_beta in Cursor Settings → Tools & MCP.',
       clientVerify:
         'Keep the token in your private configuration. After connecting, query a published document with an explicit branch, then refresh the connection evidence above.',
       configTitle: 'MCP client configuration',
@@ -760,6 +766,12 @@ const en = {
       installTitle: 'Install the official Skill',
       installDescription:
         'The Vdoc Skill teaches agents to query reviewed facts, compare versions, and submit drafts without bypassing human publication.',
+      betaInstallDescription:
+        'This beta environment installs the MCP adapter in a separate beta directory and links its bundled Skill only into the current test project. Run these commands from a separate beta project; keep your stable project and personal Skill installation intact.',
+      betaStepPackage:
+        'The commands use a pinned reviewed Release that includes install-channel.mjs and install-channel.mjs.sha256. Verify the installer checksum before running --channel beta. Rerun to receive the newest published beta adapter and Skill; download or verification failures stop the install.',
+      betaStepVerify:
+        'Use the installer’s absolute command path in the vdoc_beta configuration below. Reload the agent in this beta project, verify list_projects, list_documents, and read tools, and select vdoc_beta for testing.',
       stepPackage:
         'Install the MCP package, then link its bundled Skill into your agent directory. Existing Skill files are preserved.',
       stepMcp:
@@ -1932,6 +1944,12 @@ const zhCN = {
         '将这一节加入个人配置并保存，重启 Vdoc MCP 服务或新开 Codex 会话，再用 /mcp 查看连接状态。',
       cursorSteps:
         '将这一项合并到个人 MCP 配置并保存，在 Cursor Settings → Tools & MCP 中启用或重启 Vdoc。',
+      betaClientSetup:
+        '先在 Vdoc Skill 页面安装 beta 适配器，将 <ABSOLUTE_BETA_MCP_PATH> 替换为安装器输出的绝对命令路径。Beta 适配器使用独立目录 ~/.local/share/vdoc/mcp/beta。',
+      betaCodexSteps:
+        '在已有服务配置旁新增 vdoc_beta，使用当前 beta 环境的后端地址和令牌，重启 vdoc_beta 或新开 Codex 会话，再用 /mcp 查看连接状态。',
+      betaCursorSteps:
+        '在已有 MCP 配置中新增 vdoc_beta，使用当前 beta 环境的后端地址和令牌，在 Cursor Settings → Tools & MCP 中启用或重启 vdoc_beta。',
       clientVerify:
         '令牌只保存在私密配置中。连接后，请明确分支并查询一份已发布文档，再刷新连接证据。',
       configTitle: 'MCP 客户端配置',
@@ -1964,6 +1982,12 @@ const zhCN = {
       installTitle: '安装官方 Skill',
       installDescription:
         'Vdoc Skill 指导智能体查询已审阅事实、比较版本并提交草稿，同时不绕过人工发布。',
+      betaInstallDescription:
+        '当前 beta 环境将 MCP 适配器安装到独立的 beta 目录，并仅把随包 Skill 链接到当前测试项目。请在独立的 beta 项目中运行命令，保留稳定项目和个人 Skill 安装。',
+      betaStepPackage:
+        '以下命令固定使用包含 install-channel.mjs 和 install-channel.mjs.sha256 的已审核 Release；校验安装器摘要后再以 --channel beta 运行。重新运行可获取最新已发布的 beta 适配器和 Skill；下载或校验失败会中止安装。',
+      betaStepVerify:
+        '将安装器输出的绝对命令路径填入下方 vdoc_beta 配置。在当前 beta 项目中重新加载智能体，验证 list_projects、list_documents 和读取工具，并选择 vdoc_beta 进行测试。',
       stepPackage:
         '安装 MCP 包，再将随包提供的 Skill 链接到 Agent 目录；已有 Skill 文件不会被覆盖。',
       stepMcp:

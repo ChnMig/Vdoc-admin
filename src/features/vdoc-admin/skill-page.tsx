@@ -1,4 +1,5 @@
 import { ShieldCheck } from 'lucide-react'
+import { resolveAdminReleaseChannel } from '@/lib/release-channel'
 import { apiBaseUrl } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -23,19 +24,41 @@ const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for
   test -f "$VDOC_SKILL_DIR/SKILL.md"
 )`
 
+const vdocBetaSkillInstallSnippet = `# Run from a separate beta project; the Skill is scoped to this project.
+(
+  set -eu
+  VDOC_MCP_INSTALLER_TAG='v${vdocMcpReleaseVersion}'
+  VDOC_MCP_INSTALLER_DIR="$(mktemp -d)"
+  trap 'rm -rf -- "$VDOC_MCP_INSTALLER_DIR"' EXIT
+  VDOC_MCP_RELEASE="https://github.com/ChnMig/Vdoc-mcp/releases/download/$VDOC_MCP_INSTALLER_TAG"
+  curl -fsSL "$VDOC_MCP_RELEASE/install-channel.mjs" -o "$VDOC_MCP_INSTALLER_DIR/install-channel.mjs"
+  curl -fsSL "$VDOC_MCP_RELEASE/install-channel.mjs.sha256" -o "$VDOC_MCP_INSTALLER_DIR/install-channel.mjs.sha256"
+  (cd "$VDOC_MCP_INSTALLER_DIR" && shasum -a 256 -c install-channel.mjs.sha256)
+  VDOC_BETA_MCP_PREFIX="$HOME/.local/share/vdoc/mcp/beta"
+  node "$VDOC_MCP_INSTALLER_DIR/install-channel.mjs" --channel beta --prefix "$VDOC_BETA_MCP_PREFIX"
+  VDOC_SKILL_DIR="$PWD/.agents/skills/vdoc"
+  "$VDOC_BETA_MCP_PREFIX/node_modules/.bin/vdoc-mcp" skill install --directory "$VDOC_SKILL_DIR"
+  test -f "$VDOC_SKILL_DIR/SKILL.md"
+)`
+
 export function SkillPage() {
   const { t } = useLanguage()
+  const beta = resolveAdminReleaseChannel() === 'beta'
   return (
     <PageChrome page='skill'>
       <CollectionCard
         title={t('admin.skill.installTitle')}
-        description={t('admin.skill.installDescription')}
+        description={t(
+          beta
+            ? 'admin.skill.betaInstallDescription'
+            : 'admin.skill.installDescription'
+        )}
       >
         <ol className='grid gap-3'>
           {[
-            t('admin.skill.stepPackage'),
+            t(beta ? 'admin.skill.betaStepPackage' : 'admin.skill.stepPackage'),
             t('admin.skill.stepMcp'),
-            t('admin.skill.stepVerify'),
+            t(beta ? 'admin.skill.betaStepVerify' : 'admin.skill.stepVerify'),
           ].map((step, index) => (
             <li
               key={step}
@@ -49,7 +72,7 @@ export function SkillPage() {
           ))}
         </ol>
         <pre className='overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
-          {vdocSkillInstallSnippet}
+          {beta ? vdocBetaSkillInstallSnippet : vdocSkillInstallSnippet}
         </pre>
       </CollectionCard>
       <Alert>

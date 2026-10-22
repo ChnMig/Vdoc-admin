@@ -4,6 +4,7 @@ set -eu
 root_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+unset VDOC_ADMIN_RELEASE_CHANNEL
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -24,6 +25,7 @@ run_valid() {
     VDOC_ENTRYPOINT_CAPTURE="$capture" \
     sh "$root_dir/docker-entrypoint.sh"
   grep -Fq "apiBaseUrl: \"$expected\"" "$runtime_config" || fail "runtime config did not contain normalized origin $expected"
+  grep -Fq 'releaseChannel: "release"' "$runtime_config" || fail 'unset channel did not default to release'
   [ "$(sed -n '1p' "$capture")" = "$expected" ] || fail "CSP connect-src capture did not equal $expected"
 }
 
@@ -50,6 +52,29 @@ PATH="$tmp_dir:$PATH" \
   sh "$root_dir/docker-entrypoint.sh"
 grep -Fq 'apiBaseUrl: window.location.origin' "$tmp_dir/same-origin-runtime-config.js" || fail 'same-origin config must follow the browser origin'
 [ ! -s "$tmp_dir/same-origin-connect-src.txt" ] || fail 'same-origin CSP must not allow an additional origin'
+
+PATH="$tmp_dir:$PATH" \
+  VDOC_ADMIN_RUNTIME_CONFIG_PATH="$tmp_dir/beta-runtime-config.js" \
+  VDOC_ADMIN_API_BASE_URL=same-origin \
+  VDOC_ADMIN_RELEASE_CHANNEL=beta \
+  VDOC_ENTRYPOINT_CAPTURE="$tmp_dir/beta-connect-src.txt" \
+  sh "$root_dir/docker-entrypoint.sh"
+grep -Fq 'releaseChannel: "beta"' "$tmp_dir/beta-runtime-config.js" || fail 'beta channel was not written to runtime config'
+grep -Fq 'apiBaseUrl: window.location.origin' "$tmp_dir/beta-runtime-config.js" || fail 'beta same-origin must follow the browser origin'
+
+for channel in '' Beta stable canary 'beta release' 'beta"; injected'; do
+  rm -f "$tmp_dir/invalid-channel-config.js" "$tmp_dir/invalid-channel-caddy.txt"
+  if PATH="$tmp_dir:$PATH" \
+    VDOC_ADMIN_RUNTIME_CONFIG_PATH="$tmp_dir/invalid-channel-config.js" \
+    VDOC_ADMIN_API_BASE_URL=same-origin \
+    VDOC_ADMIN_RELEASE_CHANNEL="$channel" \
+    VDOC_ENTRYPOINT_CAPTURE="$tmp_dir/invalid-channel-caddy.txt" \
+    sh "$root_dir/docker-entrypoint.sh" >"$tmp_dir/rejected.stdout" 2>"$tmp_dir/rejected.stderr"; then
+    fail "invalid release channel was accepted: $channel"
+  fi
+  [ ! -e "$tmp_dir/invalid-channel-config.js" ] || fail 'invalid channel wrote release fallback config'
+  [ ! -e "$tmp_dir/invalid-channel-caddy.txt" ] || fail 'invalid channel started Caddy'
+done
 
 newline='
 '

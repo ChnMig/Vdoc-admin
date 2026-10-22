@@ -12,6 +12,7 @@ interface ImportMeta {
 type VdocAdminRuntimeConfig = {
   apiBaseUrl?: string
   publicShareBaseUrl?: string
+  releaseChannel?: 'beta' | 'release'
 }
 
 interface Window {
