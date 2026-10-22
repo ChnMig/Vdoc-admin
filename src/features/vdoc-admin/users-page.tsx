@@ -22,7 +22,7 @@ import {
   AccessDeniedPage,
   PageChrome,
   LoadingErrorState,
-  FormCard,
+  FormDialog,
   TextField,
   NativeSelect,
   CollectionCard,
@@ -44,6 +44,7 @@ export function UsersPage() {
   const isSuperAdmin = Boolean(
     useAuthStore((state) => state.auth.user?.is_super_admin)
   )
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const invalidateResources = useInvalidateResources()
   const invalidate = () => invalidateResources({ kind: 'users' })
   const usersQuery = useQuery({
@@ -95,54 +96,58 @@ export function UsersPage() {
           error: usersQuery.error,
         }}
       />
-      <FormCard
-        title={t('admin.sections.createUser')}
-        submitLabel={t('admin.common.create')}
-        pending={createMutation.isPending}
-        onSubmit={(formData) => {
-          const password = String(formData.get('password') ?? '')
-          if (userPasswordError(password) !== undefined) {
-            throw new Error(t('auth.validation.passwordPolicy'))
-          }
-          return createMutation.mutateAsync({
-            email: fieldValue(formData, 'email'),
-            name: fieldValue(formData, 'name'),
-            password,
-            is_super_admin: fieldValue(formData, 'is_super_admin') === 'true',
-          })
-        }}
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <TextField
-            label={t('admin.fields.email')}
-            name='email'
-            type='email'
-            required
-          />
-          <TextField label={t('admin.fields.name')} name='name' required />
-        </div>
-        <div className='grid gap-4 md:grid-cols-2'>
-          <TextField
-            label={t('admin.fields.password')}
-            name='password'
-            type='password'
-            required
-            description={t('auth.validation.passwordPolicy')}
-          />
-          <NativeSelect
-            name='is_super_admin'
-            label={t('admin.fields.superAdmin')}
-            placeholder={t('admin.common.no')}
-            options={[
-              { value: 'false', label: t('admin.common.no') },
-              { value: 'true', label: t('admin.common.yes') },
-            ]}
-          />
-        </div>
-      </FormCard>
       <CollectionCard
         title={t('nav.users')}
         count={usersQuery.data?.total ?? 0}
+        actions={
+          <FormDialog
+            title={t('admin.sections.createUser')}
+            submitLabel={t('admin.common.create')}
+            pending={createMutation.isPending}
+            submissionScope={String(sessionVersion)}
+            onSubmit={(formData) => {
+              const password = String(formData.get('password') ?? '')
+              if (userPasswordError(password) !== undefined) {
+                throw new Error(t('auth.validation.passwordPolicy'))
+              }
+              return createMutation.mutateAsync({
+                email: fieldValue(formData, 'email'),
+                name: fieldValue(formData, 'name'),
+                password,
+                is_super_admin:
+                  fieldValue(formData, 'is_super_admin') === 'true',
+              })
+            }}
+          >
+            <div className='grid gap-4'>
+              <TextField
+                label={t('admin.fields.email')}
+                name='email'
+                type='email'
+                required
+              />
+              <TextField label={t('admin.fields.name')} name='name' required />
+            </div>
+            <div className='grid gap-4'>
+              <TextField
+                label={t('admin.fields.password')}
+                name='password'
+                type='password'
+                required
+                description={t('auth.validation.passwordPolicy')}
+              />
+              <NativeSelect
+                name='is_super_admin'
+                label={t('admin.fields.superAdmin')}
+                placeholder={t('admin.common.no')}
+                options={[
+                  { value: 'false', label: t('admin.common.no') },
+                  { value: 'true', label: t('admin.common.yes') },
+                ]}
+              />
+            </div>
+          </FormDialog>
+        }
       >
         {usersQuery.data?.items.length ? (
           <Table>

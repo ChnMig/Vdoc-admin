@@ -347,6 +347,11 @@ type RegisterPayload = LoginPayload & {
   name?: string
 }
 
+type ChangePasswordPayload = {
+  current_password: string
+  new_password: string
+}
+
 type CreateUserPayload = LoginPayload & {
   name: string
   is_super_admin: boolean
@@ -666,6 +671,17 @@ export function getAuthConfig(options?: RequestOptions) {
 export function getIdentity(options?: RequestOptions) {
   return unwrapEnvelope<AuthUser>(
     vdocApi.get('/api/v1/private/identity/me', { signal: options?.signal })
+  )
+}
+
+export function changePassword(
+  payload: ChangePasswordPayload,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<void>(
+    vdocApi.post('/api/v1/private/identity/me/password', payload, {
+      signal: options?.signal,
+    })
   )
 }
 

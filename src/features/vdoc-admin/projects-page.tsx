@@ -29,7 +29,7 @@ import {
 import {
   PageChrome,
   LoadingErrorState,
-  FormCard,
+  FormDialog,
   NativeSelect,
   TextField,
   NameDescriptionTable,
@@ -216,45 +216,52 @@ export function ProjectsPage() {
           error: projectsQuery.error,
         }}
       />
-      {isSuperAdmin && (
-        <FormCard
-          title={t('admin.sections.createProject')}
-          submitLabel={t('admin.common.create')}
-          pending={createMutation.isPending}
-          onSubmit={(formData) =>
-            createMutation.mutateAsync({
-              team_id: fieldValue(formData, 'team_id'),
-              admin_user_id: fieldValue(formData, 'admin_user_id'),
-              name: fieldValue(formData, 'name'),
-              description: fieldValue(formData, 'description'),
-            })
-          }
-        >
-          <div className='grid gap-4 md:grid-cols-2'>
-            <NativeSelect
-              name='team_id'
-              label={t('admin.fields.team')}
-              placeholder={t('admin.placeholders.selectTeam')}
-              options={teamOptions}
-              required
-            />
-            <NativeSelect
-              name='admin_user_id'
-              label={t('admin.fields.initialAdmin')}
-              placeholder={t('admin.placeholders.useCurrentUser')}
-              options={projectAdminOptions}
-              hint={t('admin.projects.initialAdminHint')}
-            />
-            <TextField label={t('admin.fields.name')} name='name' required />
-            <TextField
-              label={t('admin.fields.description')}
-              name='description'
-            />
-          </div>
-        </FormCard>
-      )}
       <NameDescriptionTable
         emptyPreset='projects'
+        actions={
+          isSuperAdmin && (
+            <FormDialog
+              title={t('admin.sections.createProject')}
+              submitLabel={t('admin.common.create')}
+              pending={createMutation.isPending}
+              submissionScope={String(sessionVersion)}
+              onSubmit={(formData) =>
+                createMutation.mutateAsync({
+                  team_id: fieldValue(formData, 'team_id'),
+                  admin_user_id: fieldValue(formData, 'admin_user_id'),
+                  name: fieldValue(formData, 'name'),
+                  description: fieldValue(formData, 'description'),
+                })
+              }
+            >
+              <div className='grid gap-4'>
+                <NativeSelect
+                  name='team_id'
+                  label={t('admin.fields.team')}
+                  placeholder={t('admin.placeholders.selectTeam')}
+                  options={teamOptions}
+                  required
+                />
+                <NativeSelect
+                  name='admin_user_id'
+                  label={t('admin.fields.initialAdmin')}
+                  placeholder={t('admin.placeholders.useCurrentUser')}
+                  options={projectAdminOptions}
+                  hint={t('admin.projects.initialAdminHint')}
+                />
+                <TextField
+                  label={t('admin.fields.name')}
+                  name='name'
+                  required
+                />
+                <TextField
+                  label={t('admin.fields.description')}
+                  name='description'
+                />
+              </div>
+            </FormDialog>
+          )
+        }
         items={projectsQuery.data?.items ?? []}
         canEdit={(id) =>
           projectsQuery.data?.items.find((project) => project.id === id)

@@ -74,6 +74,9 @@ for (const width of [1280, 390]) {
       await main.evaluate((el) => el.contains(document.activeElement))
     ).toBe(true)
 
+    await page.getByRole('button', { name: 'Create user', exact: true }).click()
+    const createDialog = page.getByRole('dialog', { name: 'Create user' })
+    await expect(createDialog).toBeVisible()
     await page.getByLabel('Email', { exact: true }).fill('new@example.test')
     await page.getByLabel('Name', { exact: true }).fill('New user')
     const password = page.getByLabel('Password', { exact: true })
@@ -91,7 +94,12 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Create', exact: true }).click()
     await expect.poll(() => submissions.length).toBe(1)
     expect(submissions[0].password).toBe(valid)
+    await expect(createDialog).toBeHidden()
+    await page.getByRole('button', { name: 'Create user', exact: true }).click()
     await expect(password).toHaveValue('')
+    await createDialog
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click()
 
     const a11y = await new AxeBuilder({ page })
       .withRules(['skip-link'])

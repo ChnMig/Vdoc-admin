@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react'
+import { AlertCircle, ArrowRight, Plus, ShieldCheck } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { withNativeSelectPlaceholder } from '@/lib/native-select-options'
 import {
@@ -20,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -267,7 +276,7 @@ export function NativeSelect({
   const controlId = id ?? generatedId
   const selectOptions = withNativeSelectPlaceholder(options, placeholder)
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 content-start gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
       <select
         id={controlId}
@@ -278,7 +287,7 @@ export function NativeSelect({
         required={required}
         aria-describedby={hint ? `${controlId}-hint` : undefined}
         onChange={(event) => onChange?.(event.currentTarget.value)}
-        className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
+        className='h-9 w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
       >
         {selectOptions.map((option) => (
           <option
@@ -368,6 +377,8 @@ export function FormCard({
   submissionScope = '',
   resetOnSuccess = true,
   disabled = false,
+  presentation = 'card',
+  onCancel,
 }: {
   title: string
   children: React.ReactNode
@@ -378,6 +389,8 @@ export function FormCard({
   submissionScope?: string
   resetOnSuccess?: boolean
   disabled?: boolean
+  presentation?: 'card' | 'dialog'
+  onCancel?: () => void
 }) {
   const { t } = useLanguage()
   const [submitError, setSubmitError] = useState<{
@@ -399,6 +412,81 @@ export function FormCard({
   }, [submissionOwner])
   const currentError =
     submitError?.owner === submissionOwner ? submitError.error : null
+  const form = (
+    <form
+      className='grid min-w-0 gap-4'
+      aria-busy={pending}
+      onInputCapture={() => editVersionRef.current++}
+      onChangeCapture={() => editVersionRef.current++}
+      onSubmit={async (event) => {
+        event.preventDefault()
+        if (submitLockedRef.current || pending || disabled) return
+        submitLockedRef.current = true
+        const form = event.currentTarget
+        const submittedValues = new FormData(form)
+        const submittedEditVersion = editVersionRef.current
+        setSubmitError(null)
+        try {
+          await onSubmit(submittedValues)
+          if (
+            currentOwnerRef.current === submissionOwner &&
+            editVersionRef.current === submittedEditVersion &&
+            (presentation === 'dialog' ||
+              sameFormValues(submittedValues, new FormData(form)))
+          ) {
+            if (resetOnSuccess) form.reset()
+            onSuccess?.()
+          }
+        } catch (error) {
+          if (currentOwnerRef.current === submissionOwner)
+            setSubmitError({
+              owner: submissionOwner,
+              error:
+                error instanceof Error
+                  ? error
+                  : new Error(t('toasts.somethingWrong')),
+            })
+        } finally {
+          submitLockedRef.current = false
+        }
+      }}
+    >
+      {children}
+      {currentError && (
+        <Alert variant='destructive' aria-live='polite'>
+          <AlertCircle />
+          <AlertTitle>{t('admin.common.error')}</AlertTitle>
+          <AlertDescription>{currentError.message}</AlertDescription>
+        </Alert>
+      )}
+      <div
+        className={
+          presentation === 'dialog'
+            ? 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'
+            : undefined
+        }
+      >
+        {onCancel && (
+          <Button
+            type='button'
+            variant='outline'
+            disabled={pending}
+            onClick={onCancel}
+          >
+            {t('common.cancel')}
+          </Button>
+        )}
+        <Button
+          type='submit'
+          className={presentation === 'card' ? 'w-fit' : undefined}
+          disabled={pending || disabled}
+        >
+          {submitLabel}
+        </Button>
+      </div>
+    </form>
+  )
+  if (presentation === 'dialog') return form
   return (
     <Card className='border-primary/25'>
       <CardHeader className='border-b pb-5'>
@@ -413,61 +501,86 @@ export function FormCard({
           {t('admin.common.operationPanelDescription')}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form
-          className='grid gap-4'
-          onInputCapture={() => editVersionRef.current++}
-          onChangeCapture={() => editVersionRef.current++}
-          onSubmit={async (event) => {
-            event.preventDefault()
-            if (submitLockedRef.current || pending || disabled) return
-            submitLockedRef.current = true
-            const form = event.currentTarget
-            const submittedValues = new FormData(form)
-            const submittedEditVersion = editVersionRef.current
-            setSubmitError(null)
-            try {
-              await onSubmit(submittedValues)
-              if (
-                currentOwnerRef.current === submissionOwner &&
-                editVersionRef.current === submittedEditVersion &&
-                sameFormValues(submittedValues, new FormData(form))
-              ) {
-                if (resetOnSuccess) form.reset()
-                onSuccess?.()
-              }
-            } catch (error) {
-              if (currentOwnerRef.current === submissionOwner)
-                setSubmitError({
-                  owner: submissionOwner,
-                  error:
-                    error instanceof Error
-                      ? error
-                      : new Error(t('toasts.somethingWrong')),
-                })
-            } finally {
-              submitLockedRef.current = false
-            }
-          }}
-        >
-          {children}
-          {currentError && (
-            <Alert variant='destructive' aria-live='polite'>
-              <AlertCircle />
-              <AlertTitle>{t('admin.common.error')}</AlertTitle>
-              <AlertDescription>{currentError.message}</AlertDescription>
-            </Alert>
-          )}
-          <Button
-            type='submit'
-            className='w-fit'
-            disabled={pending || disabled}
-          >
-            {submitLabel}
-          </Button>
-        </form>
-      </CardContent>
+      <CardContent>{form}</CardContent>
     </Card>
+  )
+}
+
+type FormDialogProps = Omit<
+  React.ComponentProps<typeof FormCard>,
+  'presentation' | 'onCancel'
+> & {
+  description?: string
+  triggerLabel?: string
+  triggerVariant?: React.ComponentProps<typeof Button>['variant']
+  triggerSize?: React.ComponentProps<typeof Button>['size']
+  onOpenChange?: (open: boolean) => void
+}
+
+export function FormDialog(props: FormDialogProps) {
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
+  return (
+    <ScopedFormDialog
+      key={JSON.stringify([sessionVersion, props.submissionScope])}
+      {...props}
+    />
+  )
+}
+
+function ScopedFormDialog({
+  title,
+  description,
+  triggerLabel = title,
+  triggerVariant = 'default',
+  triggerSize = 'default',
+  onOpenChange,
+  onSuccess,
+  ...formProps
+}: FormDialogProps) {
+  const [open, setOpen] = useState(false)
+  const changeOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    onOpenChange?.(nextOpen)
+  }
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!formProps.pending) changeOpen(nextOpen)
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          type='button'
+          variant={triggerVariant}
+          size={triggerSize}
+          disabled={formProps.disabled || formProps.pending}
+        >
+          {triggerVariant === 'default' && <Plus aria-hidden='true' />}
+          {triggerLabel}
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        className='max-h-[calc(100dvh-2rem)] overflow-y-auto'
+        showCloseButton={!formProps.pending}
+        {...(!description ? { 'aria-describedby': undefined } : {})}
+      >
+        <DialogHeader className='text-start'>
+          <DialogTitle className='pr-6'>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <FormCard
+          {...formProps}
+          title={title}
+          presentation='dialog'
+          onCancel={() => changeOpen(false)}
+          onSuccess={() => {
+            changeOpen(false)
+            onSuccess?.()
+          }}
+        />
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -577,29 +690,31 @@ export function CollectionCard({
   description,
   count,
   children,
+  actions,
 }: {
   title: string
   description?: string
   count?: number
   children: React.ReactNode
+  actions?: React.ReactNode
 }) {
   const { t } = useLanguage()
   return (
-    <Card className='overflow-hidden'>
-      <CardHeader className='border-b pb-5'>
+    <Card className='gap-0 overflow-hidden py-0'>
+      <CardHeader className='border-b p-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
-          <div className='grid gap-2'>
-            <Badge className='w-fit' variant='secondary'>
-              {t('admin.common.resourceCollection')}
-            </Badge>
+          <div className='grid min-w-0 gap-2'>
             <CardTitle>{title}</CardTitle>
             {description && <CardDescription>{description}</CardDescription>}
           </div>
-          {typeof count === 'number' && (
-            <Badge variant='outline'>
-              {t('admin.common.total')}: {count}
-            </Badge>
-          )}
+          <div className='flex flex-wrap items-center gap-3'>
+            {typeof count === 'number' && (
+              <Badge variant='outline'>
+                {t('admin.common.total')}: {count}
+              </Badge>
+            )}
+            {actions}
+          </div>
         </div>
       </CardHeader>
       <CardContent className='grid gap-4 p-5'>{children}</CardContent>
@@ -637,7 +752,7 @@ export function TextField({
   const generatedId = useId()
   const controlId = id ?? generatedId
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 content-start gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
       <Input
         id={controlId}
@@ -663,72 +778,6 @@ export function TextField({
         </p>
       )}
     </div>
-  )
-}
-
-export function InlineNameDescriptionForm({
-  item,
-  onUpdate,
-  pending,
-}: {
-  item: { id: string; name: string; description?: string }
-  onUpdate: (id: string, name: string, description: string) => Promise<unknown>
-  pending: boolean
-}) {
-  const { t } = useLanguage()
-  const [error, setError] = useState<Error>()
-  const submitLockedRef = useRef(false)
-  return (
-    <form
-      className='grid gap-2 sm:grid-cols-[1fr_1fr_auto]'
-      onSubmit={async (event) => {
-        event.preventDefault()
-        if (submitLockedRef.current) return
-        submitLockedRef.current = true
-        const formData = new FormData(event.currentTarget)
-        setError(undefined)
-        try {
-          await onUpdate(
-            item.id,
-            fieldValue(formData, 'name'),
-            fieldValue(formData, 'description')
-          )
-        } catch (cause) {
-          setError(
-            cause instanceof Error
-              ? cause
-              : new Error(t('toasts.somethingWrong'))
-          )
-        } finally {
-          submitLockedRef.current = false
-        }
-      }}
-    >
-      <Input
-        name='name'
-        defaultValue={item.name}
-        aria-label={t('admin.fields.name')}
-      />
-      <Input
-        name='description'
-        defaultValue={item.description ?? ''}
-        aria-label={t('admin.fields.description')}
-      />
-      <Button type='submit' variant='outline' size='sm' disabled={pending}>
-        {t('admin.common.update')}
-      </Button>
-      {error && (
-        <Alert
-          className='sm:col-span-full'
-          variant='destructive'
-          aria-live='polite'
-        >
-          <AlertCircle />
-          <AlertTitle>{t('admin.common.error')}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-    </form>
   )
 }
 
@@ -784,6 +833,7 @@ export function NameDescriptionTable({
   emptyPreset,
   readOnly = false,
   canEdit,
+  actions,
 }: {
   items: Array<TeamDTO | ProjectDTO>
   onUpdate: (id: string, name: string, description: string) => Promise<unknown>
@@ -792,6 +842,7 @@ export function NameDescriptionTable({
   emptyPreset: EmptyStatePreset
   readOnly?: boolean
   canEdit?: (id: string) => boolean
+  actions?: React.ReactNode
 }) {
   const { t } = useLanguage()
   const hasEditableItem =
@@ -805,6 +856,7 @@ export function NameDescriptionTable({
     <CollectionCard
       title={emptyPreset === 'teams' ? t('nav.teams') : t('nav.projects')}
       count={items.length}
+      actions={actions}
     >
       {items.length ? (
         <Table>
@@ -820,45 +872,70 @@ export function NameDescriptionTable({
           <TableBody>
             {items.map((item) => (
               <TableRow key={item.id}>
-                <TableCell className='min-w-80'>
-                  {readOnly ||
-                  ('status' in item && item.status !== ACTIVE_STATUS) ||
-                  (canEdit && !canEdit(item.id)) ? (
-                    <div className='grid gap-1'>
-                      <span className='font-medium'>{item.name}</span>
-                      <span className='text-sm text-muted-foreground'>
-                        {item.description || t('admin.common.none')}
-                      </span>
-                    </div>
-                  ) : (
-                    <InlineNameDescriptionForm
-                      item={item}
-                      onUpdate={onUpdate}
-                      pending={pending}
-                    />
-                  )}
+                <TableCell className='max-w-md min-w-48 whitespace-normal'>
+                  <div className='grid gap-1'>
+                    <span className='font-medium break-words'>{item.name}</span>
+                    <span className='text-sm break-words text-muted-foreground'>
+                      {item.description || t('admin.common.none')}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell className='font-mono text-xs'>{item.id}</TableCell>
                 {hasEditableItem && (
                   <TableCell>
                     {(!('status' in item) || item.status === ACTIVE_STATUS) &&
                       (!canEdit || canEdit(item.id)) && (
-                        <ConfirmActionButton
-                          label={t('admin.common.archive')}
-                          title={t(
-                            emptyPreset === 'teams'
-                              ? 'admin.confirm.archiveTeamTitle'
-                              : 'admin.confirm.archiveProjectTitle',
-                            { name: item.name }
-                          )}
-                          description={t(
-                            emptyPreset === 'teams'
-                              ? 'admin.confirm.archiveTeamDescription'
-                              : 'admin.confirm.archiveProjectDescription'
-                          )}
-                          pending={pending}
-                          onConfirm={() => onArchive(item.id)}
-                        />
+                        <div className='flex items-center gap-2'>
+                          <FormDialog
+                            title={t(
+                              emptyPreset === 'teams'
+                                ? 'admin.sections.editTeam'
+                                : 'admin.sections.editProject'
+                            )}
+                            description={item.name}
+                            triggerLabel={t('admin.common.edit')}
+                            triggerVariant='outline'
+                            triggerSize='sm'
+                            submitLabel={t('admin.common.save')}
+                            pending={pending}
+                            submissionScope={item.id}
+                            onSubmit={(values) =>
+                              onUpdate(
+                                item.id,
+                                fieldValue(values, 'name'),
+                                fieldValue(values, 'description')
+                              )
+                            }
+                          >
+                            <TextField
+                              label={t('admin.fields.name')}
+                              name='name'
+                              defaultValue={item.name}
+                              required
+                            />
+                            <TextField
+                              label={t('admin.fields.description')}
+                              name='description'
+                              defaultValue={item.description ?? ''}
+                            />
+                          </FormDialog>
+                          <ConfirmActionButton
+                            label={t('admin.common.archive')}
+                            title={t(
+                              emptyPreset === 'teams'
+                                ? 'admin.confirm.archiveTeamTitle'
+                                : 'admin.confirm.archiveProjectTitle',
+                              { name: item.name }
+                            )}
+                            description={t(
+                              emptyPreset === 'teams'
+                                ? 'admin.confirm.archiveTeamDescription'
+                                : 'admin.confirm.archiveProjectDescription'
+                            )}
+                            pending={pending}
+                            onConfirm={() => onArchive(item.id)}
+                          />
+                        </div>
                       )}
                   </TableCell>
                 )}
@@ -1098,6 +1175,7 @@ export function TokenTable({
   onRetry,
   refreshing = false,
   pending = false,
+  actions,
 }: {
   tokens: MCPTokenDTO[]
   selected?: string
@@ -1111,12 +1189,14 @@ export function TokenTable({
   onRetry?: () => void
   refreshing?: boolean
   pending?: boolean
+  actions?: React.ReactNode
 }) {
   const { t } = useLanguage()
   return (
     <CollectionCard
       title={title ?? t('nav.mcpTokens')}
       description={description}
+      actions={actions}
       count={
         tokens.length || (!queryState?.isLoading && !queryState?.isError)
           ? tokens.length

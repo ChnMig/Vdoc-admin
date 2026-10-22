@@ -1,6 +1,5 @@
-import { useRef, useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   archiveBranch,
@@ -17,9 +16,6 @@ import {
 } from '@/lib/vdoc-api'
 import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -35,7 +31,7 @@ import {
   DeepLinkAlert,
   SelectorGrid,
   NativeSelect,
-  FormCard,
+  FormDialog,
   TextField,
   StatCard,
   CollectionCard,
@@ -282,53 +278,60 @@ export function DocumentsPage({
           ]}
         />
       </SelectorGrid>
-      {canMutateProject && (
-        <FormCard
-          title={t('admin.sections.createDocument')}
-          submitLabel={t('admin.common.create')}
-          pending={createDocumentMutation.isPending}
-          submissionScope={JSON.stringify([
-            authSessionVersion,
-            authUser?.id,
-            projectId,
-          ])}
-          onSubmit={(formData) =>
-            createDocumentMutation.mutateAsync({
-              projectId,
-              payload: {
-                name: fieldValue(formData, 'name'),
-                description: fieldValue(formData, 'description'),
-                relative_path: fieldValue(formData, 'relative_path'),
-                document_type: numberValue(
-                  formData,
-                  'document_type',
-                  DOCUMENT_TYPE_OPENAPI
-                ),
-              },
-            })
-          }
-        >
-          <div className='grid gap-4 md:grid-cols-2'>
-            <TextField label={t('admin.fields.name')} name='name' required />
-            <TextField
-              label={t('admin.fields.relativePath')}
-              name='relative_path'
-              required
-            />
-            <NativeSelect
-              name='document_type'
-              label={t('admin.fields.type')}
-              placeholder={t('admin.types.openapi')}
-              options={documentTypeOptions(t)}
-            />
-            <TextField
-              label={t('admin.fields.description')}
-              name='description'
-            />
-          </div>
-        </FormCard>
-      )}
       <DocumentsTable
+        key={`${authSessionVersion}:${projectId}`}
+        actions={
+          canMutateProject && (
+            <FormDialog
+              title={t('admin.sections.createDocument')}
+              submitLabel={t('admin.common.create')}
+              pending={createDocumentMutation.isPending}
+              submissionScope={JSON.stringify([
+                authSessionVersion,
+                authUser?.id,
+                projectId,
+              ])}
+              onSubmit={(formData) =>
+                createDocumentMutation.mutateAsync({
+                  projectId,
+                  payload: {
+                    name: fieldValue(formData, 'name'),
+                    description: fieldValue(formData, 'description'),
+                    relative_path: fieldValue(formData, 'relative_path'),
+                    document_type: numberValue(
+                      formData,
+                      'document_type',
+                      DOCUMENT_TYPE_OPENAPI
+                    ),
+                  },
+                })
+              }
+            >
+              <div className='grid gap-4'>
+                <TextField
+                  label={t('admin.fields.name')}
+                  name='name'
+                  required
+                />
+                <TextField
+                  label={t('admin.fields.relativePath')}
+                  name='relative_path'
+                  required
+                />
+                <NativeSelect
+                  name='document_type'
+                  label={t('admin.fields.type')}
+                  placeholder={t('admin.types.openapi')}
+                  options={documentTypeOptions(t)}
+                />
+                <TextField
+                  label={t('admin.fields.description')}
+                  name='description'
+                />
+              </div>
+            </FormDialog>
+          )
+        }
         documents={documentsQuery.data?.items ?? []}
         pending={
           updateDocumentMutation.isPending || archiveDocumentMutation.isPending
@@ -391,34 +394,41 @@ export function DocumentsPage({
           />
         </section>
       )}
-      {canMutateDocument && (
-        <FormCard
-          title={t('admin.sections.createBranch')}
-          submitLabel={t('admin.common.create')}
-          pending={createBranchMutation.isPending}
-          submissionScope={JSON.stringify([
-            authSessionVersion,
-            authUser?.id,
-            projectId,
-            documentId,
-          ])}
-          onSubmit={(formData) =>
-            createBranchMutation.mutateAsync({
-              name: fieldValue(formData, 'name'),
-              description: fieldValue(formData, 'description'),
-            })
-          }
-        >
-          <div className='grid gap-4 md:grid-cols-2'>
-            <TextField label={t('admin.fields.name')} name='name' required />
-            <TextField
-              label={t('admin.fields.description')}
-              name='description'
-            />
-          </div>
-        </FormCard>
-      )}
       <BranchesTable
+        key={`${authSessionVersion}:${projectId}:${documentId}`}
+        actions={
+          canMutateDocument && (
+            <FormDialog
+              title={t('admin.sections.createBranch')}
+              submitLabel={t('admin.common.create')}
+              pending={createBranchMutation.isPending}
+              submissionScope={JSON.stringify([
+                authSessionVersion,
+                authUser?.id,
+                projectId,
+                documentId,
+              ])}
+              onSubmit={(formData) =>
+                createBranchMutation.mutateAsync({
+                  name: fieldValue(formData, 'name'),
+                  description: fieldValue(formData, 'description'),
+                })
+              }
+            >
+              <div className='grid gap-4'>
+                <TextField
+                  label={t('admin.fields.name')}
+                  name='name'
+                  required
+                />
+                <TextField
+                  label={t('admin.fields.description')}
+                  name='description'
+                />
+              </div>
+            </FormDialog>
+          )
+        }
         branches={branchesQuery.data?.items ?? []}
         pending={
           updateBranchMutation.isPending || archiveBranchMutation.isPending
@@ -464,16 +474,22 @@ function DocumentsTable({
   onArchive,
   pending,
   readOnly = false,
+  actions,
 }: {
   documents: DocumentDTO[]
   onUpdate: (document: DocumentDTO) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
+  actions?: ReactNode
 }) {
   const { t } = useLanguage()
   return (
-    <CollectionCard title={t('nav.documents')} count={documents.length}>
+    <CollectionCard
+      title={t('nav.documents')}
+      count={documents.length}
+      actions={actions}
+    >
       {documents.length ? (
         <Table>
           <TableHeader>
@@ -487,21 +503,20 @@ function DocumentsTable({
           <TableBody>
             {documents.map((document) => (
               <TableRow key={document.id}>
-                <TableCell className='min-w-96'>
-                  {readOnly || document.status !== ACTIVE_STATUS ? (
-                    <div className='grid gap-1'>
-                      <span className='font-medium'>{document.name}</span>
-                      <span className='text-xs text-muted-foreground'>
-                        {document.relative_path}
+                <TableCell className='min-w-56 whitespace-normal'>
+                  <div className='grid gap-1'>
+                    <span className='font-medium break-words'>
+                      {document.name}
+                    </span>
+                    <span className='font-mono text-xs break-all text-muted-foreground'>
+                      {document.relative_path}
+                    </span>
+                    {document.description && (
+                      <span className='text-sm break-words text-muted-foreground'>
+                        {document.description}
                       </span>
-                    </div>
-                  ) : (
-                    <DocumentEditForm
-                      document={document}
-                      pending={pending}
-                      onUpdate={onUpdate}
-                    />
-                  )}
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {documentTypeLabel(document.document_type, t)}
@@ -514,17 +529,24 @@ function DocumentsTable({
                 {!readOnly && (
                   <TableCell>
                     {document.status === ACTIVE_STATUS && (
-                      <ConfirmActionButton
-                        label={t('admin.common.archive')}
-                        title={t('admin.confirm.archiveDocumentTitle', {
-                          name: document.name,
-                        })}
-                        description={t(
-                          'admin.confirm.archiveDocumentDescription'
-                        )}
-                        pending={pending}
-                        onConfirm={() => onArchive(document.id)}
-                      />
+                      <div className='flex items-center gap-2'>
+                        <DocumentEditForm
+                          document={document}
+                          pending={pending}
+                          onUpdate={onUpdate}
+                        />
+                        <ConfirmActionButton
+                          label={t('admin.common.archive')}
+                          title={t('admin.confirm.archiveDocumentTitle', {
+                            name: document.name,
+                          })}
+                          description={t(
+                            'admin.confirm.archiveDocumentDescription'
+                          )}
+                          pending={pending}
+                          onConfirm={() => onArchive(document.id)}
+                        />
+                      </div>
                     )}
                   </TableCell>
                 )}
@@ -549,67 +571,43 @@ function DocumentEditForm({
   onUpdate: (document: DocumentDTO) => Promise<unknown>
 }) {
   const { t } = useLanguage()
-  const [error, setError] = useState<Error>()
-  const submitLockedRef = useRef(false)
   return (
-    <form
-      className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.2fr_auto]'
-      onSubmit={async (event) => {
-        event.preventDefault()
-        if (submitLockedRef.current) return
-        submitLockedRef.current = true
-        const formData = new FormData(event.currentTarget)
-        setError(undefined)
-        try {
-          await onUpdate({
-            ...document,
-            name: fieldValue(formData, 'name'),
-            description: fieldValue(formData, 'description'),
-            relative_path: fieldValue(formData, 'relative_path'),
-          })
-        } catch (cause) {
-          setError(
-            cause instanceof Error
-              ? cause
-              : new Error(t('toasts.somethingWrong'))
-          )
-        } finally {
-          submitLockedRef.current = false
-        }
-      }}
+    <FormDialog
+      title={t('admin.sections.editDocument')}
+      description={document.name}
+      triggerLabel={t('admin.common.edit')}
+      triggerVariant='outline'
+      triggerSize='sm'
+      submitLabel={t('admin.common.save')}
+      pending={pending}
+      submissionScope={document.id}
+      onSubmit={(formData) =>
+        onUpdate({
+          ...document,
+          name: fieldValue(formData, 'name'),
+          description: fieldValue(formData, 'description'),
+          relative_path: fieldValue(formData, 'relative_path'),
+        })
+      }
     >
-      <Input
+      <TextField
+        label={t('admin.fields.name')}
         name='name'
         defaultValue={document.name}
-        aria-label={t('admin.fields.name')}
         required
       />
-      <Input
+      <TextField
+        label={t('admin.fields.relativePath')}
         name='relative_path'
         defaultValue={document.relative_path ?? ''}
-        aria-label={t('admin.fields.relativePath')}
         required
       />
-      <Input
+      <TextField
+        label={t('admin.fields.description')}
         name='description'
         defaultValue={document.description ?? ''}
-        aria-label={t('admin.fields.description')}
       />
-      <Button type='submit' variant='outline' size='sm' disabled={pending}>
-        {t('admin.common.save')}
-      </Button>
-      {error && (
-        <Alert
-          className='md:col-span-2 xl:col-span-4'
-          variant='destructive'
-          aria-live='polite'
-        >
-          <AlertCircle />
-          <AlertTitle>{t('admin.common.error')}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-    </form>
+    </FormDialog>
   )
 }
 
@@ -619,18 +617,21 @@ function BranchesTable({
   onArchive,
   pending,
   readOnly = false,
+  actions,
 }: {
   branches: BranchDTO[]
   onUpdate: (branch: BranchDTO) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   pending: boolean
   readOnly?: boolean
+  actions?: ReactNode
 }) {
   const { t } = useLanguage()
   return (
     <CollectionCard
       title={t('admin.sections.branches')}
       count={branches.length}
+      actions={actions}
     >
       {branches.length ? (
         <Table>
@@ -644,21 +645,27 @@ function BranchesTable({
           <TableBody>
             {branches.map((branch) => (
               <TableRow key={branch.id}>
-                <TableCell className='min-w-96'>
-                  {readOnly || branch.status !== ACTIVE_STATUS ? (
-                    <div className='grid gap-1'>
-                      <span className='font-medium'>{branch.name}</span>
-                      <span className='text-xs text-muted-foreground'>
-                        {branch.description || t('admin.common.none')}
-                      </span>
+                <TableCell className='min-w-56 whitespace-normal'>
+                  <div className='grid gap-1'>
+                    <span className='font-medium break-words'>
+                      {branch.name}
+                    </span>
+                    <span className='text-sm break-words text-muted-foreground'>
+                      {branch.description || t('admin.common.none')}
+                    </span>
+                    <div className='flex flex-wrap gap-2'>
+                      {branch.is_default && (
+                        <StatusBadge>
+                          {t('admin.fields.defaultBranch')}
+                        </StatusBadge>
+                      )}
+                      {branch.is_protected && (
+                        <StatusBadge>
+                          {t('admin.fields.protectedBranch')}
+                        </StatusBadge>
+                      )}
                     </div>
-                  ) : (
-                    <BranchEditForm
-                      branch={branch}
-                      pending={pending}
-                      onUpdate={onUpdate}
-                    />
-                  )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <StatusBadge>
@@ -668,18 +675,25 @@ function BranchesTable({
                 {!readOnly && (
                   <TableCell>
                     {branch.status === ACTIVE_STATUS && (
-                      <ConfirmActionButton
-                        label={t('admin.common.archive')}
-                        title={t('admin.confirm.archiveBranchTitle', {
-                          name: branch.name,
-                        })}
-                        description={t(
-                          'admin.confirm.archiveBranchDescription'
-                        )}
-                        pending={pending}
-                        disabled={branch.is_default}
-                        onConfirm={() => onArchive(branch.id)}
-                      />
+                      <div className='flex items-center gap-2'>
+                        <BranchEditForm
+                          branch={branch}
+                          pending={pending}
+                          onUpdate={onUpdate}
+                        />
+                        <ConfirmActionButton
+                          label={t('admin.common.archive')}
+                          title={t('admin.confirm.archiveBranchTitle', {
+                            name: branch.name,
+                          })}
+                          description={t(
+                            'admin.confirm.archiveBranchDescription'
+                          )}
+                          pending={pending}
+                          disabled={branch.is_default}
+                          onConfirm={() => onArchive(branch.id)}
+                        />
+                      </div>
                     )}
                   </TableCell>
                 )}
@@ -704,77 +718,67 @@ function BranchEditForm({
   onUpdate: (branch: BranchDTO) => Promise<unknown>
 }) {
   const { t } = useLanguage()
-  const [error, setError] = useState<Error>()
   // Untouched fields follow the latest server data after a branch refetch.
   const [edits, setEdits] = useState<
     Partial<
       Pick<BranchDTO, 'name' | 'description' | 'is_default' | 'is_protected'>
     >
   >({})
-  const submitLockedRef = useRef(false)
   return (
-    <form
-      className='grid gap-2 md:grid-cols-2 xl:grid-cols-[1fr_1.2fr_auto]'
-      onSubmit={async (event) => {
-        event.preventDefault()
-        if (submitLockedRef.current) return
-        submitLockedRef.current = true
+    <FormDialog
+      title={t('admin.sections.editBranch')}
+      description={branch.name}
+      triggerLabel={t('admin.common.edit')}
+      triggerVariant='outline'
+      triggerSize='sm'
+      submitLabel={t('admin.common.save')}
+      pending={pending}
+      submissionScope={branch.id}
+      resetOnSuccess={false}
+      onOpenChange={(open) => {
+        if (!open) setEdits({})
+      }}
+      onSubmit={async () => {
         const submittedEdits = edits
-        setError(undefined)
-        try {
-          await onUpdate({
-            ...branch,
-            name: (edits.name ?? branch.name).trim(),
-            description: (edits.description ?? branch.description ?? '').trim(),
-            is_default: branch.is_default || (edits.is_default ?? false),
-            is_protected: edits.is_protected ?? branch.is_protected,
-          })
-          setEdits((current) => {
-            // Keep changes made while this save was pending.
-            const remaining = { ...current }
-            for (const field of [
-              'name',
-              'description',
-              'is_default',
-              'is_protected',
-            ] as const) {
-              if (current[field] === submittedEdits[field]) {
-                delete remaining[field]
-              }
-            }
-            return remaining
-          })
-        } catch (cause) {
-          setError(
-            cause instanceof Error
-              ? cause
-              : new Error(t('toasts.somethingWrong'))
-          )
-        } finally {
-          submitLockedRef.current = false
-        }
+        await onUpdate({
+          ...branch,
+          name: (edits.name ?? branch.name).trim(),
+          description: (edits.description ?? branch.description ?? '').trim(),
+          is_default: branch.is_default || (edits.is_default ?? false),
+          is_protected: edits.is_protected ?? branch.is_protected,
+        })
+        setEdits((current) => {
+          // Keep changes made while this save was pending.
+          const remaining = { ...current }
+          for (const field of [
+            'name',
+            'description',
+            'is_default',
+            'is_protected',
+          ] as const) {
+            if (current[field] === submittedEdits[field])
+              delete remaining[field]
+          }
+          return remaining
+        })
       }}
     >
-      <Input
+      <TextField
         name='name'
         value={edits.name ?? branch.name}
-        onChange={(event) => {
-          const name = event.target.value
-          setEdits((current) => ({ ...current, name }))
-        }}
-        aria-label={t('admin.fields.name')}
+        onChange={(name) => setEdits((current) => ({ ...current, name }))}
+        label={t('admin.fields.name')}
         required
       />
-      <Input
+      <TextField
         name='description'
         value={edits.description ?? branch.description ?? ''}
-        onChange={(event) => {
-          const description = event.target.value
+        onChange={(description) =>
           setEdits((current) => ({ ...current, description }))
-        }}
-        aria-label={t('admin.fields.description')}
+        }
+        label={t('admin.fields.description')}
       />
-      <div className='flex flex-wrap items-center gap-3 xl:col-span-2'>
+      <div className='grid gap-3'>
         <label className='flex items-center gap-2 text-sm'>
           <input
             type='checkbox'
@@ -800,21 +804,7 @@ function BranchEditForm({
           />
           {t('admin.fields.protectedBranch')}
         </label>
-        <Button type='submit' variant='outline' size='sm' disabled={pending}>
-          {t('admin.common.save')}
-        </Button>
       </div>
-      {error && (
-        <Alert
-          className='md:col-span-2 xl:col-span-3'
-          variant='destructive'
-          aria-live='polite'
-        >
-          <AlertCircle />
-          <AlertTitle>{t('admin.common.error')}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-    </form>
+    </FormDialog>
   )
 }

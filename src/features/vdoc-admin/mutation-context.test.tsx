@@ -123,7 +123,7 @@ afterEach(() => {
 
 describe('document create completion', () => {
   it.each(['unchanged', 'new-project', 'new-input'])(
-    'keeps newer form input while preserving normal reset: %s',
+    'keeps newer form input while preserving normal completion: %s',
     async (scenario) => {
       api.listProjects.mockResolvedValue({
         items: [project, { ...project, id: 'project-b', name: 'Project B' }],
@@ -134,15 +134,30 @@ describe('document create completion', () => {
       api.createDocument.mockImplementation(() => request.promise)
       const view = renderPage(<DocumentsPage />)
       const user = userEvent.setup()
-      const name = await view.findByLabelText('Name')
-      const path = view.getByLabelText('Relative path')
+      await user.click(
+        await view.findByRole('button', { name: 'Create document' })
+      )
+      const dialog = view.getByRole('dialog', { name: 'Create document' })
+      const name = within(dialog).getByLabelText('Name')
+      const path = within(dialog).getByLabelText('Relative path')
       await user.type(name, 'Document A')
       await user.type(path, 'a.md')
-      await user.click(view.getByRole('button', { name: 'Create' }))
+      await user.click(within(dialog).getByRole('button', { name: 'Create' }))
       await waitFor(() => expect(api.createDocument).toHaveBeenCalledOnce())
-      if (scenario === 'new-project')
-        await user.selectOptions(view.getByLabelText('Project'), 'project-b')
-      if (scenario !== 'unchanged') {
+      if (scenario === 'new-project') {
+        // External context updates can happen while the modal blocks background clicks.
+        fireEvent.change(view.getByLabelText('Project'), {
+          target: { value: 'project-b' },
+        })
+        await waitFor(() =>
+          expect(view.getByLabelText('Project')).toHaveValue('project-b')
+        )
+        expect(view.queryByRole('dialog')).not.toBeInTheDocument()
+        expect(
+          view.getByRole('button', { name: 'Create document' })
+        ).toBeDisabled()
+      }
+      if (scenario === 'new-input') {
         await user.clear(name)
         await user.type(name, 'Unsaved document B')
         await user.clear(path)
@@ -151,10 +166,21 @@ describe('document create completion', () => {
       await act(async () => request.resolve({ id: 'created-a' }))
       await waitFor(() => expect(view.client.isMutating()).toBe(0))
       expect(api.createDocument.mock.calls[0][0]).toBe(project.id)
-      expect(name).toHaveValue(
-        scenario === 'unchanged' ? '' : 'Unsaved document B'
-      )
-      expect(path).toHaveValue(scenario === 'unchanged' ? '' : 'b.md')
+      if (scenario === 'new-input') {
+        expect(view.getByRole('dialog')).toBe(dialog)
+        expect(name).toHaveValue('Unsaved document B')
+        expect(path).toHaveValue('b.md')
+      } else {
+        expect(view.queryByRole('dialog')).not.toBeInTheDocument()
+        await user.click(view.getByRole('button', { name: 'Create document' }))
+        const freshDialog = view.getByRole('dialog', {
+          name: 'Create document',
+        })
+        expect(within(freshDialog).getByLabelText('Name')).toHaveValue('')
+        expect(within(freshDialog).getByLabelText('Relative path')).toHaveValue(
+          ''
+        )
+      }
       view.unmount()
       view.client.clear()
     }
@@ -164,6 +190,7 @@ describe('document create completion', () => {
 describe('branch create completion', () => {
   it.each([
     'normal-success',
+    'normal-error',
     'document-switch-success',
     'document-switch-error',
     'returned-document-error',
@@ -196,12 +223,11 @@ describe('branch create completion', () => {
     const user = userEvent.setup()
     const document = await view.findByLabelText('Document')
     await waitFor(() => expect(document).toHaveValue(documentA.id))
-    const form = view
-      .getAllByRole('button', { name: 'Create' })[1]
-      .closest('form')!
-    const name = within(form).getByLabelText('Name')
+    await user.click(view.getByRole('button', { name: 'Create branch' }))
+    const dialog = view.getByRole('dialog', { name: 'Create branch' })
+    const name = within(dialog).getByLabelText('Name')
     await user.type(name, 'feature/from-a')
-    await user.click(within(form).getByRole('button', { name: 'Create' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(api.createBranch).toHaveBeenCalledOnce())
     expect(api.createBranch.mock.calls[0].slice(0, 2)).toEqual([
       project.id,
@@ -212,42 +238,50 @@ describe('branch create completion', () => {
         request.reject(new Error('Document A request failed'))
       )
       expect(
-        await within(form).findByText('Document A request failed')
+        await within(dialog).findByText('Document A request failed')
       ).toBeInTheDocument()
     }
-    if (scenario !== 'normal-success') {
-      await user.selectOptions(document, documentB.id)
+    const changesContext = !scenario.startsWith('normal-')
+    if (changesContext) {
+      // Model an external route/context change rather than clicking through the modal.
+      fireEvent.change(document, { target: { value: documentB.id } })
+      await waitFor(() => expect(document).toHaveValue(documentB.id))
       if (
         scenario === 'returned-document-error' ||
         scenario === 'settled-error-roundtrip'
-      )
-        await user.selectOptions(document, documentA.id)
-      expect(
-        view.getAllByRole('button', { name: 'Create' })[1].closest('form')
-      ).toBe(form)
+      ) {
+        fireEvent.change(document, { target: { value: documentA.id } })
+        await waitFor(() => expect(document).toHaveValue(documentA.id))
+      }
+      expect(view.queryByRole('dialog')).not.toBeInTheDocument()
     }
     if (scenario.endsWith('error')) {
-      fireEvent.change(name, { target: { value: 'feature/current-unsaved' } })
       await act(async () =>
         request.reject(new Error('Document A request failed'))
       )
-      await waitFor(() => expect(client.isMutating()).toBe(0))
-      expect(name).toHaveValue('feature/current-unsaved')
-      expect(
-        within(form).queryByText('Document A request failed')
-      ).not.toBeInTheDocument()
-    } else if (scenario === 'settled-error-roundtrip') {
-      expect(
-        within(form).queryByText('Document A request failed')
-      ).not.toBeInTheDocument()
-    } else {
+    } else if (scenario !== 'settled-error-roundtrip') {
       await act(async () =>
         request.resolve({ id: 'created-branch', document_id: documentA.id })
       )
-      await waitFor(() => expect(client.isMutating()).toBe(0))
-      expect(name).toHaveValue(
-        scenario === 'normal-success' ? '' : 'feature/from-a'
-      )
+    }
+    await waitFor(() => expect(client.isMutating()).toBe(0))
+    if (scenario === 'normal-error') {
+      expect(view.getByRole('dialog')).toBe(dialog)
+      expect(name).toHaveValue('feature/from-a')
+      expect(
+        within(dialog).getByText('Document A request failed')
+      ).toBeInTheDocument()
+    } else {
+      expect(view.queryByRole('dialog')).not.toBeInTheDocument()
+      await user.click(view.getByRole('button', { name: 'Create branch' }))
+      const freshDialog = view.getByRole('dialog', { name: 'Create branch' })
+      const freshName = within(freshDialog).getByLabelText('Name')
+      expect(freshName).toHaveValue('')
+      expect(
+        within(freshDialog).queryByText('Document A request failed')
+      ).not.toBeInTheDocument()
+      await user.type(freshName, 'feature/current-unsaved')
+      expect(freshName).toHaveValue('feature/current-unsaved')
     }
     view.unmount()
     client.clear()

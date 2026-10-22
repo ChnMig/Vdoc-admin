@@ -225,6 +225,7 @@ const en = {
       add: 'Add',
       create: 'Create',
       update: 'Update',
+      edit: 'Edit',
       archive: 'Archive',
       revoke: 'Revoke',
       submit: 'Submit',
@@ -388,7 +389,7 @@ const en = {
         title: 'No users yet',
         description:
           'Create the first user before assigning project admins or auditing user MCP tokens.',
-        action: 'Use the Create user form above.',
+        action: 'Click Create user to add your first account.',
       },
       teams: {
         title: 'No teams yet',
@@ -1051,6 +1052,10 @@ const en = {
     sections: {
       createUser: 'Create user',
       createTeam: 'Create team',
+      editTeam: 'Edit team',
+      editProject: 'Edit project',
+      editDocument: 'Edit document',
+      editBranch: 'Edit branch',
       createProject: 'Create project',
       createDocument: 'Create document',
       createBranch: 'Create branch',
@@ -1163,6 +1168,24 @@ const en = {
       submit: 'Create Vdoc account',
       footerPrefix: 'By creating an account, you agree to our',
       created: 'Vdoc account created.',
+    },
+    changePassword: {
+      title: 'Change password',
+      description:
+        'Enter your current password to choose a new one. This page will sign out after the change; sign in again with your new password.',
+      current: 'Current password',
+      new: 'New password',
+      confirm: 'Confirm new password',
+      currentRequired: 'Enter your current password.',
+      mustDiffer: 'Choose a password different from your current password.',
+      submit: 'Change password',
+      submitting: 'Changing password…',
+      success: 'Password changed. Sign in again with your new password.',
+      invalidCredentials:
+        'Check your current password and the new password requirements, then try again.',
+      concurrentChange:
+        'Your password changed during this request. Enter your current password and try again.',
+      failed: 'The password could not be changed. Please try again.',
     },
   },
   legal: {
@@ -1472,6 +1495,7 @@ const zhCN = {
       add: '添加',
       create: '创建',
       update: '更新',
+      edit: '编辑',
       archive: '归档',
       revoke: '撤销',
       submit: '提交',
@@ -1625,7 +1649,7 @@ const zhCN = {
       users: {
         title: '还没有用户',
         description: '先创建首个用户，再分配项目管理员或审计用户 MCP 令牌。',
-        action: '使用上方“创建用户”表单。',
+        action: '点击“创建用户”添加首个账号。',
       },
       teams: {
         title: '还没有团队',
@@ -2255,6 +2279,10 @@ const zhCN = {
     sections: {
       createUser: '创建用户',
       createTeam: '创建团队',
+      editTeam: '编辑团队',
+      editProject: '编辑项目',
+      editDocument: '编辑文档',
+      editBranch: '编辑分支',
       createProject: '创建项目',
       createDocument: '创建文档',
       createBranch: '创建分支',
@@ -2359,6 +2387,22 @@ const zhCN = {
       submit: '创建 Vdoc 账号',
       footerPrefix: '创建账号即表示你同意我们的',
       created: 'Vdoc 账号已创建。',
+    },
+    changePassword: {
+      title: '修改密码',
+      description:
+        '输入当前密码后设置新密码。修改成功后，当前页面将退出登录，请使用新密码重新登录。',
+      current: '当前密码',
+      new: '新密码',
+      confirm: '确认新密码',
+      currentRequired: '请输入当前密码。',
+      mustDiffer: '新密码不能与当前密码相同。',
+      submit: '修改密码',
+      submitting: '正在修改密码…',
+      success: '密码已修改，请使用新密码重新登录。',
+      invalidCredentials: '请检查当前密码和新密码要求后重试。',
+      concurrentChange: '密码在操作期间已发生变更，请输入当前密码后重试。',
+      failed: '密码未能修改，请重试。',
     },
   },
   legal: {

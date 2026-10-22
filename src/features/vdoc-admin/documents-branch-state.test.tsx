@@ -54,13 +54,19 @@ async function renderBranches() {
       <DocumentsPage />
     </QueryClientProvider>
   )
-  const mainForm = (await screen.findByDisplayValue('dev')).closest('form')!
-  const featureForm = (await screen.findByDisplayValue('test')).closest('form')!
+  const user = userEvent.setup()
+  await screen.findByText('dev')
   return {
     client,
-    user: userEvent.setup(),
-    main: within(mainForm),
-    feature: within(featureForm),
+    screen,
+    user,
+    open: async (name: string) => {
+      const row = screen.getByText(name, { exact: true }).closest('tr')!
+      await user.click(within(row).getByRole('button', { name: 'Edit' }))
+      return within(await screen.findByRole('dialog', { name: 'Edit branch' }))
+    },
+    refresh: () =>
+      act(() => client.invalidateQueries({ queryKey: ['branches', 'p', 'd'] })),
   }
 }
 
@@ -139,8 +145,52 @@ afterEach(() => {
 })
 
 describe('branch form state after server refresh', () => {
+  it('shows resource facts in the list and discards canceled edits', async () => {
+    const { screen, user, open } = await renderBranches()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    const branch = await open('test')
+    await user.type(branch.getByLabelText('Description'), 'discard this')
+    await user.click(branch.getByRole('button', { name: 'Cancel' }))
+    const reopened = await open('test')
+    expect(reopened.getByLabelText('Description')).toHaveValue('')
+    expect(api.updateBranch).not.toHaveBeenCalled()
+  })
+
+  it('closes after successfully saving normalized values', async () => {
+    const { screen, user, open } = await renderBranches()
+    const branch = await open('test')
+    await user.clear(branch.getByLabelText('Name'))
+    await user.type(branch.getByLabelText('Name'), '  release  ')
+    await user.type(branch.getByLabelText('Description'), '  release branch  ')
+    await user.click(branch.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expect(api.updateBranch.mock.calls[0][3]).toEqual({
+      name: 'release',
+      description: 'release branch',
+      is_default: false,
+      is_protected: false,
+    })
+    expect(screen.getByText('release', { exact: true })).toBeInTheDocument()
+  })
+
+  it('retains the edit dialog and input when saving fails', async () => {
+    api.updateBranch.mockRejectedValueOnce(new Error('Could not save branch'))
+    const { screen, user, open } = await renderBranches()
+    const branch = await open('test')
+    await user.type(branch.getByLabelText('Description'), 'keep this')
+    await user.click(branch.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Could not save branch')).toBeInTheDocument()
+    expect(branch.getByLabelText('Description')).toHaveValue('keep this')
+    expect(
+      screen.getByRole('dialog', { name: 'Edit branch' })
+    ).toBeInTheDocument()
+  })
+
   it('keeps the initial default when only its description is saved', async () => {
-    const { user, main } = await renderBranches()
+    const { user, open } = await renderBranches()
+    const main = await open('dev')
     expect(main.getByLabelText('Default branch')).toBeChecked()
     expect(main.getByLabelText('Default branch')).toBeDisabled()
 
@@ -158,21 +208,20 @@ describe('branch form state after server refresh', () => {
   })
 
   it('does not restore a former default when only its description is saved', async () => {
-    const { user, main, feature } = await renderBranches()
-    await user.click(feature.getByLabelText('Default branch'))
-    await user.click(feature.getByRole('button', { name: 'Save' }))
+    const { user, open, refresh } = await renderBranches()
+    const main = await open('dev')
+    applyUpdate('feature', { is_default: true })
+    await refresh()
     await waitFor(() =>
       expect(main.getByLabelText('Default branch')).toBeEnabled()
     )
     expect(main.getByLabelText('Default branch')).not.toBeChecked()
-    expect(feature.getByLabelText('Default branch')).toBeChecked()
-    expect(feature.getByLabelText('Default branch')).toBeDisabled()
 
     await user.type(main.getByLabelText('Description'), 'updated description')
     await user.click(main.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(2))
-    expect(api.updateBranch.mock.calls[1][3]).toEqual({
+    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(1))
+    expect(api.updateBranch.mock.calls[0][3]).toEqual({
       name: 'dev',
       description: 'updated description',
       is_default: false,
@@ -184,13 +233,14 @@ describe('branch form state after server refresh', () => {
   })
 
   it('preserves unsaved name, description and protected edits when another branch becomes default', async () => {
-    const { user, main, feature } = await renderBranches()
+    const { user, open, refresh } = await renderBranches()
+    const main = await open('dev')
     await user.clear(main.getByLabelText('Name'))
     await user.type(main.getByLabelText('Name'), 'development')
     await user.type(main.getByLabelText('Description'), 'unsaved description')
     await user.click(main.getByLabelText('Protected branch'))
-    await user.click(feature.getByLabelText('Default branch'))
-    await user.click(feature.getByRole('button', { name: 'Save' }))
+    applyUpdate('feature', { is_default: true })
+    await refresh()
 
     await waitFor(() =>
       expect(main.getByLabelText('Default branch')).toBeEnabled()
@@ -202,8 +252,8 @@ describe('branch form state after server refresh', () => {
     expect(main.getByLabelText('Protected branch')).not.toBeChecked()
     await user.click(main.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(2))
-    expect(api.updateBranch.mock.calls[1][3]).toEqual({
+    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(1))
+    expect(api.updateBranch.mock.calls[0][3]).toEqual({
       name: 'development',
       description: 'unsaved description',
       is_default: false,
@@ -212,32 +262,35 @@ describe('branch form state after server refresh', () => {
   })
 
   it('preserves an explicit unsaved default selection across an unrelated save', async () => {
-    const { user, main, feature } = await renderBranches()
+    const { screen, user, open, refresh } = await renderBranches()
+    const feature = await open('test')
     await user.click(feature.getByLabelText('Default branch'))
-    await user.type(main.getByLabelText('Description'), 'main metadata')
-    await user.click(main.getByRole('button', { name: 'Save' }))
-    await waitFor(() =>
-      expect(main.getByRole('button', { name: 'Save' })).toBeEnabled()
-    )
+    applyUpdate('main', { description: 'main metadata' })
+    await refresh()
 
     expect(feature.getByLabelText('Default branch')).toBeChecked()
     expect(feature.getByLabelText('Default branch')).toBeEnabled()
     await user.click(feature.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(2))
-    expect(api.updateBranch.mock.calls[1][3].is_default).toBe(true)
+    await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(1))
+    expect(api.updateBranch.mock.calls[0][3].is_default).toBe(true)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
     expect(branches.find((branch) => branch.id === 'feature')?.is_default).toBe(
       true
     )
   })
 
   it('follows later server changes after successfully saving an edited flag', async () => {
-    const { client, user, feature } = await renderBranches()
+    const { client, screen, user, open } = await renderBranches()
+    let feature = await open('test')
     await user.click(feature.getByLabelText('Protected branch'))
     await user.click(feature.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
-      expect(feature.getByRole('button', { name: 'Save' })).toBeEnabled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
+    feature = await open('test')
     branches = branches.map((branch) =>
       branch.id === 'feature'
         ? { ...branch, name: 'server name', is_protected: false }
@@ -266,7 +319,8 @@ describe('branch form state after server refresh', () => {
           finishSave = () => resolve(applyUpdate(id, payload))
         })
     )
-    const { user, main } = await renderBranches()
+    const { user, open } = await renderBranches()
+    const main = await open('dev')
     await user.type(main.getByLabelText('Description'), 'submitted')
     await user.click(main.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.updateBranch).toHaveBeenCalledTimes(1))

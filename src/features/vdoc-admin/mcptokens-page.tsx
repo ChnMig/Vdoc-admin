@@ -34,7 +34,7 @@ import {
   PageChrome,
   LoadingErrorState,
   DeepLinkAlert,
-  FormCard,
+  FormDialog,
   TextField,
   TokenTable,
   CollectionCard,
@@ -370,67 +370,7 @@ export function MCPTokensPage({
             : []
         }
       />
-      <FormCard
-        title={t('admin.sections.createToken')}
-        submitLabel={t('admin.common.create')}
-        pending={createMutation.isPending}
-        onSubmit={(formData) => {
-          const scopes = formData.getAll('scopes').map(Number)
-          if (scopes.length === 0) {
-            throw new Error(t('admin.token.scopeRequired'))
-          }
-          const expiry = optionalFieldValue(formData, 'expires_at')
-          if (expiry) {
-            const expiresAt = Date.parse(expiry)
-            if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-              throw new Error(t('admin.token.futureExpiryRequired'))
-            }
-          }
-          const requestId = beginTokenOperation()
-          return createMutation.mutateAsync({
-            requestId,
-            payload: {
-              name: fieldValue(formData, 'name'),
-              scopes,
-              expires_at: expiry ?? null,
-            },
-          })
-        }}
-      >
-        <div className='grid gap-4 md:grid-cols-2'>
-          <TextField label={t('admin.fields.name')} name='name' required />
-          <TextField
-            label={t('admin.fields.expiresAt')}
-            name='expires_at'
-            placeholder={t('admin.placeholders.optionalIsoDate')}
-          />
-        </div>
-        <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
-          <legend className='px-2 text-sm font-medium'>
-            {t('admin.token.scopesTitle')}
-          </legend>
-          {[
-            [1, t('admin.token.apiRead')],
-            [2, t('admin.token.apiDraft')],
-            [3, t('admin.token.docRead')],
-            [4, t('admin.token.docDraft')],
-          ].map(([scope, label]) => (
-            <label
-              key={String(scope)}
-              className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
-            >
-              <input
-                type='checkbox'
-                name='scopes'
-                value={String(scope)}
-                defaultChecked={scope === 1}
-                className='mt-0.5 size-4 accent-primary'
-              />
-              <span>{label}</span>
-            </label>
-          ))}
-        </fieldset>
-      </FormCard>
+
       {visibleToken && (
         <Alert>
           <KeyRound />
@@ -489,6 +429,69 @@ export function MCPTokensPage({
           </Alert>
         )}
       <TokenTable
+        actions={
+          <FormDialog
+            title={t('admin.sections.createToken')}
+            submitLabel={t('admin.common.create')}
+            pending={createMutation.isPending}
+            onSubmit={(formData) => {
+              const scopes = formData.getAll('scopes').map(Number)
+              if (scopes.length === 0) {
+                throw new Error(t('admin.token.scopeRequired'))
+              }
+              const expiry = optionalFieldValue(formData, 'expires_at')
+              if (expiry) {
+                const expiresAt = Date.parse(expiry)
+                if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+                  throw new Error(t('admin.token.futureExpiryRequired'))
+                }
+              }
+              const requestId = beginTokenOperation()
+              return createMutation.mutateAsync({
+                requestId,
+                payload: {
+                  name: fieldValue(formData, 'name'),
+                  scopes,
+                  expires_at: expiry ?? null,
+                },
+              })
+            }}
+          >
+            <div className='grid gap-4'>
+              <TextField label={t('admin.fields.name')} name='name' required />
+              <TextField
+                label={t('admin.fields.expiresAt')}
+                name='expires_at'
+                placeholder={t('admin.placeholders.optionalIsoDate')}
+              />
+            </div>
+            <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
+              <legend className='px-2 text-sm font-medium'>
+                {t('admin.token.scopesTitle')}
+              </legend>
+              {[
+                [1, t('admin.token.apiRead')],
+                [2, t('admin.token.apiDraft')],
+                [3, t('admin.token.docRead')],
+                [4, t('admin.token.docDraft')],
+              ].map(([scope, label]) => (
+                <label
+                  key={String(scope)}
+                  className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
+                >
+                  <input
+                    type='checkbox'
+                    name='scopes'
+                    value={String(scope)}
+                    defaultChecked={scope === 1}
+                    className='mt-0.5 size-4 accent-primary'
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
+          </FormDialog>
+        }
         tokens={tokensQuery.data?.items ?? []}
         selected={selectedTokenId}
         pending={revokeMutation.isPending}

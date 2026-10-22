@@ -39,6 +39,7 @@ Responsive behavior should preserve task hierarchy: sidebar and header chrome fi
 - Cards use `rounded-lg`, border, `bg-card`, `panel-control`, and the restrained `--shadow-card`; avoid nested card stacks unless the data hierarchy demands it.
 - Tables use semantic `table`, `thead`, `tbody`, `th`, and `td` wrappers with horizontal overflow and hover state.
 - Forms should keep labels, validation messages, required fields, and disabled/loading states visible.
+- Resource management pages show lists first. Place creation buttons in the collection header and editing buttons in each row; open short, labeled forms in the shared `FormDialog`. Keep fields in one column, preserve input on errors, and close after successful submission. Draft editing and review retain their dedicated workflows.
 - Alerts, badges, status labels, copy buttons, command search, language switch, theme switch, and profile dropdown are functional controls, not decoration.
 - Lucide icons are the functional icon vocabulary. Product branding uses the owner-supplied Vdoc artwork through `src/assets/logo.tsx`, with the original blue-and-cyan colors and transparent background in both themes. `public/images/vdoc-logo.png` is the 256px mark and `public/images/favicon.png` is the 64px browser variant. The shared Logo component reserves its dimensions and uses empty alt text alongside the visible brand name.
 

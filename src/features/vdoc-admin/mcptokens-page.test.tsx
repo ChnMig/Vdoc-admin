@@ -283,6 +283,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       screen.getByRole('button', { name: 'Refresh connection evidence' })
     )
     api.listMCPTokens.mockResolvedValue({ items: [token, newToken], total: 2 })
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
     await user.type(screen.getByLabelText('Name'), newToken.name)
     await user.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(screen.container.textContent).toContain(secret))
@@ -305,15 +306,17 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       new Error('Initial network failure')
     )
     api.createMCPToken.mockReturnValueOnce(creation.promise)
-    const { user, screen } = setup()
+    const { user, client, screen } = setup()
     await screen.findByText('Initial network failure')
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
     await user.type(screen.getByLabelText('Name'), newToken.name)
     await user.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(api.createMCPToken).toHaveBeenCalledOnce())
     api.listMCPTokens.mockReturnValueOnce(secondList.promise)
-    await user.click(
-      screen.getByRole('button', { name: 'Refresh connection evidence' })
-    )
+    // Background refetches can run while the creation dialog owns focus.
+    act(() => {
+      void client.refetchQueries({ queryKey: ['mcp-tokens'] })
+    })
     await waitFor(() => expect(api.listMCPTokens).toHaveBeenCalledTimes(2))
     api.listMCPTokens.mockResolvedValue({ items: [token, newToken], total: 2 })
 
@@ -348,6 +351,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       api.createMCPToken.mockReturnValueOnce(creation.promise)
       const { user, client, screen } = setup()
       await screen.findByRole('button', { name: 'View' })
+      await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
       await user.type(screen.getByLabelText('Name'), newToken.name)
       await user.click(screen.getByRole('button', { name: 'Create' }))
       await waitFor(() => expect(api.createMCPToken).toHaveBeenCalledOnce())

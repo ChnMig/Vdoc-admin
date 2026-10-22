@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   approveDraft,
+  changePassword,
   createAIChatSession,
   createTeam,
   getIdentity,
@@ -129,6 +130,58 @@ describe('vdoc-api', () => {
     await expect(getIdentity()).resolves.toEqual(sampleUser)
 
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBeUndefined()
+  })
+
+  it('posts a password change for the current session and forwards cancellation', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+      code: 200,
+      status: 'OK',
+      timestamp: 1,
+    })
+    useAuthStore.getState().auth.setAccessToken('original.jwt')
+    const controller = new AbortController()
+    const payload = {
+      current_password: 'current-password',
+      new_password: 'next-password',
+    }
+
+    const request = changePassword(payload, { signal: controller.signal })
+    useAuthStore.getState().auth.setAccessToken('new-account.jwt')
+    await expect(request).resolves.toBeUndefined()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.method).toBe('post')
+    expect(requests[0]?.url).toBe('/api/v1/private/identity/me/password')
+    expect(headerValue(requests[0]?.headers, 'Authorization')).toBe(
+      'original.jwt'
+    )
+    expect(JSON.parse(requests[0]!.data)).toEqual(payload)
+    expect(requests[0]?.signal).toBe(controller.signal)
+
+    controller.abort()
+    await expect(
+      changePassword(payload, { signal: controller.signal })
+    ).rejects.toMatchObject({ code: 'ERR_CANCELED' })
+    expect(requests).toHaveLength(1)
+  })
+
+  it('keeps incorrect-password responses recoverable without clearing the session', async () => {
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter([], {
+      code: 400,
+      status: 'INVALID_ARGUMENT',
+      message: 'current password is incorrect',
+      timestamp: 1,
+    })
+    useAuthStore.getState().auth.setAccessToken('existing.jwt')
+
+    await expect(
+      changePassword({
+        current_password: 'wrong-password',
+        new_password: 'next-password',
+      })
+    ).rejects.toMatchObject({ status: 'INVALID_ARGUMENT' })
+    expect(useAuthStore.getState().auth.accessToken).toBe('existing.jwt')
   })
 
   it.each(['switch', 'logout'] as const)(

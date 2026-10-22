@@ -103,6 +103,11 @@ const apiMocks = vi.hoisted(() => ({
   submitDraft: vi.fn(),
 }))
 
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useNavigate: () => vi.fn(),
+}))
+
 vi.mock('@/lib/vdoc-api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/vdoc-api')>()
   return {
@@ -593,6 +598,101 @@ describe('UsersPage password boundaries', () => {
     })
   })
 
+  it('keeps the user list visible and discards cancelled creation input', async () => {
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+
+    expect(await screen.findByText('admin@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create user' })
+    await user.type(
+      within(dialog).getByLabelText('Email'),
+      'discard@example.com'
+    )
+    await user.type(within(dialog).getByLabelText('Name'), 'Discard me')
+    await user.type(
+      within(dialog).getByLabelText('Password'),
+      'discard-password-123'
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(apiMocks.createUser).not.toHaveBeenCalled()
+    expect(screen.getByRole('table')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    const reopenedDialog = screen.getByRole('dialog', { name: 'Create user' })
+    expect(within(reopenedDialog).getByLabelText('Email')).toHaveValue('')
+    expect(within(reopenedDialog).getByLabelText('Name')).toHaveValue('')
+    expect(within(reopenedDialog).getByLabelText('Password')).toHaveValue('')
+  })
+
+  it('closes user creation after success and preserves the list', async () => {
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+    await screen.findByText('admin@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create user' })
+    await user.type(
+      within(dialog).getByLabelText('Email'),
+      'created@example.com'
+    )
+    await user.type(within(dialog).getByLabelText('Name'), 'Created user')
+    await user.type(
+      within(dialog).getByLabelText('Password'),
+      'created-password-123'
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expect(apiMocks.createUser).toHaveBeenCalledWith(
+      {
+        email: 'created@example.com',
+        name: 'Created user',
+        password: 'created-password-123',
+        is_super_admin: false,
+      },
+      expect.any(Object)
+    )
+    expect(screen.getByRole('table')).toBeInTheDocument()
+  })
+
+  it('keeps failed user creation open with entered values for retry', async () => {
+    apiMocks.createUser.mockRejectedValueOnce(new Error('Email already exists'))
+    const user = userEvent.setup()
+    const screen = renderUsersPage()
+    await screen.findByText('admin@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create user' })
+    await user.type(
+      within(dialog).getByLabelText('Email'),
+      'existing@example.com'
+    )
+    await user.type(within(dialog).getByLabelText('Name'), 'Existing user')
+    await user.type(
+      within(dialog).getByLabelText('Password'),
+      'existing-password-123'
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    expect(
+      await within(dialog).findByText('Email already exists')
+    ).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Email')).toHaveValue(
+      'existing@example.com'
+    )
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Existing user')
+    expect(within(dialog).getByLabelText('Password')).toHaveValue(
+      'existing-password-123'
+    )
+    expect(within(dialog).getByRole('button', { name: 'Create' })).toBeEnabled()
+  })
+
   it.each([
     ' password123456 ',
     '\u00a0password123456\u00a0',
@@ -603,6 +703,7 @@ describe('UsersPage password boundaries', () => {
       const user = userEvent.setup()
       const screen = renderUsersPage()
       await screen.findByText('admin@example.com')
+      await user.click(screen.getByRole('button', { name: 'Create user' }))
       await user.type(screen.getByLabelText('Email'), 'created@example.com')
       await user.type(screen.getByLabelText('Name'), 'Created user')
       const password = screen.getByLabelText('Password')
@@ -625,6 +726,7 @@ describe('UsersPage password boundaries', () => {
     const screen = renderUsersPage()
 
     await screen.findByText('admin@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create user' }))
     await user.type(screen.getByLabelText('Email'), 'created@example.com')
     await user.type(screen.getByLabelText('Name'), 'Created user')
     const password = screen.getByLabelText('Password')
@@ -856,11 +958,14 @@ describe('ProjectsPage lifecycle boundaries', () => {
       total: 1,
     })
 
+    const user = userEvent.setup()
     const screen = renderProjectsPage()
-    const createProjectTitle = await screen.findByText('Create project')
-    const createProjectCard = createProjectTitle.closest('[data-slot="card"]')
-    if (!(createProjectCard instanceof HTMLElement))
-      throw new Error('missing create-project card')
+    await user.click(
+      await screen.findByRole('button', { name: 'Create project' })
+    )
+    const createProjectCard = screen.getByRole('dialog', {
+      name: 'Create project',
+    })
     const adminSelect = within(createProjectCard).getByLabelText(
       'Initial Project Admin'
     )
@@ -885,6 +990,10 @@ describe('ProjectsPage lifecycle boundaries', () => {
         name: 'Admin · admin@example.com',
       })
     ).not.toBeInTheDocument()
+
+    await user.click(
+      within(createProjectCard).getByRole('button', { name: 'Cancel' })
+    )
 
     let memberUserSelect: HTMLElement | undefined
     await waitFor(() => {
@@ -922,7 +1031,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
       })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Update' })
+      screen.queryByRole('button', { name: 'Edit' })
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Archive' })
@@ -1001,7 +1110,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
     ).toHaveLength(2)
   })
 
-  it('shows an inline update error without discarding edited project input', async () => {
+  it('keeps the edit dialog and edited project input after an update error', async () => {
     apiMocks.listProjects.mockResolvedValue({
       items: [projectFixture],
       total: 1,
@@ -1011,18 +1120,19 @@ describe('ProjectsPage lifecycle boundaries', () => {
     )
     const user = userEvent.setup()
     const screen = renderProjectsPage()
-    const nameInput = (await screen.findAllByDisplayValue('Docs project')).find(
-      (element): element is HTMLInputElement =>
-        element instanceof HTMLInputElement
-    )
-    if (!nameInput) throw new Error('missing project name input')
+    const projectRow = await screen.findByRole('row', { name: /Docs project/ })
+    if (!(projectRow instanceof HTMLElement))
+      throw new Error('missing project row')
+    await user.click(within(projectRow).getByRole('button', { name: 'Edit' }))
+    const editDialog = screen.getByRole('dialog', { name: 'Edit project' })
+    const nameInput = within(editDialog).getByLabelText('Name')
     const form = nameInput.closest('form')
     if (!(form instanceof HTMLFormElement))
       throw new Error('missing project update form')
 
     await user.clear(nameInput)
     await user.type(nameInput, 'Unsaved project name')
-    await user.click(within(form).getByRole('button', { name: 'Update' }))
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
 
     expect(
       await within(form).findByText('Project update was rejected')
@@ -1089,10 +1199,8 @@ describe('MCPTokensPage secret lifecycle', () => {
   it('requires an explicit scope and a future expiry before creating a token', async () => {
     const user = userEvent.setup()
     const screen = renderMCPTokensPage()
-    const card = screen
-      .getByText('Create MCP token')
-      .closest('[data-slot="card"]')
-    if (!(card instanceof HTMLElement)) throw new Error('missing token card')
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
+    const card = screen.getByRole('dialog', { name: 'Create MCP token' })
     await user.type(within(card).getByLabelText('Name'), 'Scoped token')
     const apiRead = within(card).getAllByRole('checkbox')[0]
     if (!(apiRead instanceof HTMLInputElement)) {
@@ -1230,11 +1338,10 @@ describe('MCPTokensPage secret lifecycle', () => {
       items: [token, { ...token, id: 'token-new', name: 'New token' }],
       total: 2,
     })
-    const createTokenTitle = screen.getByText('Create MCP token')
-    const createTokenCard = createTokenTitle.closest('[data-slot="card"]')
-    if (!(createTokenCard instanceof HTMLElement)) {
-      throw new Error('missing create-token card')
-    }
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
+    const createTokenCard = screen.getByRole('dialog', {
+      name: 'Create MCP token',
+    })
     await user.type(within(createTokenCard).getByLabelText('Name'), 'New token')
     await user.click(
       within(createTokenCard).getByRole('button', { name: 'Create' })
@@ -1253,7 +1360,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect(screen.getAllByText(/vdoc_b{48}/).length).toBeGreaterThan(0)
   })
 
-  it('does not let a late token creation overwrite a newer reveal', async () => {
+  it('blocks background token reveals until creation completes', async () => {
     const lateCreation = createDeferred<
       typeof token & { id: string; name: string; token: string }
     >()
@@ -1264,23 +1371,36 @@ describe('MCPTokensPage secret lifecycle', () => {
     })
     const user = userEvent.setup()
     const screen = renderMCPTokensPage()
-    const createTokenCard = screen
-      .getByText('Create MCP token')
-      .closest('[data-slot="card"]')
-    if (!(createTokenCard instanceof HTMLElement)) {
-      throw new Error('missing create-token card')
-    }
+    await screen.findByRole('button', { name: 'View' })
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
+    const createTokenDialog = screen.getByRole('dialog', {
+      name: 'Create MCP token',
+    })
     await user.type(
-      within(createTokenCard).getByLabelText('Name'),
+      within(createTokenDialog).getByLabelText('Name'),
       'Late token'
     )
     await user.click(
-      within(createTokenCard).getByRole('button', { name: 'Create' })
+      within(createTokenDialog).getByRole('button', { name: 'Create' })
     )
     await waitFor(() => expect(apiMocks.createMCPToken).toHaveBeenCalledOnce())
 
-    await user.click(await screen.findByRole('button', { name: 'View' }))
-    expect((await screen.findAllByText(/vdoc_c{48}/)).length).toBeGreaterThan(0)
+    expect(
+      within(createTokenDialog).getByRole('button', { name: 'Cancel' })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'View' })
+    ).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Create MCP token' })).toBe(
+      createTokenDialog
+    )
+    expect(apiMocks.getMCPToken).not.toHaveBeenCalled()
+
+    apiMocks.listMCPTokens.mockResolvedValue({
+      items: [token, { ...token, id: 'token-late', name: 'Late token' }],
+      total: 2,
+    })
     await act(async () => {
       lateCreation.resolve({
         ...token,
@@ -1290,9 +1410,19 @@ describe('MCPTokensPage secret lifecycle', () => {
       })
       await lateCreation.promise
     })
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    const originalTokenRow = await screen.findByRole('row', {
+      name: /Local agent/,
+    })
+    await user.click(
+      within(originalTokenRow).getByRole('button', { name: 'View' })
+    )
 
+    expect((await screen.findAllByText(/vdoc_c{48}/)).length).toBeGreaterThan(0)
     expect(screen.queryAllByText(/vdoc_b{48}/)).toHaveLength(0)
-    expect(screen.getAllByText(/vdoc_c{48}/).length).toBeGreaterThan(0)
+    expect(apiMocks.getMCPToken).toHaveBeenCalledWith(token.id)
   })
 
   it('loads sanitized usage for an exact token deep link without revealing its secret', async () => {
@@ -1478,12 +1608,10 @@ describe('MCPTokensPage secret lifecycle', () => {
     apiMocks.createMCPToken.mockReturnValueOnce(creation.promise)
     const user = userEvent.setup()
     const screen = renderMCPTokensPage()
-    const createTokenCard = screen
-      .getByText('Create MCP token')
-      .closest('[data-slot="card"]')
-    if (!(createTokenCard instanceof HTMLElement)) {
-      throw new Error('missing create-token card')
-    }
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
+    const createTokenCard = screen.getByRole('dialog', {
+      name: 'Create MCP token',
+    })
     const name = within(createTokenCard).getByLabelText('Name')
     await user.type(name, 'One request')
     const form = name.closest('form')

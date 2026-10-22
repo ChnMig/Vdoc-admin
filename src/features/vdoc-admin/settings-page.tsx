@@ -6,6 +6,7 @@ import { useLanguage } from '@/context/language-provider'
 import { useTheme } from '@/context/theme-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AISettingsPanel } from './ai-settings'
+import { ChangePasswordPanel } from './change-password-panel'
 import { PageChrome, CollectionCard } from './page-shared'
 
 export function SettingsPage() {
@@ -56,6 +57,7 @@ export function SettingsPage() {
           ]}
         />
       </section>
+      {identity && <ChangePasswordPanel />}
       {identity && <AISettingsPanel user={identity} />}
       <Alert>
         <CheckCircle2 />
