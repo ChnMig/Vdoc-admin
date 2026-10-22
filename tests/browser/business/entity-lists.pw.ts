@@ -1,9 +1,14 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const evidenceRoot =
-  '/Users/chenming/work/Vdoc/.artifacts/entity-list-layout-20261022'
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
+const evidenceRoot = resolve(
+  repositoryRoot,
+  process.env['VDOC_ENTITY_LIST_EVIDENCE_DIR'] || '.artifacts/entity-lists'
+)
 const timestamp = '2026-10-22T08:00:00Z'
 const session = 'entity-list-fixture-session'
 const rootPath = '/api/v1/private'
@@ -228,10 +233,14 @@ async function noPageOverflow(page: Page) {
   ).toBe(true)
 }
 
-async function saveScreenshot(page: Page, filename: string) {
+async function evidencePath(filename: string) {
   await mkdir(evidenceRoot, { recursive: true })
+  return resolve(evidenceRoot, filename)
+}
+
+async function saveScreenshot(page: Page, filename: string) {
   await page.screenshot({
-    path: `${evidenceRoot}/${filename}`,
+    path: await evidencePath(filename),
     fullPage: false,
   })
 }
@@ -453,7 +462,7 @@ for (const width of [1280, 768, 640, 390]) {
     if (width === 1280 || width === 390)
       await saveScreenshot(page, `project-dialog-${width}.png`)
     await writeFile(
-      `${evidenceRoot}/project-layout-${width}.json`,
+      await evidencePath(`project-layout-${width}.json`),
       JSON.stringify(
         { width, geometry, axeViolations: a11y.violations, result: 'passed' },
         null,
