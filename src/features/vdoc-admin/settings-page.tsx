@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { OptionsSelect } from '@/components/options-select'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -36,7 +37,7 @@ export function SettingsPage() {
   return (
     <>
       <Header className='[&>div]:gap-2 sm:[&>div]:gap-4'>
-        <Search />
+        <Search className='me-auto' />
         <LanguageSwitch />
         <ThemeSwitch />
         <ProfileDropdown />
@@ -206,15 +207,15 @@ function AppearanceSettings() {
           <Label htmlFor='settings-language' className='sr-only'>
             {t('language.label')}
           </Label>
-          <select
+          <OptionsSelect
             id='settings-language'
             value={language}
-            onChange={(event) => setLanguage(event.target.value as Language)}
-            className='h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-          >
-            <option value='zh-CN'>简体中文</option>
-            <option value='en'>English</option>
-          </select>
+            onChange={(value) => setLanguage(value as Language)}
+            options={[
+              { value: 'zh-CN', label: '简体中文' },
+              { value: 'en', label: 'English' },
+            ]}
+          />
         </div>
       </SettingsSection>
     </div>

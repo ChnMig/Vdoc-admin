@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { SearchIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AIContextPanel } from './ai-panels'
 import { MarkdownFactsCard } from './markdown-facts-card'
 import { MarkdownPreview } from './markdown-preview'
@@ -38,7 +39,6 @@ import {
   DeepLinkAlert,
   SelectorGrid,
   NativeSelect,
-  ContentViewer,
   CollectionCard,
   StatusBadge,
   EmptyState,
@@ -184,6 +184,23 @@ export function VersionsPage({
   )
   const [endpointGroupMode, setEndpointGroupMode] =
     useState<EndpointGroupMode>('tag')
+  const [workspaceTab, setWorkspaceTab] = useState({
+    context: '',
+    value: 'content',
+  })
+  const contentTabTriggerRef = useRef<HTMLButtonElement>(null)
+  const workspaceContext = JSON.stringify([
+    projectId,
+    documentId,
+    versionId,
+    endpointId,
+  ])
+  const activeWorkspaceTab =
+    workspaceTab.context === workspaceContext
+      ? workspaceTab.value
+      : endpointId && !isMarkdownDocument
+        ? 'endpoints'
+        : 'content'
   const contentQuery = useQuery({
     queryKey: [
       'version-content',
@@ -273,6 +290,10 @@ export function VersionsPage({
   const handleVersionChange = (value: string) => {
     clearEndpointSelection()
     setVersionId(value)
+    setWorkspaceTab({
+      context: JSON.stringify([projectId, documentId, value, '']),
+      value: 'content',
+    })
   }
   const selectedVersionContent = contentQuery.data?.content
   const selectedProject = projectsQuery.data?.items.find(
@@ -380,144 +401,189 @@ export function VersionsPage({
           options={versionOptions}
         />
       </SelectorGrid>
-      <section className='grid min-w-0 gap-4'>
-        <TextField
-          id='version-search'
-          name='version_search'
-          label={t('admin.pagination.searchVersions')}
-          value={versionSearch}
-          onChange={setVersionSearch}
-        />
-        <LoadingErrorState state={versionsQuery} />
-        <VersionsTable
-          versions={versionsQuery.data?.items ?? []}
-          selected={versionId}
-          onSelect={handleVersionChange}
-        />
-        <QueryPagination
-          offset={versionOffset}
-          count={versionsQuery.data?.items.length ?? 0}
-          total={versionsQuery.data?.total}
-          hasMore={versionsQuery.data?.hasMore ?? false}
-          busy={versionsQuery.isFetching}
-          onPrevious={() => setVersionOffset(versionOffset - 50)}
-          onNext={() => setVersionOffset(versionOffset + 50)}
-        />
-      </section>
-      {!isMarkdownDocument && (
-        <dl className='grid min-w-0 grid-cols-3 gap-4 rounded-lg border bg-card p-5 text-sm'>
-          {[
-            [
-              t('admin.developerPortal.endpointCount'),
-              String(endpointsQuery.data?.total ?? visibleEndpoints.length),
-              t('admin.developerPortal.endpointCountDescription'),
-            ],
-            [
-              t('admin.developerPortal.methodCount'),
-              String(methodCount),
-              t('admin.developerPortal.methodCountDescription'),
-            ],
-            [
-              t('admin.developerPortal.tagCount'),
-              String(tagCount),
-              t('admin.developerPortal.tagCountDescription'),
-            ],
-          ].map(([label, value, description]) => (
-            <div key={label} className='min-w-0 space-y-2'>
-              <dt className='text-muted-foreground'>{label}</dt>
-              <dd className='font-semibold tabular-nums'>{value}</dd>
-              <dd className='text-xs leading-5 text-muted-foreground'>
-                {description}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {!isMarkdownDocument && (
-        <>
-          <SelectorGrid>
-            <div className='grid gap-2'>
-              <Label htmlFor='endpoint-search'>
-                {t('admin.developerPortal.searchLabel')}
-              </Label>
-              <div className='relative'>
-                <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-                <Input
-                  id='endpoint-search'
-                  value={endpointSearchQuery}
-                  onChange={(event) =>
-                    setEndpointSearchQuery(event.currentTarget.value)
-                  }
-                  placeholder={t('admin.developerPortal.searchPlaceholder')}
-                  className='ps-9'
+      <Tabs
+        value={activeWorkspaceTab}
+        onValueChange={(value) =>
+          setWorkspaceTab({ context: workspaceContext, value })
+        }
+        className='min-w-0 gap-5'
+      >
+        <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+          <TabsTrigger
+            ref={contentTabTriggerRef}
+            value='content'
+            className='h-auto min-h-9 flex-none'
+          >
+            {t('admin.sections.contentViewer')}
+          </TabsTrigger>
+          {!isMarkdownDocument && (
+            <TabsTrigger value='endpoints' className='h-auto min-h-9 flex-none'>
+              {t('admin.sections.endpoints')}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value='versions' className='h-auto min-h-9 flex-none'>
+            {t('admin.sections.versions')}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value='versions' className='grid min-w-0 gap-4'>
+          <VersionsTable
+            versions={versionsQuery.data?.items ?? []}
+            selected={versionId}
+            onSelect={(value) => {
+              handleVersionChange(value)
+              contentTabTriggerRef.current?.focus()
+            }}
+            search={versionSearch}
+            onSearchChange={setVersionSearch}
+            loadingState={versionsQuery}
+            pagination={
+              <QueryPagination
+                offset={versionOffset}
+                count={versionsQuery.data?.items.length ?? 0}
+                total={versionsQuery.data?.total}
+                hasMore={versionsQuery.data?.hasMore ?? false}
+                busy={versionsQuery.isFetching}
+                onPrevious={() => setVersionOffset(versionOffset - 50)}
+                onNext={() => setVersionOffset(versionOffset + 50)}
+              />
+            }
+          />
+        </TabsContent>
+        <TabsContent value='content' className='grid min-w-0 gap-5'>
+          <CollectionCard
+            title={t('admin.sections.contentViewer')}
+            description={selectedVersion?.changelog}
+          >
+            <div className='flex min-w-0 flex-wrap items-end justify-between gap-4'>
+              {selectedVersion && (
+                <div className='flex min-w-0 flex-wrap items-center gap-3 text-sm'>
+                  <span className='font-medium break-all'>
+                    {selectedVersion.version_name}
+                  </span>
+                  <StatusBadge>
+                    {versionStatusLabel(selectedVersion.status, t)}
+                  </StatusBadge>
+                  <span className='text-muted-foreground'>
+                    {formatDate(selectedVersion.published_at)}
+                  </span>
+                </div>
+              )}
+              <div className='w-full sm:w-48'>
+                <NativeSelect
+                  label={t('admin.fields.contentKind')}
+                  value={activeVersionContentKind}
+                  onChange={setContentKind}
+                  placeholder={t('admin.types.raw')}
+                  options={versionContentKindOptions}
                 />
               </div>
             </div>
-            <NativeSelect
-              label={t('admin.developerPortal.groupBy')}
-              value={endpointGroupMode}
-              onChange={(value) =>
-                setEndpointGroupMode(parseEndpointGroupMode(value))
-              }
-              placeholder={t('admin.developerPortal.groupByTag')}
-              options={[
-                { value: 'tag', label: t('admin.developerPortal.groupByTag') },
-                {
-                  value: 'method',
-                  label: t('admin.developerPortal.groupByMethod'),
-                },
-              ]}
-            />
-          </SelectorGrid>
-          <LoadingErrorState
-            state={endpointsQuery.isError ? endpointsQuery : endpointQuery}
-          />
-          <EndpointsCard
-            endpoints={visibleEndpoints}
-            selected={endpointId}
-            onSelect={(value) => {
-              setEndpointId(value)
-              onSearchChange?.({ endpoint_id: value || undefined })
-            }}
-            detail={endpointQuery.data}
-            groupMode={endpointGroupMode}
-            untaggedLabel={untaggedLabel}
-          />
-          <QueryPagination
-            offset={endpointOffset}
-            count={visibleEndpoints.length}
-            total={endpointsQuery.data?.total}
-            hasMore={endpointsQuery.data?.hasMore ?? false}
-            busy={endpointsQuery.isFetching}
-            onPrevious={() => setEndpointOffset(endpointOffset - 50)}
-            onNext={() => setEndpointOffset(endpointOffset + 50)}
-          />
-        </>
-      )}
-      <div className='grid min-w-0 gap-4'>
-        <div className='max-w-xs'>
-          <NativeSelect
-            label={t('admin.fields.contentKind')}
-            value={activeVersionContentKind}
-            onChange={setContentKind}
-            placeholder={t('admin.types.raw')}
-            options={versionContentKindOptions}
-          />
-        </div>
-        <LoadingErrorState state={contentQuery} />
-        <ContentViewer
-          title={t('admin.sections.contentViewer')}
-          content={selectedVersionContent}
-        />
-      </div>
-      {isMarkdownDocument && (
-        <>
-          {selectedVersionContent && (
-            <MarkdownPreview content={selectedVersionContent} />
+            <LoadingErrorState state={contentQuery} />
+            {selectedVersionContent ? (
+              <pre className='max-h-[36rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
+                {selectedVersionContent}
+              </pre>
+            ) : (
+              <p className='text-sm text-muted-foreground'>
+                {t('admin.common.empty')}
+              </p>
+            )}
+          </CollectionCard>
+          {isMarkdownDocument && (
+            <>
+              {selectedVersionContent && (
+                <MarkdownPreview content={selectedVersionContent} />
+              )}
+              <MarkdownFactsCard content={selectedVersionContent} />
+            </>
           )}
-          <MarkdownFactsCard content={selectedVersionContent} />
-        </>
-      )}
+        </TabsContent>
+        {!isMarkdownDocument && (
+          <TabsContent value='endpoints' className='grid min-w-0 gap-4'>
+            <dl className='flex min-w-0 flex-wrap gap-x-6 gap-y-3 border-b pb-4 text-sm'>
+              {[
+                [
+                  t('admin.developerPortal.endpointCount'),
+                  String(endpointsQuery.data?.total ?? visibleEndpoints.length),
+                ],
+                [t('admin.developerPortal.methodCount'), String(methodCount)],
+                [t('admin.developerPortal.tagCount'), String(tagCount)],
+              ].map(([label, value]) => (
+                <div key={label} className='flex items-baseline gap-2'>
+                  <dt className='text-muted-foreground'>{label}</dt>
+                  <dd className='font-semibold tabular-nums'>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <EndpointsCard
+              endpoints={visibleEndpoints}
+              selected={endpointId}
+              onSelect={(value) => {
+                setEndpointId(value)
+                onSearchChange?.({ endpoint_id: value || undefined })
+              }}
+              detail={endpointQuery.data}
+              groupMode={endpointGroupMode}
+              untaggedLabel={untaggedLabel}
+              toolbar={
+                <div className='grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]'>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='endpoint-search'>
+                      {t('admin.developerPortal.searchLabel')}
+                    </Label>
+                    <div className='relative'>
+                      <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+                      <Input
+                        id='endpoint-search'
+                        value={endpointSearchQuery}
+                        onChange={(event) =>
+                          setEndpointSearchQuery(event.currentTarget.value)
+                        }
+                        placeholder={t(
+                          'admin.developerPortal.searchPlaceholder'
+                        )}
+                        className='ps-9'
+                      />
+                    </div>
+                  </div>
+                  <NativeSelect
+                    label={t('admin.developerPortal.groupBy')}
+                    value={endpointGroupMode}
+                    onChange={(value) =>
+                      setEndpointGroupMode(parseEndpointGroupMode(value))
+                    }
+                    placeholder={t('admin.developerPortal.groupByTag')}
+                    options={[
+                      {
+                        value: 'tag',
+                        label: t('admin.developerPortal.groupByTag'),
+                      },
+                      {
+                        value: 'method',
+                        label: t('admin.developerPortal.groupByMethod'),
+                      },
+                    ]}
+                  />
+                </div>
+              }
+              loadingState={
+                endpointsQuery.isError ? endpointsQuery : endpointQuery
+              }
+              pagination={
+                <QueryPagination
+                  offset={endpointOffset}
+                  count={visibleEndpoints.length}
+                  total={endpointsQuery.data?.total}
+                  hasMore={endpointsQuery.data?.hasMore ?? false}
+                  busy={endpointsQuery.isFetching}
+                  onPrevious={() => setEndpointOffset(endpointOffset - 50)}
+                  onNext={() => setEndpointOffset(endpointOffset + 50)}
+                />
+              }
+            />
+          </TabsContent>
+        )}
+      </Tabs>
       <AIContextPanel
         target={selectedVersionAITarget}
         interactive={selectedVersionAIInteractive}
@@ -531,10 +597,18 @@ function VersionsTable({
   versions,
   selected,
   onSelect,
+  search,
+  onSearchChange,
+  loadingState,
+  pagination,
 }: {
   versions: VersionDTO[]
   selected: string
   onSelect: (id: string) => void
+  search: string
+  onSearchChange: (value: string) => void
+  loadingState: React.ComponentProps<typeof LoadingErrorState>['state']
+  pagination: React.ReactNode
 }) {
   const { t } = useLanguage()
   return (
@@ -542,6 +616,16 @@ function VersionsTable({
       title={t('admin.sections.versions')}
       count={versions.length}
     >
+      <div className='max-w-md'>
+        <TextField
+          id='version-search'
+          name='version_search'
+          label={t('admin.pagination.searchVersions')}
+          value={search}
+          onChange={onSearchChange}
+        />
+      </div>
+      <LoadingErrorState state={loadingState} />
       {versions.length ? (
         <Table>
           <TableHeader>
@@ -582,6 +666,7 @@ function VersionsTable({
       ) : (
         <EmptyState preset='versions' />
       )}
+      {pagination}
     </CollectionCard>
   )
 }
@@ -593,6 +678,9 @@ function EndpointsCard({
   detail,
   groupMode,
   untaggedLabel,
+  toolbar,
+  loadingState,
+  pagination,
 }: {
   endpoints: EndpointSummaryDTO[]
   selected: string
@@ -600,6 +688,9 @@ function EndpointsCard({
   detail?: EndpointDTO
   groupMode: EndpointGroupMode
   untaggedLabel: string
+  toolbar: React.ReactNode
+  loadingState: React.ComponentProps<typeof LoadingErrorState>['state']
+  pagination: React.ReactNode
 }) {
   const { t } = useLanguage()
   const groupedEndpoints = useMemo(() => {
@@ -626,72 +717,87 @@ function EndpointsCard({
       description={t('admin.developerPortal.endpointBrowserDescription')}
       count={endpoints.length}
     >
-      {groupedEndpoints.length ? (
-        groupedEndpoints.map(([group, groupEndpoints]) => (
-          <section
-            key={group}
-            className='grid min-w-0 gap-3 border-t pt-4 first:border-0 first:pt-0'
-          >
-            <div className='flex flex-wrap items-center justify-between gap-2'>
-              <div>
-                <p className='font-medium'>{group}</p>
-                <p className='text-xs text-muted-foreground'>
-                  {groupEndpoints.length} {t('admin.common.endpoint')}
-                </p>
-              </div>
-              <Badge variant='secondary'>
-                {groupMode === 'method'
-                  ? t('admin.fields.method')
-                  : t('admin.developerPortal.tag')}
-              </Badge>
-            </div>
-            <div className='grid gap-2'>
-              {groupEndpoints.map((endpoint) => (
-                <button
-                  key={`${group}-${endpoint.id}`}
-                  type='button'
-                  data-state={selected === endpoint.id ? 'selected' : undefined}
-                  className='grid min-w-0 gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 md:grid-cols-[7rem_minmax(0,1fr)]'
-                  onClick={() => onSelect(endpoint.id)}
-                >
-                  <div className='flex items-start gap-2'>
-                    <Badge variant='outline'>
-                      {methodLabel(endpoint.method)}
-                    </Badge>
-                  </div>
-                  <div className='grid gap-2'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <code className='font-mono text-xs break-all'>
-                        {endpoint.path}
-                      </code>
-                      {endpoint.deprecated && (
-                        <Badge variant='secondary'>
-                          {t('admin.developerPortal.deprecated')}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className='text-sm text-muted-foreground'>
-                      {endpoint.summary ??
-                        endpoint.operation_id ??
-                        t('admin.developerPortal.noEndpointSummary')}
+      {toolbar}
+      <LoadingErrorState state={loadingState} />
+      <div
+        className={
+          detail
+            ? 'grid min-w-0 gap-5 lg:grid-cols-[minmax(15rem,2fr)_minmax(0,3fr)]'
+            : 'min-w-0'
+        }
+      >
+        <div className='grid max-h-[40rem] min-w-0 content-start gap-4 overflow-y-auto pe-1'>
+          {groupedEndpoints.length ? (
+            groupedEndpoints.map(([group, groupEndpoints]) => (
+              <section
+                key={group}
+                className='grid min-w-0 gap-3 border-t pt-4 first:border-0 first:pt-0'
+              >
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <div>
+                    <p className='font-medium'>{group}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      {groupEndpoints.length} {t('admin.common.endpoint')}
                     </p>
-                    <div className='flex flex-wrap gap-1.5'>
-                      {endpointTags(endpoint, untaggedLabel).map((tag) => (
-                        <Badge key={tag} variant='secondary'>
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
                   </div>
-                </button>
-              ))}
-            </div>
-          </section>
-        ))
-      ) : (
-        <EmptyState preset='endpoints' />
-      )}
-      {detail && <EndpointDetailPanel endpoint={detail} />}
+                  <Badge variant='secondary'>
+                    {groupMode === 'method'
+                      ? t('admin.fields.method')
+                      : t('admin.developerPortal.tag')}
+                  </Badge>
+                </div>
+                <div className='grid gap-2'>
+                  {groupEndpoints.map((endpoint) => (
+                    <button
+                      key={`${group}-${endpoint.id}`}
+                      type='button'
+                      data-state={
+                        selected === endpoint.id ? 'selected' : undefined
+                      }
+                      className='grid min-w-0 gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 sm:grid-cols-[4.5rem_minmax(0,1fr)]'
+                      onClick={() => onSelect(endpoint.id)}
+                    >
+                      <div className='flex items-start gap-2'>
+                        <Badge variant='outline'>
+                          {methodLabel(endpoint.method)}
+                        </Badge>
+                      </div>
+                      <div className='grid gap-2'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <code className='font-mono text-xs break-all'>
+                            {endpoint.path}
+                          </code>
+                          {endpoint.deprecated && (
+                            <Badge variant='secondary'>
+                              {t('admin.developerPortal.deprecated')}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className='text-sm text-muted-foreground'>
+                          {endpoint.summary ??
+                            endpoint.operation_id ??
+                            t('admin.developerPortal.noEndpointSummary')}
+                        </p>
+                        <div className='flex flex-wrap gap-1.5'>
+                          {endpointTags(endpoint, untaggedLabel).map((tag) => (
+                            <Badge key={tag} variant='secondary'>
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))
+          ) : (
+            <EmptyState preset='endpoints' />
+          )}
+        </div>
+        {detail && <EndpointDetailPanel endpoint={detail} />}
+      </div>
+      {pagination}
     </CollectionCard>
   )
 }
@@ -700,7 +806,7 @@ function EndpointDetailPanel({ endpoint }: { endpoint: EndpointDTO }) {
   const { t } = useLanguage()
   const untaggedLabel = t('admin.developerPortal.untagged')
   return (
-    <section className='grid min-w-0 gap-5 border-t pt-5'>
+    <section className='grid min-w-0 content-start gap-5 border-t pt-5 lg:border-s lg:border-t-0 lg:ps-5 lg:pt-0'>
       <div className='grid gap-2'>
         <h3 className='flex min-w-0 flex-wrap items-center gap-2 font-semibold'>
           <Badge variant='outline'>{methodLabel(endpoint.method)}</Badge>

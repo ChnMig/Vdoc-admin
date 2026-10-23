@@ -1,6 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, GitCompareArrows, SearchIcon } from 'lucide-react'
+import {
+  AlertCircle,
+  ChevronDown,
+  GitCompareArrows,
+  SearchIcon,
+} from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   compareDiff,
@@ -17,8 +22,14 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageOffset } from '@/hooks/use-page-offset'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AIContextPanel } from './ai-panels'
 import {
   PageChrome,
@@ -123,6 +134,11 @@ export function DiffsPage({
     onSearchChange !== undefined
   )
   const [diffSearch, setDiffSearch] = useState('')
+  const [workspaceView, setWorkspaceView] = useState({
+    context: '',
+    value: 'result',
+  })
+  const resultTabTriggerRef = useRef<HTMLButtonElement>(null)
   const [diffFilterValue, setDiffFilterValue] = useState<DiffFilter>('all')
   const resolveDiffById = Boolean(search?.diff_id)
   const [historySearch, setHistorySearch] = useState('')
@@ -199,6 +215,15 @@ export function DiffsPage({
   const selectedToVersionId = requestedDiff?.to_version_id
     ? requestedDiff.to_version_id
     : requestedToVersionId
+  const workspaceContext = JSON.stringify([
+    projectId,
+    documentId,
+    selectedFromVersionId,
+    selectedToVersionId,
+    search?.diff_id,
+  ])
+  const activeWorkspaceView =
+    workspaceView.context === workspaceContext ? workspaceView.value : 'result'
   const persistedDiff =
     selectedFromVersionId && selectedToVersionId
       ? diffHistoryQuery.data?.items.find(
@@ -338,6 +363,7 @@ export function DiffsPage({
           result
         )
         setDiff(result)
+        setWorkspaceView({ context: workspaceContext, value: 'result' })
         onSearchChange?.({
           from_version_id: result.from_version_id || undefined,
           to_version_id: result.to_version_id || undefined,
@@ -456,51 +482,62 @@ export function DiffsPage({
           options={versionOptions}
         />
       </SelectorGrid>
-      <div className='grid gap-2'>
-        <Label htmlFor='diff-version-search'>
-          {t('admin.pagination.searchVersions')}
-        </Label>
-        <Input
-          id='diff-version-search'
-          value={choices.search}
-          onChange={(event) => choices.setSearch(event.target.value)}
-          placeholder={t('admin.fields.versionName')}
-        />
-        <QueryPagination
-          offset={choices.offset}
-          count={versionsQuery.data?.items.length ?? 0}
-          total={versionsQuery.data?.total}
-          hasMore={
-            choices.offset + (versionsQuery.data?.items.length ?? 0) <
-            (versionsQuery.data?.total ?? 0)
-          }
-          busy={versionsQuery.isFetching}
-          onPrevious={() => choices.setOffset(choices.offset - 50)}
-          onNext={() => choices.setOffset(choices.offset + 50)}
-        />
-      </div>
-      <div className='flex flex-wrap items-center gap-3'>
-        <Button
-          className='w-fit'
-          disabled={
-            !selectedFromVersionId ||
-            !selectedToVersionId ||
-            selectedFromVersionId === selectedToVersionId ||
-            !activeDocumentContext ||
-            Boolean(persistedDiff) ||
-            (comparisonIsCurrent && diffMutation.isPending)
-          }
-          onClick={() => diffMutation.mutate(comparisonTarget)}
-        >
-          <GitCompareArrows className='size-4' />
-          {persistedDiff
-            ? t('admin.diff.existingLoaded')
-            : t('admin.common.compare')}
-        </Button>
+      <Collapsible className='grid min-w-0 gap-3'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <Button
+            className='w-fit'
+            disabled={
+              !selectedFromVersionId ||
+              !selectedToVersionId ||
+              selectedFromVersionId === selectedToVersionId ||
+              !activeDocumentContext ||
+              Boolean(persistedDiff) ||
+              (comparisonIsCurrent && diffMutation.isPending)
+            }
+            onClick={() => diffMutation.mutate(comparisonTarget)}
+          >
+            <GitCompareArrows className='size-4' />
+            {persistedDiff
+              ? t('admin.diff.existingLoaded')
+              : t('admin.common.compare')}
+          </Button>
+          <CollapsibleTrigger asChild>
+            <Button variant='ghost' size='sm' className='group'>
+              <SearchIcon className='size-4' />
+              {t('admin.pagination.searchVersions')}
+              <ChevronDown className='size-4 transition-transform group-data-[state=open]:rotate-180' />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
         <p className='text-sm text-muted-foreground'>
           {t('admin.diff.compareHint')}
         </p>
-      </div>
+        <CollapsibleContent className='grid min-w-0 gap-3 rounded-lg border bg-card p-4'>
+          <div className='grid max-w-md gap-2'>
+            <Label htmlFor='diff-version-search'>
+              {t('admin.pagination.searchVersions')}
+            </Label>
+            <Input
+              id='diff-version-search'
+              value={choices.search}
+              onChange={(event) => choices.setSearch(event.target.value)}
+              placeholder={t('admin.fields.versionName')}
+            />
+          </div>
+          <QueryPagination
+            offset={choices.offset}
+            count={versionsQuery.data?.items.length ?? 0}
+            total={versionsQuery.data?.total}
+            hasMore={
+              choices.offset + (versionsQuery.data?.items.length ?? 0) <
+              (versionsQuery.data?.total ?? 0)
+            }
+            busy={versionsQuery.isFetching}
+            onPrevious={() => choices.setOffset(choices.offset - 50)}
+            onNext={() => choices.setOffset(choices.offset + 50)}
+          />
+        </CollapsibleContent>
+      </Collapsible>
       {comparisonIsCurrent && diffMutation.isError && (
         <Alert variant='destructive' aria-live='polite'>
           <AlertCircle />
@@ -508,154 +545,189 @@ export function DiffsPage({
           <AlertDescription>{diffMutation.error.message}</AlertDescription>
         </Alert>
       )}
-      <LoadingErrorState
-        state={{
-          isLoading: search?.diff_id
-            ? requestedDiffQuery.isLoading
-            : Boolean(activeDiffCandidate) && activeDiffQuery.isLoading,
-          isError: requestedDiffQuery.isError || activeDiffQuery.isError,
-          error: requestedDiffQuery.error ?? activeDiffQuery.error,
-        }}
-      />
-      <CollectionCard
-        title={t('admin.sections.diffResult')}
-        description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
-        count={visibleItems.length}
+      <Tabs
+        value={activeWorkspaceView}
+        onValueChange={(value) =>
+          setWorkspaceView({ context: workspaceContext, value })
+        }
+        className='min-w-0 gap-5'
       >
-        {summary && (
-          <DiffSummaryCards
-            summary={summary}
-            isMarkdown={
-              summary.document_format === DOCUMENT_FORMAT_MARKDOWN ||
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-            }
+        <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+          <TabsTrigger
+            ref={resultTabTriggerRef}
+            value='result'
+            className='h-auto min-h-9 flex-none'
+          >
+            {t('admin.sections.diffResult')}
+          </TabsTrigger>
+          <TabsTrigger value='history' className='h-auto min-h-9 flex-none'>
+            {t('admin.diff.historyTitle')}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value='result' className='grid min-w-0 gap-4'>
+          <LoadingErrorState
+            state={{
+              isLoading: search?.diff_id
+                ? requestedDiffQuery.isLoading
+                : Boolean(activeDiffCandidate) && activeDiffQuery.isLoading,
+              isError: requestedDiffQuery.isError || activeDiffQuery.isError,
+              error: requestedDiffQuery.error ?? activeDiffQuery.error,
+            }}
           />
-        )}
-        <SelectorGrid>
-          <div className='grid gap-2'>
-            <Label htmlFor='diff-search'>{t('admin.diff.searchLabel')}</Label>
-            <div className='relative'>
-              <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+          <CollectionCard
+            title={t('admin.sections.diffResult')}
+            description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
+            count={visibleItems.length}
+          >
+            {summary && (
+              <DiffSummaryCards
+                summary={summary}
+                isMarkdown={
+                  summary.document_format === DOCUMENT_FORMAT_MARKDOWN ||
+                  selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+                }
+              />
+            )}
+            <SelectorGrid>
+              <div className='grid gap-2'>
+                <Label htmlFor='diff-search'>
+                  {t('admin.diff.searchLabel')}
+                </Label>
+                <div className='relative'>
+                  <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+                  <Input
+                    id='diff-search'
+                    value={diffSearch}
+                    onChange={(event) =>
+                      setDiffSearch(event.currentTarget.value)
+                    }
+                    placeholder={t('admin.diff.searchPlaceholder')}
+                    className='ps-9'
+                  />
+                </div>
+              </div>
+              <NativeSelect
+                label={t('admin.diff.filterLabel')}
+                value={diffFilterValue}
+                onChange={(value) => setDiffFilterValue(diffFilter(value))}
+                placeholder={t('admin.diff.filterAll')}
+                options={[
+                  { value: 'all', label: t('admin.diff.filterAll') },
+                  { value: 'breaking', label: t('admin.diff.filterBreaking') },
+                  {
+                    value: 'mustHandle',
+                    label: t('admin.diff.filterMustHandle'),
+                  },
+                  { value: 'high', label: t('admin.diff.filterHigh') },
+                ]}
+              />
+            </SelectorGrid>
+            {visibleItems.length ? (
+              <DiffReviewList
+                items={visibleItems}
+                isMarkdown={
+                  summary?.document_format === DOCUMENT_FORMAT_MARKDOWN ||
+                  selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+                }
+              />
+            ) : (
+              <EmptyState preset='diffs' />
+            )}
+          </CollectionCard>
+        </TabsContent>
+        <TabsContent value='history' className='grid min-w-0 gap-4'>
+          <LoadingErrorState
+            state={{
+              isLoading: diffHistoryQuery.isLoading,
+              isError: diffHistoryQuery.isError,
+              error: diffHistoryQuery.error,
+            }}
+          />
+          <CollectionCard
+            title={t('admin.diff.historyTitle')}
+            description={t('admin.diff.historyDescription')}
+            count={diffHistoryQuery.data?.total ?? 0}
+          >
+            <div className='grid max-w-md gap-2'>
+              <Label htmlFor='diff-history-search'>
+                {t('admin.pagination.searchDiffs')}
+              </Label>
               <Input
-                id='diff-search'
-                value={diffSearch}
-                onChange={(event) => setDiffSearch(event.currentTarget.value)}
-                placeholder={t('admin.diff.searchPlaceholder')}
-                className='ps-9'
+                id='diff-history-search'
+                value={historySearch}
+                onChange={(event) =>
+                  setHistorySearch(event.currentTarget.value)
+                }
               />
             </div>
-          </div>
-          <NativeSelect
-            label={t('admin.diff.filterLabel')}
-            value={diffFilterValue}
-            onChange={(value) => setDiffFilterValue(diffFilter(value))}
-            placeholder={t('admin.diff.filterAll')}
-            options={[
-              { value: 'all', label: t('admin.diff.filterAll') },
-              { value: 'breaking', label: t('admin.diff.filterBreaking') },
-              {
-                value: 'mustHandle',
-                label: t('admin.diff.filterMustHandle'),
-              },
-              { value: 'high', label: t('admin.diff.filterHigh') },
-            ]}
-          />
-        </SelectorGrid>
-        {visibleItems.length ? (
-          <DiffReviewList
-            items={visibleItems}
-            isMarkdown={
-              summary?.document_format === DOCUMENT_FORMAT_MARKDOWN ||
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-            }
-          />
-        ) : (
-          <EmptyState preset='diffs' />
-        )}
-      </CollectionCard>
-      <LoadingErrorState
-        state={{
-          isLoading: diffHistoryQuery.isLoading,
-          isError: diffHistoryQuery.isError,
-          error: diffHistoryQuery.error,
-        }}
-      />
-      <CollectionCard
-        title={t('admin.diff.historyTitle')}
-        description={t('admin.diff.historyDescription')}
-        count={diffHistoryQuery.data?.total ?? 0}
-      >
-        <div className='grid max-w-md gap-2'>
-          <Label htmlFor='diff-history-search'>
-            {t('admin.pagination.searchDiffs')}
-          </Label>
-          <Input
-            id='diff-history-search'
-            value={historySearch}
-            onChange={(event) => setHistorySearch(event.currentTarget.value)}
-          />
-        </div>
-        {diffHistoryQuery.data?.items.length ? (
-          <div className='grid gap-2'>
-            {diffHistoryQuery.data.items.map((item) => {
-              const fromVersionLabel =
-                versionLabelById.get(item.from_version_id ?? '') ??
-                item.from_version_id ??
-                '-'
-              const toVersionLabel =
-                versionLabelById.get(item.to_version_id ?? '') ??
-                item.to_version_id ??
-                '-'
-              return (
-                <button
-                  key={item.id}
-                  type='button'
-                  className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
-                  onClick={() => {
-                    setFromVersionId(item.from_version_id ?? '')
-                    setToVersionId(item.to_version_id ?? '')
-                    setDiff(item)
-                    onSearchChange?.({
-                      from_version_id: item.from_version_id || undefined,
-                      to_version_id: item.to_version_id || undefined,
-                      diff_id: item.id,
-                    })
-                  }}
-                >
-                  <span className='text-sm font-medium break-words'>
-                    {fromVersionLabel} → {toVersionLabel}
-                  </span>
-                  <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
-                    {t('admin.diff.historyIdentifiers', {
-                      from: item.from_version_id ?? '-',
-                      to: item.to_version_id ?? '-',
-                      diff: item.id,
-                    })}
-                  </span>
-                  <span className='text-xs text-muted-foreground'>
-                    {formatDate(item.created_at)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <EmptyState preset='diffs' />
-        )}
-        <QueryPagination
-          label={t('admin.pagination.diffs')}
-          offset={historyOffset}
-          count={diffHistoryQuery.data?.items.length ?? 0}
-          total={diffHistoryQuery.data?.total}
-          hasMore={
-            historyOffset + (diffHistoryQuery.data?.items.length ?? 0) <
-            (diffHistoryQuery.data?.total ?? 0)
-          }
-          busy={diffHistoryQuery.isFetching}
-          onPrevious={() => setHistoryOffset(historyOffset - 50)}
-          onNext={() => setHistoryOffset(historyOffset + 50)}
-        />
-      </CollectionCard>
+            {diffHistoryQuery.data?.items.length ? (
+              <div className='grid divide-y rounded-md border'>
+                {diffHistoryQuery.data.items.map((item) => {
+                  const fromVersionLabel =
+                    versionLabelById.get(item.from_version_id ?? '') ??
+                    item.from_version_id ??
+                    '-'
+                  const toVersionLabel =
+                    versionLabelById.get(item.to_version_id ?? '') ??
+                    item.to_version_id ??
+                    '-'
+                  return (
+                    <button
+                      key={item.id}
+                      type='button'
+                      className='grid min-w-0 gap-1 border-b p-3 text-start transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                      onClick={() => {
+                        setFromVersionId(item.from_version_id ?? '')
+                        setToVersionId(item.to_version_id ?? '')
+                        setDiff(item)
+                        setWorkspaceView({
+                          context: workspaceContext,
+                          value: 'result',
+                        })
+                        resultTabTriggerRef.current?.focus()
+                        onSearchChange?.({
+                          from_version_id: item.from_version_id || undefined,
+                          to_version_id: item.to_version_id || undefined,
+                          diff_id: item.id,
+                        })
+                      }}
+                    >
+                      <span className='text-sm font-medium break-words'>
+                        {fromVersionLabel} → {toVersionLabel}
+                      </span>
+                      <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
+                        {t('admin.diff.historyIdentifiers', {
+                          from: item.from_version_id ?? '-',
+                          to: item.to_version_id ?? '-',
+                          diff: item.id,
+                        })}
+                      </span>
+                      <span className='text-xs text-muted-foreground'>
+                        {formatDate(item.created_at)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <EmptyState preset='diffs' />
+            )}
+            <QueryPagination
+              label={t('admin.pagination.diffs')}
+              offset={historyOffset}
+              count={diffHistoryQuery.data?.items.length ?? 0}
+              total={diffHistoryQuery.data?.total}
+              hasMore={
+                historyOffset + (diffHistoryQuery.data?.items.length ?? 0) <
+                (diffHistoryQuery.data?.total ?? 0)
+              }
+              busy={diffHistoryQuery.isFetching}
+              onPrevious={() => setHistoryOffset(historyOffset - 50)}
+              onNext={() => setHistoryOffset(historyOffset + 50)}
+            />
+          </CollectionCard>
+        </TabsContent>
+      </Tabs>
       <AIContextPanel
         target={activeDiffAITarget}
         interactive={activeDiffAIInteractive}

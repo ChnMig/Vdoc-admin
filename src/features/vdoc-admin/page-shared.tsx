@@ -1,4 +1,11 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  Children,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   AlertCircle,
   ArrowRight,
@@ -49,6 +56,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import { OptionsSelect } from '@/components/options-select'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
@@ -100,7 +108,7 @@ export function PageChrome({
   return (
     <>
       <Header>
-        <Search />
+        <Search className='me-auto' />
         <LanguageSwitch />
         <ThemeSwitch />
         <ProfileDropdown />
@@ -158,7 +166,10 @@ export function PageChrome({
             )}
           </div>
           {guidance && (
-            <aside className='flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-md border bg-card px-4 py-3 text-sm'>
+            <aside
+              aria-label={t('admin.common.nextAction')}
+              className='flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-md border bg-card px-4 py-3 text-sm'
+            >
               <details open className='group min-w-0 flex-1'>
                 <summary className='flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden'>
                   {resolvedGuidance.title}
@@ -272,24 +283,10 @@ export function EmptyState({ preset }: { preset?: EmptyStatePreset }) {
     : t('admin.emptyStates.generic.description')
   const action = preset ? t(`admin.emptyStates.${preset}.action`) : undefined
   return (
-    <div className='grid gap-4 rounded-lg border border-dashed bg-[var(--surface-control)] p-5 text-sm'>
-      <div className='flex items-start gap-3'>
-        <span className='mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-primary'>
-          <ArrowRight className='size-4' />
-        </span>
-        <div className='grid gap-2'>
-          <p className='font-medium'>{title}</p>
-          <p className='max-w-2xl text-muted-foreground'>{description}</p>
-        </div>
-      </div>
-      {action && (
-        <div className='rounded-md border bg-background p-3'>
-          <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
-            {t('admin.common.nextAction')}
-          </p>
-          <p className='mt-1 text-sm'>{action}</p>
-        </div>
-      )}
+    <div className='grid justify-items-start gap-2 px-1 py-6 text-sm'>
+      <p className='font-medium'>{title}</p>
+      <p className='max-w-2xl leading-6 text-muted-foreground'>{description}</p>
+      {action && <p className='max-w-2xl leading-6'>{action}</p>}
     </div>
   )
 }
@@ -325,7 +322,7 @@ export function NativeSelect({
   return (
     <div className='grid min-w-0 content-start gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
-      <select
+      <OptionsSelect
         id={controlId}
         name={name}
         value={value}
@@ -333,19 +330,10 @@ export function NativeSelect({
         disabled={disabled}
         required={required}
         aria-describedby={hint ? `${controlId}-hint` : undefined}
-        onChange={(event) => onChange?.(event.currentTarget.value)}
-        className='h-9 w-full max-w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
-      >
-        {selectOptions.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            disabled={required && option.value === ''}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={selectOptions}
+        placeholder={placeholder}
+      />
       {hint && (
         <p id={`${controlId}-hint`} className='text-sm text-muted-foreground'>
           {hint}
@@ -357,12 +345,16 @@ export function NativeSelect({
 
 export function SelectorGrid({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage()
+  const fieldCount = Children.toArray(children).length
   return (
     <section
       aria-label={t('admin.common.selectedContext')}
       className='grid min-w-0 gap-3 border-b pb-5'
     >
-      <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4'>
+      <div
+        className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4'
+        style={{ maxWidth: `${Math.max(fieldCount, 1) * 24}rem` }}
+      >
         {children}
       </div>
     </section>
@@ -715,23 +707,33 @@ export function CollectionCard({
   const { t } = useLanguage()
   return (
     <Card className='min-w-0 gap-0 overflow-hidden py-0'>
-      <CardHeader className='border-b p-5'>
-        <div className='flex flex-wrap items-start justify-between gap-3'>
-          <div className='grid min-w-0 gap-2'>
-            <CardTitle>{title}</CardTitle>
-            {description && <CardDescription>{description}</CardDescription>}
-          </div>
-          <div className='flex flex-wrap items-center gap-3'>
-            {typeof count === 'number' && (
-              <Badge variant='outline'>
-                {t('admin.common.total')}: {count}
-              </Badge>
+      <CardHeader className='border-b px-4 py-3 sm:px-5 [.border-b]:pb-3'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='grid min-w-0 flex-1 gap-1'>
+            <div className='flex min-w-0 flex-wrap items-center gap-2'>
+              <CardTitle className='text-sm leading-6'>{title}</CardTitle>
+              {typeof count === 'number' && (
+                <Badge variant='secondary' className='tabular-nums'>
+                  {t('admin.common.total')}: {count}
+                </Badge>
+              )}
+            </div>
+            {description && (
+              <CardDescription className='max-w-3xl leading-5'>
+                {description}
+              </CardDescription>
             )}
-            {actions}
           </div>
+          {actions && (
+            <div className='flex max-w-full flex-wrap items-center gap-2'>
+              {actions}
+            </div>
+          )}
         </div>
       </CardHeader>
-      <CardContent className='grid min-w-0 gap-4 p-5'>{children}</CardContent>
+      <CardContent className='grid min-w-0 gap-4 p-4 sm:px-5'>
+        {children}
+      </CardContent>
     </Card>
   )
 }

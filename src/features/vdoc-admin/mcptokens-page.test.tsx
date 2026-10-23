@@ -73,8 +73,27 @@ async function refresh(client: QueryClient) {
   })
 }
 
+async function expectRedactedAcrossTasks({
+  user,
+  screen,
+}: Pick<ReturnType<typeof setup>, 'user' | 'screen'>) {
+  expect(screen.container.textContent).not.toContain(secret)
+  expect(
+    screen.queryByRole('button', { name: 'Copy token' })
+  ).not.toBeInTheDocument()
+  await user.click(
+    screen.getByRole('tab', { name: 'MCP client configuration' })
+  )
+  expect(screen.container.textContent).not.toContain(secret)
+  expect(screen.container.textContent).toContain('<YOUR_ACTIVE_VDOC_TOKEN>')
+  await user.click(screen.getByRole('tab', { name: 'Recent Agent activity' }))
+  expect(screen.container.textContent).not.toContain(secret)
+  await user.click(screen.getByRole('tab', { name: 'MCP Tokens' }))
+  expect(screen.container.textContent).not.toContain(secret)
+}
+
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   api.listMCPTokens.mockResolvedValue({ items: [token], total: 1 })
   api.listMCPUsage.mockResolvedValue({ items: [], total: 0 })
   api.getMCPToken.mockResolvedValue({ ...token, token: secret })
@@ -98,15 +117,15 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
 
       api.listMCPTokens.mockResolvedValue({ items, total: items.length })
       await user.click(
+        screen.getByRole('tab', { name: 'Recent Agent activity' })
+      )
+      await user.click(
         screen.getByRole('button', { name: 'Refresh connection evidence' })
       )
       await waitFor(() =>
         expect(screen.container.textContent).not.toContain(secret)
       )
-      expect(
-        screen.queryByRole('button', { name: 'Copy token' })
-      ).not.toBeInTheDocument()
-      expect(screen.container.textContent).toContain('<YOUR_ACTIVE_VDOC_TOKEN>')
+      await expectRedactedAcrossTasks({ user, screen })
       if (items.length) {
         expect(screen.container.textContent).toContain(
           `"status": ${items[0].status}`
@@ -117,7 +136,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
 
       api.listMCPTokens.mockResolvedValue({ items: [token], total: 1 })
       await refresh(client)
-      expect(screen.container.textContent).not.toContain(secret)
+      await expectRedactedAcrossTasks({ user, screen })
     }
   )
 
@@ -151,6 +170,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
     await user.click(await screen.findByRole('button', { name: 'View' }))
     await waitFor(() => expect(screen.container.textContent).toContain(secret))
     api.listMCPTokens.mockReturnValueOnce(pending.promise)
+    await user.click(screen.getByRole('tab', { name: 'Recent Agent activity' }))
     await user.click(
       screen.getByRole('button', { name: 'Refresh connection evidence' })
     )
@@ -189,10 +209,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
         await reveal.promise
       })
 
-      expect(screen.container.textContent).not.toContain(secret)
-      expect(
-        screen.queryByRole('button', { name: 'Copy token' })
-      ).not.toBeInTheDocument()
+      await expectRedactedAcrossTasks({ user, screen })
     }
   )
 
@@ -227,7 +244,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       await waitFor(() =>
         expect(screen.container.textContent).toContain(`"status": ${status}`)
       )
-      expect(screen.container.textContent).not.toContain(secret)
+      await expectRedactedAcrossTasks({ user, screen })
     }
   )
 
@@ -270,6 +287,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       expect(api.revokeMCPToken).toHaveBeenCalledWith(token.id)
     )
     expect(screen.container.textContent).not.toContain(secret)
+    await expectRedactedAcrossTasks({ user, screen })
   })
 
   it('preserves a newly created secret through an older in-flight list request', async () => {
@@ -279,9 +297,11 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
     const { user, client, screen } = setup()
     await screen.findByRole('button', { name: 'View' })
     api.listMCPTokens.mockReturnValueOnce(pending.promise)
+    await user.click(screen.getByRole('tab', { name: 'Recent Agent activity' }))
     await user.click(
       screen.getByRole('button', { name: 'Refresh connection evidence' })
     )
+    await user.click(screen.getByRole('tab', { name: 'MCP Tokens' }))
     api.listMCPTokens.mockResolvedValue({ items: [token, newToken], total: 2 })
     await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
     await user.type(screen.getByLabelText('Name'), newToken.name)
@@ -375,13 +395,7 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
         expect(screen.container.textContent).toContain(secret)
         expect(screen.getByRole('button', { name: 'Copy token' })).toBeEnabled()
       } else {
-        expect(screen.container.textContent).not.toContain(secret)
-        expect(
-          screen.queryByRole('button', { name: 'Copy token' })
-        ).not.toBeInTheDocument()
-        expect(screen.container.textContent).toContain(
-          '<YOUR_ACTIVE_VDOC_TOKEN>'
-        )
+        await expectRedactedAcrossTasks({ user, screen })
         expect(screen.container.textContent).toContain(
           `"status": ${listedToken?.status}`
         )

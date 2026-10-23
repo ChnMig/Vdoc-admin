@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
 import { userPasswordError } from '@/lib/user-password'
@@ -10,6 +10,7 @@ import {
   revokeUserMCPToken,
 } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -53,6 +54,7 @@ export function UsersPage() {
     enabled: isSuperAdmin,
   })
   const [selectedUserId, setSelectedUserId] = useState('')
+  const tokenButtonsRef = useRef(new Map<string, HTMLButtonElement>())
   const selectedUser = usersQuery.data?.items.find(
     (user) => user.id === selectedUserId
   )
@@ -161,17 +163,31 @@ export function UsersPage() {
             </TableHeader>
             <TableBody>
               {usersQuery.data.items.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow
+                  key={user.id}
+                  data-state={
+                    selectedUserId === user.id ? 'selected' : undefined
+                  }
+                >
                   <TableCell>
-                    <button
-                      type='button'
-                      className='text-start font-medium underline-offset-4 hover:underline'
-                      onClick={() => setSelectedUserId(user.id)}
-                    >
-                      {user.email}
-                    </button>
-                    <div className='text-xs text-muted-foreground'>
-                      {user.name}
+                    <div className='font-medium'>{user.email}</div>
+                    <div className='mt-1 flex items-center gap-3 text-xs'>
+                      <span className='text-muted-foreground'>{user.name}</span>
+                      <Button
+                        ref={(button) => {
+                          if (button)
+                            tokenButtonsRef.current.set(user.id, button)
+                          else tokenButtonsRef.current.delete(user.id)
+                        }}
+                        type='button'
+                        variant='link'
+                        size='sm'
+                        className='h-auto min-h-6 p-0 text-xs'
+                        aria-pressed={selectedUserId === user.id}
+                        onClick={() => setSelectedUserId(user.id)}
+                      >
+                        {t('admin.actions.viewUserTokens')}
+                      </Button>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -256,36 +272,43 @@ export function UsersPage() {
           <EmptyState preset='users' />
         )}
       </CollectionCard>
-      <TokenTable
-        title={t('admin.sections.userTokens')}
-        description={selectedUser?.email ?? t('admin.placeholders.selectUser')}
-        tokens={userTokenQuery.data?.items ?? []}
-        emptyPreset='userTokens'
-        emptyContent={
-          selectedUserId ? (
+      {selectedUser && (
+        <TokenTable
+          title={t('admin.sections.userTokens')}
+          description={selectedUser.email}
+          actions={
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={() => {
+                setSelectedUserId('')
+                tokenButtonsRef.current.get(selectedUserId)?.focus()
+              }}
+            >
+              {t('admin.actions.hideUserTokens')}
+            </Button>
+          }
+          tokens={userTokenQuery.data?.items ?? []}
+          emptyPreset='userTokens'
+          emptyContent={
             <p role='status' className='text-sm text-muted-foreground'>
-              {t('admin.userTokens.noneIssued', {
-                user: selectedUser?.email ?? selectedUserId,
-              })}
+              {t('admin.userTokens.noneIssued', { user: selectedUser.email })}
             </p>
-          ) : undefined
-        }
-        queryState={
-          selectedUserId
-            ? {
-                isLoading: userTokenQuery.isLoading,
-                isError: userTokenQuery.isError,
-                error: userTokenQuery.error,
-              }
-            : undefined
-        }
-        onRetry={() => void userTokenQuery.refetch()}
-        refreshing={userTokenQuery.isFetching}
-        onRevoke={(tokenId) =>
-          revokeMutation.mutateAsync({ userId: selectedUserId, tokenId })
-        }
-        pending={revokeMutation.isPending}
-      />
+          }
+          queryState={{
+            isLoading: userTokenQuery.isLoading,
+            isError: userTokenQuery.isError,
+            error: userTokenQuery.error,
+          }}
+          onRetry={() => void userTokenQuery.refetch()}
+          refreshing={userTokenQuery.isFetching}
+          onRevoke={(tokenId) =>
+            revokeMutation.mutateAsync({ userId: selectedUserId, tokenId })
+          }
+          pending={revokeMutation.isPending}
+        />
+      )}
     </PageChrome>
   )
 }

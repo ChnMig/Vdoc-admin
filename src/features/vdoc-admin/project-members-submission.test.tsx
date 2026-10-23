@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { selectOption } from '@/test/select-option'
 import {
   act,
   cleanup,
@@ -123,7 +124,7 @@ afterEach(() => {
   useAuthStore.getState().auth.reset()
   vi.resetAllMocks()
 })
-async function page(mutationError?: (error: Error) => void) {
+async function page(mutationError?: (error: Error) => void, openMember = true) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Infinity },
@@ -140,24 +141,28 @@ async function page(mutationError?: (error: Error) => void) {
     </QueryClientProvider>
   )
   await view.findByRole('combobox', { name: 'Role: existing@example.test' })
+  const user = userEvent.setup()
+  if (openMember)
+    await user.click(view.getByRole('button', { name: 'Add member' }))
   const candidateSelect = () =>
     view
       .getAllByRole('combobox', { name: 'User' })
-      .find((e) => (e as HTMLSelectElement).name === 'user_id')!
+      .find((e) => e.getAttribute('name') === 'user_id')!
   const memberForm = () => candidateSelect().closest('form')!
-  return { view, client, user: userEvent.setup(), candidateSelect, memberForm }
+  return { view, client, user, candidateSelect, memberForm }
 }
 describe('project member submission ownership', () => {
   it.each(['unchanged', 'new-role', 'restored-role', 'new-user'])(
-    'resets only unchanged input in its own project: %s',
+    'closes only an unchanged submission in its own project: %s',
     async (scenario) => {
       const pending = deferred<unknown>()
       api.addProjectMember.mockReturnValue(pending.promise)
       const { view, user, candidateSelect, memberForm } = await page()
-      await user.selectOptions(candidateSelect(), 'candidate')
-      await user.selectOptions(
+      await selectOption(candidateSelect(), 'candidate', user)
+      await selectOption(
         within(memberForm()).getByRole('combobox', { name: 'Role' }),
-        '2'
+        '2',
+        user
       )
       fireEvent.submit(memberForm())
       await waitFor(() =>
@@ -167,18 +172,27 @@ describe('project member submission ownership', () => {
         })
       )
       if (scenario === 'new-role' || scenario === 'restored-role')
-        await user.selectOptions(
+        await selectOption(
           within(memberForm()).getByRole('combobox', { name: 'Role' }),
-          '3'
+          '3',
+          user
         )
       if (scenario === 'restored-role')
-        await user.selectOptions(
+        await selectOption(
           within(memberForm()).getByRole('combobox', { name: 'Role' }),
-          '2'
+          '2',
+          user
         )
       if (scenario === 'new-user')
-        await user.selectOptions(candidateSelect(), 'candidate-2')
+        await selectOption(candidateSelect(), 'candidate-2', user)
       await act(async () => pending.resolve({}))
+      if (scenario === 'unchanged') {
+        await waitFor(() =>
+          expect(view.queryByRole('dialog')).not.toBeInTheDocument()
+        )
+        await user.click(view.getByRole('button', { name: 'Add member' }))
+        expect(candidateSelect()).toHaveValue('')
+      }
       await waitFor(() =>
         expect(view.getByRole('button', { name: 'Add' })).toBeEnabled()
       )
@@ -198,10 +212,11 @@ describe('project member submission ownership', () => {
       const pending = deferred<unknown>()
       api.addProjectMember.mockReturnValue(pending.promise)
       const { view, user, candidateSelect, memberForm } = await page()
-      await user.selectOptions(candidateSelect(), 'candidate')
-      await user.selectOptions(
+      await selectOption(candidateSelect(), 'candidate', user)
+      await selectOption(
         within(memberForm()).getByRole('combobox', { name: 'Role' }),
-        '2'
+        '2',
+        user
       )
       const submittedForm = memberForm()
       fireEvent.submit(submittedForm)
@@ -211,33 +226,24 @@ describe('project member submission ownership', () => {
           role: 2,
         })
       )
-      await user.selectOptions(
-        view.getByRole('combobox', { name: 'Project' }),
-        'b'
-      )
+      act(() => useVdocContextStore.getState().setProjectId('b'))
       if (scenario === 'returned-project')
-        await user.selectOptions(
-          view.getByRole('combobox', { name: 'Project' }),
-          'a'
-        )
-      expect(memberForm()).not.toBe(submittedForm)
-      await user.selectOptions(candidateSelect(), 'candidate-2')
-      await user.selectOptions(
-        within(memberForm()).getByRole('combobox', { name: 'Role' }),
-        '3'
-      )
+        act(() => useVdocContextStore.getState().setProjectId('a'))
+      expect(view.queryByRole('dialog')).not.toBeInTheDocument()
       await act(async () => {
         if (scenario === 'failure')
           pending.reject(new Error('Private Project A error'))
         else pending.resolve({})
       })
       await waitFor(() =>
-        expect(view.getByRole('button', { name: 'Add' })).toBeEnabled()
+        expect(view.getByRole('button', { name: 'Add member' })).toBeEnabled()
       )
+      await user.click(view.getByRole('button', { name: 'Add member' }))
+      expect(memberForm()).not.toBe(submittedForm)
       expect(
         within(memberForm()).getByRole('combobox', { name: 'Role' })
-      ).toHaveValue('3')
-      expect(candidateSelect()).toHaveValue('candidate-2')
+      ).toHaveValue('1')
+      expect(candidateSelect()).toHaveValue('')
       expect(
         view.queryByText('Private Project A error')
       ).not.toBeInTheDocument()
@@ -247,10 +253,11 @@ describe('project member submission ownership', () => {
   it('keeps current-project errors recoverable without clearing the edit', async () => {
     api.addProjectMember.mockRejectedValueOnce(new Error('Cannot add member'))
     const { view, user, candidateSelect, memberForm } = await page()
-    await user.selectOptions(candidateSelect(), 'candidate')
-    await user.selectOptions(
+    await selectOption(candidateSelect(), 'candidate', user)
+    await selectOption(
       within(memberForm()).getByRole('combobox', { name: 'Role' }),
-      '2'
+      '2',
+      user
     )
     fireEvent.submit(memberForm())
     expect(await view.findByText('Cannot add member')).toBeInTheDocument()
@@ -264,9 +271,7 @@ describe('project member submission ownership', () => {
       expect(view.queryByText('Cannot add member')).not.toBeInTheDocument()
     )
     await waitFor(() =>
-      expect(
-        within(memberForm()).getByRole('combobox', { name: 'Role' })
-      ).toHaveValue('1')
+      expect(view.queryByRole('dialog')).not.toBeInTheDocument()
     )
   })
 
@@ -274,7 +279,7 @@ describe('project member submission ownership', () => {
     const pending = deferred<unknown>()
     api.addProjectMember.mockReturnValue(pending.promise)
     const { candidateSelect, memberForm, user } = await page()
-    await user.selectOptions(candidateSelect(), 'candidate')
+    await selectOption(candidateSelect(), 'candidate', user)
     fireEvent.submit(memberForm())
     fireEvent.submit(memberForm())
     await waitFor(() => expect(api.addProjectMember).toHaveBeenCalledOnce())
@@ -284,7 +289,7 @@ describe('project member submission ownership', () => {
   it('discards an old submission before dispatch when the session changes', async () => {
     api.addProjectMember.mockResolvedValue({})
     const { candidateSelect, memberForm, user } = await page()
-    await user.selectOptions(candidateSelect(), 'candidate')
+    await selectOption(candidateSelect(), 'candidate', user)
     await act(async () => {
       fireEvent.submit(memberForm())
       useAuthStore
@@ -301,7 +306,7 @@ describe('project member submission ownership', () => {
     const mutationError = vi.fn()
     const { view, candidateSelect, memberForm, user } =
       await page(mutationError)
-    await user.selectOptions(candidateSelect(), 'candidate')
+    await selectOption(candidateSelect(), 'candidate', user)
     fireEvent.submit(memberForm())
     await waitFor(() => expect(api.addProjectMember).toHaveBeenCalledOnce())
     act(() =>
@@ -311,33 +316,34 @@ describe('project member submission ownership', () => {
     )
     await act(async () => pending.reject(new Error('Private Alice failure')))
     await waitFor(() =>
-      expect(view.getByRole('button', { name: 'Add' })).toBeEnabled()
+      expect(view.getByRole('button', { name: 'Add member' })).toBeEnabled()
     )
     expect(view.queryByText('Private Alice failure')).not.toBeInTheDocument()
     expect(mutationError).not.toHaveBeenCalled()
   })
 
   it('does not carry unsaved role edits into another project with the same member', async () => {
-    const { view, user } = await page()
-    await user.selectOptions(
+    const { view, user } = await page(undefined, false)
+    await selectOption(
       view.getByRole('combobox', { name: 'Role: existing@example.test' }),
-      '1'
+      '1',
+      user
     )
-    await user.selectOptions(
+    await selectOption(
       view.getByRole('combobox', { name: 'Project' }),
-      'b'
+      'b',
+      user
     )
     const role = view.getByRole('combobox', {
       name: 'Role: existing@example.test',
     })
+    const memberRow = role.closest('tr')!
     expect(role).toHaveValue('2')
     expect(
-      within(role.parentElement!).queryByRole('button', { name: 'Save' })
+      within(memberRow).queryByRole('button', { name: 'Save' })
     ).not.toBeInTheDocument()
-    await user.selectOptions(role, '1')
-    await user.click(
-      within(role.parentElement!).getByRole('button', { name: 'Save' })
-    )
+    await selectOption(role, '1', user)
+    await user.click(within(memberRow).getByRole('button', { name: 'Save' }))
     await user.click(
       within(await view.findByRole('alertdialog')).getByRole('button', {
         name: 'Save',

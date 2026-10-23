@@ -21,6 +21,7 @@ import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -29,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DateTimePickerField } from '@/components/date-time-picker'
 import { MCPClientConfig } from './mcp-client-config'
 import {
   PageChrome,
@@ -376,18 +379,20 @@ export function MCPTokensPage({
           <AlertTitle>{t('admin.token.secretAvailable')}</AlertTitle>
           <AlertDescription className='grid gap-3'>
             <p>{t('admin.token.secretGuidance')}</p>
-            <code className='mt-2 block min-w-0 rounded-md border bg-muted p-3 text-xs break-all'>
-              {visibleToken}
-            </code>
-            <Button
-              type='button'
-              variant='outline'
-              className='w-fit'
-              onClick={() => void copyVisibleToken()}
-            >
-              <Copy className='size-4' />
-              {t('admin.token.copy')}
-            </Button>
+            <div className='grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_auto]'>
+              <code className='block min-w-0 rounded-md border bg-muted p-3 text-xs break-all'>
+                {visibleToken}
+              </code>
+              <Button
+                type='button'
+                variant='outline'
+                className='w-fit'
+                onClick={() => void copyVisibleToken()}
+              >
+                <Copy className='size-4' />
+                {t('admin.token.copy')}
+              </Button>
+            </div>
             {copyStatus && (
               <p
                 role='status'
@@ -427,172 +432,212 @@ export function MCPTokensPage({
             <AlertDescription>{revokeMutation.error.message}</AlertDescription>
           </Alert>
         )}
-      <TokenTable
-        actions={
-          <FormDialog
-            title={t('admin.sections.createToken')}
-            submitLabel={t('admin.common.create')}
-            pending={createMutation.isPending}
-            onSubmit={(formData) => {
-              const scopes = formData.getAll('scopes').map(Number)
-              if (scopes.length === 0) {
-                throw new Error(t('admin.token.scopeRequired'))
-              }
-              const expiry = optionalFieldValue(formData, 'expires_at')
-              if (expiry) {
-                const expiresAt = Date.parse(expiry)
-                if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-                  throw new Error(t('admin.token.futureExpiryRequired'))
-                }
-              }
+      <Tabs defaultValue='tokens' className='min-w-0 gap-5'>
+        <TabsList
+          aria-label={t('nav.mcpTokens')}
+          className='h-auto w-full justify-start overflow-x-auto rounded-none border-b bg-transparent p-0'
+        >
+          {(
+            [
+              ['tokens', 'nav.mcpTokens'],
+              ['config', 'admin.token.configTitle'],
+              ['activity', 'admin.token.activityTitle'],
+            ] as const
+          ).map(([value, label]) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className='min-h-11 flex-none shrink-0 rounded-none border-0 border-b-2 border-transparent px-3 py-3 text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-primary dark:data-[state=active]:bg-transparent'
+            >
+              {t(label)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value='tokens' className='grid min-w-0 gap-5'>
+          <TokenTable
+            actions={
+              <FormDialog
+                title={t('admin.sections.createToken')}
+                submitLabel={t('admin.common.create')}
+                pending={createMutation.isPending}
+                onSubmit={(formData) => {
+                  const scopes = formData.getAll('scopes').map(Number)
+                  if (scopes.length === 0) {
+                    throw new Error(t('admin.token.scopeRequired'))
+                  }
+                  const expiry = optionalFieldValue(formData, 'expires_at')
+                  if (expiry) {
+                    const expiresAt = Date.parse(expiry)
+                    if (
+                      !Number.isFinite(expiresAt) ||
+                      expiresAt <= Date.now()
+                    ) {
+                      throw new Error(t('admin.token.futureExpiryRequired'))
+                    }
+                  }
+                  const requestId = beginTokenOperation()
+                  return createMutation.mutateAsync({
+                    requestId,
+                    payload: {
+                      name: fieldValue(formData, 'name'),
+                      scopes,
+                      expires_at: expiry
+                        ? new Date(expiry).toISOString()
+                        : null,
+                    },
+                  })
+                }}
+              >
+                <div className='grid gap-4'>
+                  <TextField
+                    label={t('admin.fields.name')}
+                    name='name'
+                    required
+                  />
+                  <DateTimePickerField
+                    label={t('admin.fields.expiresAt')}
+                    name='expires_at'
+                    description={t('admin.token.expiryHint')}
+                  />
+                </div>
+                <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
+                  <legend className='px-2 text-sm font-medium'>
+                    {t('admin.token.scopesTitle')}
+                  </legend>
+                  {[
+                    [1, t('admin.token.apiRead')],
+                    [2, t('admin.token.apiDraft')],
+                    [3, t('admin.token.docRead')],
+                    [4, t('admin.token.docDraft')],
+                  ].map(([scope, label]) => (
+                    <label
+                      key={String(scope)}
+                      className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
+                    >
+                      <Checkbox
+                        name='scopes'
+                        value={String(scope)}
+                        defaultChecked={scope === 1}
+                        className='mt-0.5 rounded-sm'
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              </FormDialog>
+            }
+            tokens={tokensQuery.data?.items ?? []}
+            selected={selectedTokenId}
+            pending={revokeMutation.isPending}
+            onView={(tokenId) => {
+              activeTokenSelectionRef.current = tokenId
+              onSearchChange?.({ token_id: tokenId })
+              latestTokenCopyRequestId.current += 1
+              clearTokenInteraction()
+              revokeMutation.reset()
+              getMutation.reset()
               const requestId = beginTokenOperation()
-              return createMutation.mutateAsync({
+              pendingRevealTokenRef.current = tokenId
+              getMutation.mutate({
+                tokenId,
                 requestId,
-                payload: {
-                  name: fieldValue(formData, 'name'),
-                  scopes,
-                  expires_at: expiry ? new Date(expiry).toISOString() : null,
-                },
+                listUpdateCount:
+                  queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ??
+                  0,
               })
             }}
-          >
-            <div className='grid gap-4'>
-              <TextField label={t('admin.fields.name')} name='name' required />
-              <TextField
-                label={t('admin.fields.expiresAt')}
-                name='expires_at'
-                type='datetime-local'
-                description={t('admin.token.expiryHint')}
-              />
-            </div>
-            <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
-              <legend className='px-2 text-sm font-medium'>
-                {t('admin.token.scopesTitle')}
-              </legend>
-              {[
-                [1, t('admin.token.apiRead')],
-                [2, t('admin.token.apiDraft')],
-                [3, t('admin.token.docRead')],
-                [4, t('admin.token.docDraft')],
-              ].map(([scope, label]) => (
-                <label
-                  key={String(scope)}
-                  className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
-                >
-                  <input
-                    type='checkbox'
-                    name='scopes'
-                    value={String(scope)}
-                    defaultChecked={scope === 1}
-                    className='mt-0.5 size-4 accent-primary'
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </fieldset>
-          </FormDialog>
-        }
-        tokens={tokensQuery.data?.items ?? []}
-        selected={selectedTokenId}
-        pending={revokeMutation.isPending}
-        onView={(tokenId) => {
-          activeTokenSelectionRef.current = tokenId
-          onSearchChange?.({ token_id: tokenId })
-          latestTokenCopyRequestId.current += 1
-          clearTokenInteraction()
-          revokeMutation.reset()
-          getMutation.reset()
-          const requestId = beginTokenOperation()
-          pendingRevealTokenRef.current = tokenId
-          getMutation.mutate({
-            tokenId,
-            requestId,
-            listUpdateCount:
-              queryClient.getQueryState(['mcp-tokens'])?.dataUpdateCount ?? 0,
-          })
-        }}
-        onRevoke={async (tokenId) => {
-          activeTokenSelectionRef.current = tokenId
-          onSearchChange?.({ token_id: tokenId })
-          const requestId = beginTokenOperation()
-          pendingRevealTokenRef.current = undefined
-          latestTokenCopyRequestId.current += 1
-          clearTokenInteraction()
-          getMutation.reset()
-          revokeMutation.reset()
-          await revokeMutation.mutateAsync({ tokenId, requestId })
-        }}
-      />
-      <Alert>
-        <ShieldCheck />
-        <AlertTitle>
-          {t(
-            connectedToken
-              ? 'admin.token.connectionVerifiedTitle'
-              : 'admin.token.connectionPendingTitle'
-          )}
-        </AlertTitle>
-        <AlertDescription className='grid gap-3'>
-          <p>
-            {connectedToken
-              ? t('admin.token.connectionVerifiedDescription', {
-                  name: connectedToken.name,
-                  time: formatDate(publishedReadEvidence?.created_at),
-                  tool:
-                    publishedReadEvidence?.metadata.tool_name ??
-                    t('admin.common.unknown'),
-                  target: mcpUsageTarget(publishedReadEvidence),
-                })
-              : t('admin.token.connectionPendingDescription')}
-          </p>
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='w-fit'
-            disabled={
-              tokensQuery.isFetching || (canLoadUsage && usageQuery.isFetching)
-            }
-            onClick={() => {
-              void tokensQuery.refetch()
-              if (canLoadUsage) void usageQuery.refetch()
+            onRevoke={async (tokenId) => {
+              activeTokenSelectionRef.current = tokenId
+              onSearchChange?.({ token_id: tokenId })
+              const requestId = beginTokenOperation()
+              pendingRevealTokenRef.current = undefined
+              latestTokenCopyRequestId.current += 1
+              clearTokenInteraction()
+              getMutation.reset()
+              revokeMutation.reset()
+              await revokeMutation.mutateAsync({ tokenId, requestId })
             }}
+          />
+          {selectedToken && (
+            <details className='min-w-0 rounded-lg border bg-card'>
+              <summary className='cursor-pointer rounded-lg px-5 py-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                {t('admin.sections.tokenDetails')}
+              </summary>
+              <pre className='max-h-[32rem] overflow-auto border-t p-5 text-xs leading-relaxed'>
+                {stringify(tokenDetails(selectedToken))}
+              </pre>
+            </details>
+          )}
+        </TabsContent>
+        <TabsContent value='activity' className='grid min-w-0 gap-5'>
+          <section className='flex min-w-0 flex-wrap items-start gap-3 rounded-lg border bg-card p-5'>
+            <ShieldCheck
+              className='mt-0.5 size-4 shrink-0 text-muted-foreground'
+              aria-hidden
+            />
+            <div className='min-w-0 flex-1 basis-64 space-y-1'>
+              <h2 className='text-sm font-medium'>
+                {t(
+                  connectedToken
+                    ? 'admin.token.connectionVerifiedTitle'
+                    : 'admin.token.connectionPendingTitle'
+                )}
+              </h2>
+              <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
+                {connectedToken
+                  ? t('admin.token.connectionVerifiedDescription', {
+                      name: connectedToken.name,
+                      time: formatDate(publishedReadEvidence?.created_at),
+                      tool:
+                        publishedReadEvidence?.metadata.tool_name ??
+                        t('admin.common.unknown'),
+                      target: mcpUsageTarget(publishedReadEvidence),
+                    })
+                  : t('admin.token.connectionPendingDescription')}
+              </p>
+            </div>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              className='w-fit'
+              disabled={
+                tokensQuery.isFetching ||
+                (canLoadUsage && usageQuery.isFetching)
+              }
+              onClick={() => {
+                void tokensQuery.refetch()
+                if (canLoadUsage) void usageQuery.refetch()
+              }}
+            >
+              <RefreshCw />
+              {t('admin.token.refreshConnectionEvidence')}
+            </Button>
+          </section>
+          <CollectionCard
+            title={t('admin.token.activityTitle')}
+            description={t('admin.token.activityDescription')}
+            count={usageQuery.data?.total ?? 0}
           >
-            <RefreshCw />
-            {t('admin.token.refreshConnectionEvidence')}
-          </Button>
-        </AlertDescription>
-      </Alert>
-      <CollectionCard
-        title={t('admin.token.activityTitle')}
-        description={t('admin.token.activityDescription')}
-        count={usageQuery.data?.total ?? 0}
-      >
-        {usageQuery.data?.items.length ? (
-          <MCPUsageTable logs={usageQuery.data.items} />
-        ) : (
-          <EmptyState />
-        )}
-      </CollectionCard>
-      {selectedToken && (
-        <details className='min-w-0 rounded-lg border bg-card'>
-          <summary className='cursor-pointer rounded-lg px-5 py-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
-            {t('admin.sections.tokenDetails')}
-          </summary>
-          <pre className='max-h-[32rem] overflow-auto border-t p-5 text-xs leading-relaxed'>
-            {stringify(tokenDetails(selectedToken))}
-          </pre>
-        </details>
-      )}
-      <CollectionCard
-        title={t('admin.token.configTitle')}
-        description={t('admin.token.configDescription')}
-      >
-        <MCPClientConfig
-          baseUrl={apiBaseUrl}
-          token={visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>'}
-        />
-      </CollectionCard>
+            {usageQuery.data?.items.length ? (
+              <MCPUsageTable logs={usageQuery.data.items} />
+            ) : (
+              <EmptyState />
+            )}
+          </CollectionCard>
+        </TabsContent>
+        <TabsContent value='config' className='min-w-0'>
+          <CollectionCard
+            title={t('admin.token.configTitle')}
+            description={t('admin.token.configDescription')}
+          >
+            <MCPClientConfig
+              baseUrl={apiBaseUrl}
+              token={visibleToken || '<YOUR_ACTIVE_VDOC_TOKEN>'}
+            />
+          </CollectionCard>
+        </TabsContent>
+      </Tabs>
     </PageChrome>
   )
 }

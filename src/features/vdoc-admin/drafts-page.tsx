@@ -46,10 +46,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { AIContextPanel } from './ai-panels'
 import { useDraftEditorState } from './draft-editor-state'
+import { DraftFileField } from './draft-file-field'
 import { MarkdownPreview } from './markdown-preview'
 import {
   PageChrome,
@@ -61,7 +63,6 @@ import {
   CollectionCard,
   DiffSummaryCards,
   DiffReviewList,
-  ContentViewer,
   LoadingErrorState,
   StatusBadge,
   EmptyState,
@@ -156,7 +157,8 @@ function TextAreaField({
           onChange ? (event) => onChange(event.currentTarget.value) : undefined
         }
         disabled={disabled}
-        className='min-h-32 font-mono'
+        rows={18}
+        className='field-sizing-fixed min-h-72 resize-y font-mono text-sm leading-6'
       />
     </div>
   )
@@ -268,6 +270,19 @@ export function DraftsPage({
     search?.draft_id,
     onSearchChange !== undefined
   )
+  const [workspaceTab, setWorkspaceTab] = useState({
+    context: '',
+    value: 'workspace',
+  })
+  const workspaceTabTriggerRef = useRef<HTMLButtonElement>(null)
+  const workspaceContext = JSON.stringify([
+    projectId,
+    documentId,
+    branchFilter,
+    draftId,
+  ])
+  const activeWorkspaceTab =
+    workspaceTab.context === workspaceContext ? workspaceTab.value : 'workspace'
   const [contentKind, setContentKind] = useState('raw')
   const [reviewNote, setReviewNote] = useState('')
   const [pendingReviewAction, setPendingReviewAction] = useState<{
@@ -491,6 +506,7 @@ export function DraftsPage({
     },
   })
   const handleProjectChange = (value: string) => {
+    setWorkspaceTab({ context: workspaceContext, value: 'workspace' })
     setDraftId('')
     setBranchFilter('')
     setContentKind('raw')
@@ -501,6 +517,7 @@ export function DraftsPage({
     setProjectId(value)
   }
   const handleDocumentChange = (value: string) => {
+    setWorkspaceTab({ context: workspaceContext, value: 'workspace' })
     setDraftId('')
     setBranchFilter('')
     setContentKind('raw')
@@ -511,6 +528,7 @@ export function DraftsPage({
     setDocumentId(value)
   }
   const handleDraftSelect = (value: string) => {
+    setWorkspaceTab({ context: workspaceContext, value: 'workspace' })
     setDraftId(value)
     setReviewNote('')
     setPendingReviewAction(undefined)
@@ -612,157 +630,6 @@ export function DraftsPage({
           }
         />
       </SelectorGrid>
-      {canDraftForRole && (
-        <DraftEditorCard
-          contextKey={`${authUser?.id ?? ''}:${projectId}:${documentId}:${draftId || 'new'}`}
-          selectedDraft={selectedDraft}
-          snapshotDraft={editorRawContentQuery.data?.draft}
-          rawContent={editorRawContentQuery.data?.content}
-          rawContentState={{
-            isLoading: editorRawContentQuery.isLoading,
-            isError: editorRawContentQuery.isError,
-            error: editorRawContentQuery.error,
-          }}
-          branches={activeBranches}
-          contextActive={activeDocumentContext}
-          pending={createMutation.isPending || updateMutation.isPending}
-          onClear={() => handleDraftSelect('')}
-          onCreate={(payload) =>
-            createMutation.mutateAsync({ projectId, documentId, payload })
-          }
-          onUpdate={(id, payload) =>
-            updateMutation.mutateAsync({ projectId, documentId, id, payload })
-          }
-        />
-      )}
-      <section className='grid min-w-0 gap-4'>
-        <div className='grid gap-2'>
-          <Label htmlFor='draft-history-search'>
-            {t('admin.pagination.searchDrafts')}
-          </Label>
-          <Input
-            id='draft-history-search'
-            value={draftSearch}
-            onChange={(event) => setDraftSearch(event.currentTarget.value)}
-          />
-        </div>
-        <LoadingErrorState
-          state={{
-            isLoading: draftsQuery.isLoading,
-            isError: draftsQuery.isError,
-            error: draftsQuery.error,
-          }}
-        />
-        <DraftsTable
-          total={draftsQuery.data?.total ?? 0}
-          drafts={draftsQuery.data?.items ?? []}
-          selected={draftId}
-          onSelect={handleDraftSelect}
-          onAction={(id, action) =>
-            actionMutation.mutate({
-              projectId,
-              documentId,
-              draftId: id,
-              action,
-            })
-          }
-          canDraft={canDraft}
-          pending={actionMutation.isPending}
-          activeBranchIds={activeBranchIds}
-        />
-        <QueryPagination
-          label={t('admin.pagination.drafts')}
-          offset={draftOffset}
-          count={draftsQuery.data?.items.length ?? 0}
-          total={draftsQuery.data?.total}
-          hasMore={
-            draftOffset + (draftsQuery.data?.items.length ?? 0) <
-            (draftsQuery.data?.total ?? 0)
-          }
-          busy={draftsQuery.isFetching}
-          onPrevious={() => setDraftOffset(draftOffset - 50)}
-          onNext={() => setDraftOffset(draftOffset + 50)}
-        />
-      </section>
-      {canPublish && (
-        <>
-          <LoadingErrorState state={overviewQuery} />
-          {promotionAvailable ? (
-            <FormCard
-              title={t('admin.sections.promoteDraft')}
-              submitLabel={t('admin.common.createPromotionDraft')}
-              pending={promoteMutation.isPending}
-              submissionScope={JSON.stringify([
-                authSessionVersion,
-                authUser?.id,
-                projectId,
-                documentId,
-              ])}
-              onSubmit={(formData) =>
-                promoteMutation.mutateAsync({
-                  projectId,
-                  documentId,
-                  payload: {
-                    source_branch_id: fieldValue(formData, 'source_branch_id'),
-                    target_branch_id: fieldValue(formData, 'target_branch_id'),
-                    version_name: fieldValue(formData, 'version_name'),
-                    changelog: fieldValue(formData, 'changelog'),
-                  },
-                })
-              }
-              onSuccess={() => {
-                setPromoteSourceBranchId('')
-                setPromoteTargetBranchId('')
-              }}
-            >
-              <div className='grid gap-4 md:grid-cols-2'>
-                <NativeSelect
-                  name='source_branch_id'
-                  label={t('admin.fields.sourceBranch')}
-                  placeholder={t('admin.placeholders.selectPublishedBranch')}
-                  options={promoteSourceOptions}
-                  value={promoteSourceBranchId}
-                  onChange={(value) => {
-                    setPromoteSourceBranchId(value)
-                    setPromoteTargetBranchId('')
-                  }}
-                  required
-                />
-                <NativeSelect
-                  name='target_branch_id'
-                  label={t('admin.fields.targetBranch')}
-                  placeholder={t('admin.placeholders.selectBranch')}
-                  options={promoteTargetOptions}
-                  value={promoteTargetBranchId}
-                  onChange={setPromoteTargetBranchId}
-                  disabled={!promoteSourceBranchId}
-                  required
-                />
-                <TextField
-                  label={t('admin.fields.versionName')}
-                  name='version_name'
-                  required
-                />
-                <TextField
-                  label={t('admin.fields.changelog')}
-                  name='changelog'
-                />
-              </div>
-            </FormCard>
-          ) : (
-            !overviewQuery.isLoading &&
-            !overviewQuery.isError && (
-              <Alert>
-                <Route />
-                <AlertTitle>{t('admin.promote.unavailableTitle')}</AlertTitle>
-                <AlertDescription>
-                  {t('admin.promote.unavailableDescription')}
-                </AlertDescription>
-              </Alert>
-            )
-          )}
-        </>
-      )}
       {actionMutation.isError &&
         actionMutation.variables?.action === 'submit' && (
           <Alert variant='destructive' aria-live='polite'>
@@ -771,98 +638,380 @@ export function DraftsPage({
             <AlertDescription>{actionMutation.error.message}</AlertDescription>
           </Alert>
         )}
-      {selectedSnapshot?.review_comment && (
-        <Alert>
-          <BookOpenText />
-          <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
-          <AlertDescription>{selectedSnapshot.review_comment}</AlertDescription>
-        </Alert>
-      )}
-      {selectedSnapshot?.diff_preview && (
-        <CollectionCard
-          title={t('admin.sections.diffPreview')}
-          count={selectedSnapshot.diff_preview.items.length}
+      <Tabs
+        value={activeWorkspaceTab}
+        onValueChange={(value) =>
+          setWorkspaceTab({ context: workspaceContext, value })
+        }
+        className='min-w-0 gap-5'
+      >
+        <TabsList
+          aria-label={t('admin.draftEditor.workspace')}
+          className='h-auto max-w-full flex-wrap justify-start'
         >
-          <DiffSummaryCards
-            summary={selectedSnapshot.diff_preview.summary}
-            isMarkdown={
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+          <TabsTrigger ref={workspaceTabTriggerRef} value='workspace'>
+            {t('admin.draftEditor.workspace')}
+          </TabsTrigger>
+          <TabsTrigger value='history'>
+            {t('admin.draftEditor.history')}
+          </TabsTrigger>
+          <TabsTrigger value='ai'>{t('admin.ai.badge')}</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value='workspace'
+          forceMount
+          hidden={activeWorkspaceTab !== 'workspace'}
+          className='@container/draft-workspace min-w-0'
+        >
+          <div
+            className={
+              canDraftForRole &&
+              selectedDraft &&
+              (selectedDraft.status === DRAFT_STATUS_DRAFT ||
+                selectedDraft.status === DRAFT_STATUS_CHANGES_REQUESTED)
+                ? 'grid min-w-0 items-start gap-5 @4xl/draft-workspace:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]'
+                : 'grid min-w-0 items-start gap-5'
             }
+          >
+            <div className='grid min-w-0 gap-5'>
+              {canDraftForRole && (
+                <DraftEditorCard
+                  contextKey={`${authUser?.id ?? ''}:${projectId}:${documentId}:${draftId || 'new'}`}
+                  selectedDraft={selectedDraft}
+                  snapshotDraft={editorRawContentQuery.data?.draft}
+                  rawContent={editorRawContentQuery.data?.content}
+                  rawContentState={{
+                    isLoading: editorRawContentQuery.isLoading,
+                    isError: editorRawContentQuery.isError,
+                    error: editorRawContentQuery.error,
+                  }}
+                  branches={activeBranches}
+                  contextActive={activeDocumentContext}
+                  pending={createMutation.isPending || updateMutation.isPending}
+                  onClear={() => handleDraftSelect('')}
+                  onCreate={(payload) =>
+                    createMutation.mutateAsync({
+                      projectId,
+                      documentId,
+                      payload,
+                    })
+                  }
+                  onUpdate={(id, payload) =>
+                    updateMutation.mutateAsync({
+                      projectId,
+                      documentId,
+                      id,
+                      payload,
+                    })
+                  }
+                />
+              )}
+            </div>
+            {draftId && (
+              <div className='grid min-w-0 gap-5'>
+                {selectedSnapshot?.review_comment && (
+                  <Alert>
+                    <BookOpenText />
+                    <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
+                    <AlertDescription>
+                      {selectedSnapshot.review_comment}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {selectedSnapshot?.diff_preview && (
+                  <CollectionCard
+                    title={t('admin.sections.diffPreview')}
+                    count={selectedSnapshot.diff_preview.items.length}
+                  >
+                    <DiffSummaryCards
+                      summary={selectedSnapshot.diff_preview.summary}
+                      isMarkdown={
+                        selectedDocument?.document_type ===
+                        DOCUMENT_TYPE_MARKDOWN
+                      }
+                    />
+                    <DiffReviewList
+                      items={selectedSnapshot.diff_preview.items}
+                      isMarkdown={
+                        selectedDocument?.document_type ===
+                        DOCUMENT_TYPE_MARKDOWN
+                      }
+                    />
+                  </CollectionCard>
+                )}
+                <CollectionCard
+                  title={t('admin.sections.contentViewer')}
+                  description={t('admin.draftEditor.savedContent')}
+                >
+                  <Tabs
+                    key={`${projectId}:${documentId}:${draftId}`}
+                    defaultValue='source'
+                    className='@container/draft-content min-w-0 gap-4'
+                  >
+                    <div className='grid min-w-0 gap-3 @sm/draft-content:flex @sm/draft-content:items-end @sm/draft-content:justify-between'>
+                      {selectedDocument?.document_type ===
+                        DOCUMENT_TYPE_MARKDOWN && (
+                        <TabsList
+                          aria-label={t('admin.sections.contentViewer')}
+                        >
+                          <TabsTrigger value='source'>
+                            {t('admin.draftEditor.sourceView')}
+                          </TabsTrigger>
+                          <TabsTrigger value='preview'>
+                            {t('admin.draftEditor.renderedView')}
+                          </TabsTrigger>
+                        </TabsList>
+                      )}
+                      <div className='w-44 max-w-full'>
+                        <NativeSelect
+                          label={t('admin.fields.contentKind')}
+                          value={activeDraftContentKind}
+                          onChange={setContentKind}
+                          placeholder={t('admin.types.raw')}
+                          options={draftContentKindOptions}
+                        />
+                      </div>
+                    </div>
+                    <TabsContent value='source' className='min-w-0'>
+                      {selectedDraftContent ? (
+                        <pre className='max-h-[32rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
+                          {selectedDraftContent}
+                        </pre>
+                      ) : (
+                        <p className='text-sm text-muted-foreground'>
+                          {t('admin.common.empty')}
+                        </p>
+                      )}
+                    </TabsContent>
+                    {selectedDocument?.document_type ===
+                      DOCUMENT_TYPE_MARKDOWN && (
+                      <TabsContent
+                        value='preview'
+                        className='max-h-[32rem] min-w-0 overflow-auto [&>article]:rounded-none [&>article]:border-0 [&>article]:bg-transparent [&>article]:p-0 [&>article]:shadow-none'
+                      >
+                        {selectedDraftContent ? (
+                          <MarkdownPreview content={selectedDraftContent} />
+                        ) : (
+                          <p className='text-sm text-muted-foreground'>
+                            {t('admin.common.empty')}
+                          </p>
+                        )}
+                      </TabsContent>
+                    )}
+                  </Tabs>
+                </CollectionCard>
+                <LoadingErrorState state={contentQuery} />
+                {canPublish &&
+                  selectedDraft?.status === DRAFT_STATUS_SUBMITTED &&
+                  (!selectedSnapshot?.review_revision ||
+                    contentQuery.isError) && (
+                    <Alert aria-live='polite'>
+                      <AlertCircle />
+                      <AlertTitle>
+                        {t('admin.review.snapshotUnavailableTitle')}
+                      </AlertTitle>
+                      <AlertDescription>
+                        <p>
+                          {t('admin.review.snapshotUnavailableDescription')}
+                        </p>
+                        <Button
+                          type='button'
+                          variant='outline'
+                          disabled={contentQuery.isFetching}
+                          onClick={() => void contentQuery.refetch()}
+                        >
+                          {t('admin.review.reloadSnapshot')}
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                {canPublish && (
+                  <ReviewNotePanel
+                    selectedDraftName={selectedSnapshot?.version_name}
+                    value={reviewNote}
+                    onChange={setReviewNote}
+                    pending={actionMutation.isPending}
+                    reviewable={canReviewSelectedDraft}
+                    onReview={(action) => {
+                      if (!selectedSnapshot || !canReviewSelectedDraft) return
+                      actionMutation.reset()
+                      setPendingReviewAction({
+                        projectId,
+                        documentId,
+                        draftId: selectedSnapshot.id,
+                        draftName: selectedSnapshot.version_name,
+                        action,
+                        reviewRevision: selectedSnapshot.review_revision,
+                        comment: reviewNote.trim() || undefined,
+                      })
+                    }}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent
+          value='history'
+          forceMount
+          hidden={activeWorkspaceTab !== 'history'}
+          className='grid min-w-0 gap-5'
+        >
+          <section className='grid min-w-0 gap-4'>
+            <div className='grid gap-2'>
+              <Label htmlFor='draft-history-search'>
+                {t('admin.pagination.searchDrafts')}
+              </Label>
+              <Input
+                id='draft-history-search'
+                value={draftSearch}
+                onChange={(event) => setDraftSearch(event.currentTarget.value)}
+              />
+            </div>
+            <LoadingErrorState
+              state={{
+                isLoading: draftsQuery.isLoading,
+                isError: draftsQuery.isError,
+                error: draftsQuery.error,
+              }}
+            />
+            <DraftsTable
+              total={draftsQuery.data?.total ?? 0}
+              drafts={draftsQuery.data?.items ?? []}
+              selected={draftId}
+              onSelect={(value) => {
+                handleDraftSelect(value)
+                workspaceTabTriggerRef.current?.focus()
+              }}
+              onAction={(id, action) =>
+                actionMutation.mutate({
+                  projectId,
+                  documentId,
+                  draftId: id,
+                  action,
+                })
+              }
+              canDraft={canDraft}
+              pending={actionMutation.isPending}
+              activeBranchIds={activeBranchIds}
+            />
+            <QueryPagination
+              label={t('admin.pagination.drafts')}
+              offset={draftOffset}
+              count={draftsQuery.data?.items.length ?? 0}
+              total={draftsQuery.data?.total}
+              hasMore={
+                draftOffset + (draftsQuery.data?.items.length ?? 0) <
+                (draftsQuery.data?.total ?? 0)
+              }
+              busy={draftsQuery.isFetching}
+              onPrevious={() => setDraftOffset(draftOffset - 50)}
+              onNext={() => setDraftOffset(draftOffset + 50)}
+            />
+          </section>
+          {canPublish && (
+            <>
+              <LoadingErrorState state={overviewQuery} />
+              {promotionAvailable ? (
+                <FormCard
+                  title={t('admin.sections.promoteDraft')}
+                  submitLabel={t('admin.common.createPromotionDraft')}
+                  pending={promoteMutation.isPending}
+                  submissionScope={JSON.stringify([
+                    authSessionVersion,
+                    authUser?.id,
+                    projectId,
+                    documentId,
+                  ])}
+                  onSubmit={(formData) =>
+                    promoteMutation.mutateAsync({
+                      projectId,
+                      documentId,
+                      payload: {
+                        source_branch_id: fieldValue(
+                          formData,
+                          'source_branch_id'
+                        ),
+                        target_branch_id: fieldValue(
+                          formData,
+                          'target_branch_id'
+                        ),
+                        version_name: fieldValue(formData, 'version_name'),
+                        changelog: fieldValue(formData, 'changelog'),
+                      },
+                    })
+                  }
+                  onSuccess={() => {
+                    setPromoteSourceBranchId('')
+                    setPromoteTargetBranchId('')
+                  }}
+                >
+                  <div className='grid gap-4 md:grid-cols-2'>
+                    <NativeSelect
+                      name='source_branch_id'
+                      label={t('admin.fields.sourceBranch')}
+                      placeholder={t(
+                        'admin.placeholders.selectPublishedBranch'
+                      )}
+                      options={promoteSourceOptions}
+                      value={promoteSourceBranchId}
+                      onChange={(value) => {
+                        setPromoteSourceBranchId(value)
+                        setPromoteTargetBranchId('')
+                      }}
+                      required
+                    />
+                    <NativeSelect
+                      name='target_branch_id'
+                      label={t('admin.fields.targetBranch')}
+                      placeholder={t('admin.placeholders.selectBranch')}
+                      options={promoteTargetOptions}
+                      value={promoteTargetBranchId}
+                      onChange={setPromoteTargetBranchId}
+                      disabled={!promoteSourceBranchId}
+                      required
+                    />
+                    <TextField
+                      label={t('admin.fields.versionName')}
+                      name='version_name'
+                      required
+                    />
+                    <TextField
+                      label={t('admin.fields.changelog')}
+                      name='changelog'
+                    />
+                  </div>
+                </FormCard>
+              ) : (
+                !overviewQuery.isLoading &&
+                !overviewQuery.isError && (
+                  <Alert>
+                    <Route />
+                    <AlertTitle>
+                      {t('admin.promote.unavailableTitle')}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {t('admin.promote.unavailableDescription')}
+                    </AlertDescription>
+                  </Alert>
+                )
+              )}
+            </>
+          )}
+        </TabsContent>
+        <TabsContent
+          value='ai'
+          forceMount
+          hidden={activeWorkspaceTab !== 'ai'}
+          className='min-w-0'
+        >
+          <AIContextPanel
+            target={selectedDraftAITarget}
+            interactive={selectedDraftAIInteractive}
+            canRegenerate={canPublishForRole && selectedDraftAIInteractive}
           />
-          <DiffReviewList
-            items={selectedSnapshot.diff_preview.items}
-            isMarkdown={
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-            }
-          />
-        </CollectionCard>
-      )}
-      <SelectorGrid>
-        <NativeSelect
-          label={t('admin.fields.contentKind')}
-          value={activeDraftContentKind}
-          onChange={setContentKind}
-          placeholder={t('admin.types.raw')}
-          options={draftContentKindOptions}
-        />
-      </SelectorGrid>
-      <ContentViewer
-        title={t('admin.sections.contentViewer')}
-        content={selectedDraftContent}
-      />
-      <LoadingErrorState state={contentQuery} />
-      {canPublish &&
-        selectedDraft?.status === DRAFT_STATUS_SUBMITTED &&
-        (!selectedSnapshot?.review_revision || contentQuery.isError) && (
-          <Alert aria-live='polite'>
-            <AlertCircle />
-            <AlertTitle>
-              {t('admin.review.snapshotUnavailableTitle')}
-            </AlertTitle>
-            <AlertDescription>
-              <p>{t('admin.review.snapshotUnavailableDescription')}</p>
-              <Button
-                type='button'
-                variant='outline'
-                disabled={contentQuery.isFetching}
-                onClick={() => void contentQuery.refetch()}
-              >
-                {t('admin.review.reloadSnapshot')}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-      {selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN &&
-        selectedDraftContent && (
-          <MarkdownPreview content={selectedDraftContent} />
-        )}
-      <AIContextPanel
-        target={selectedDraftAITarget}
-        interactive={selectedDraftAIInteractive}
-        canRegenerate={canPublishForRole && selectedDraftAIInteractive}
-      />
-      {canPublish && (
-        <ReviewNotePanel
-          selectedDraftName={selectedSnapshot?.version_name}
-          value={reviewNote}
-          onChange={setReviewNote}
-          pending={actionMutation.isPending}
-          reviewable={canReviewSelectedDraft}
-          onReview={(action) => {
-            if (!selectedSnapshot || !canReviewSelectedDraft) return
-            actionMutation.reset()
-            setPendingReviewAction({
-              projectId,
-              documentId,
-              draftId: selectedSnapshot.id,
-              draftName: selectedSnapshot.version_name,
-              action,
-              reviewRevision: selectedSnapshot.review_revision,
-              comment: reviewNote.trim() || undefined,
-            })
-          }}
-        />
-      )}
+        </TabsContent>
+      </Tabs>
       <ConfirmDialog
         open={pendingReviewAction !== undefined}
         onOpenChange={(open) => {
@@ -1196,34 +1345,10 @@ function DraftEditorCard({
           value={editor.values.content}
           onChange={(value) => editor.change('content', value)}
         />
-        <div className='grid gap-2'>
-          <Label htmlFor={`schema-file-${selectedDraft?.id ?? 'new'}`}>
-            {t('admin.fields.schemaFile')}
-          </Label>
-          <Input
-            id={`schema-file-${selectedDraft?.id ?? 'new'}`}
-            name='schema_file'
-            type='file'
-            onChange={(event) => {
-              editor.change('file', event.currentTarget.files?.[0])
-              event.currentTarget.value = ''
-            }}
-            accept='.yaml,.yml,.json,.md,text/markdown,application/json,application/yaml,text/yaml'
-          />
-          {editor.values.file && (
-            <div className='flex flex-wrap items-center gap-2 text-sm'>
-              <span className='break-all'>{editor.values.file.name}</span>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => editor.change('file', undefined)}
-              >
-                {t('admin.draftEditor.removeFile')}
-              </Button>
-            </div>
-          )}
-        </div>
+        <DraftFileField
+          file={editor.values.file}
+          onChange={(file) => editor.change('file', file)}
+        />
       </fieldset>
     </FormCard>
   )
@@ -1316,12 +1441,6 @@ function ReviewNotePanel({
   return (
     <Card className='border-primary/20'>
       <CardHeader className='border-b pb-5'>
-        <Badge
-          className='w-fit border-primary/20 bg-primary/8 text-primary'
-          variant='outline'
-        >
-          {t('admin.review.noteTitle')}
-        </Badge>
         <CardTitle>{t('admin.fields.reviewNote')}</CardTitle>
         <CardDescription>{t('admin.review.noteDescription')}</CardDescription>
       </CardHeader>
@@ -1339,7 +1458,8 @@ function ReviewNotePanel({
             onChange={(event) => onChange(event.currentTarget.value)}
             placeholder={t('admin.placeholders.reviewNote')}
             disabled={pending || !reviewable}
-            className='min-h-24'
+            rows={4}
+            className='field-sizing-fixed min-h-24 resize-y'
           />
         </div>
         <div className='flex flex-wrap gap-2'>

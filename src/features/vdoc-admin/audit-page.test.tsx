@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { selectOption } from '@/test/select-option'
 import {
   act,
   cleanup,
@@ -7,6 +8,7 @@ import {
   render,
   waitFor,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
@@ -74,7 +76,7 @@ async function selectAllProjects() {
   const screen = renderWithClient(<AuditPage />)
   const selector = screen.getByLabelText('Project')
   await waitFor(() => expect(selector).toHaveValue('project-a'))
-  fireEvent.change(selector, { target: { value: '' } })
+  await selectOption(selector, '')
   await waitFor(() => expect(selector).toHaveValue(''))
   await waitFor(() =>
     expect(api.listAuditLogs).toHaveBeenLastCalledWith(
@@ -103,7 +105,7 @@ describe('AuditPage project scope', () => {
     )
     expect(selector).toHaveValue('')
     expect(useVdocContextStore.getState().projectId).toBe('')
-    fireEvent.change(selector, { target: { value: 'project-b' } })
+    await selectOption(selector, 'project-b')
     await waitFor(() =>
       expect(api.listAuditLogs).toHaveBeenLastCalledWith(
         expect.objectContaining({ project_id: 'project-b' }),
@@ -152,9 +154,11 @@ describe('AuditPage project scope', () => {
       )
     ).toBeInTheDocument()
     expect(api.listAuditLogs).toHaveBeenCalledTimes(previousCalls)
+    await userEvent.click(selector)
     expect(
       screen.queryByRole('option', { name: 'All projects' })
     ).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
   })
 
   it.each([1, 2, 3])(
@@ -170,16 +174,18 @@ describe('AuditPage project scope', () => {
       const screen = renderWithClient(<AuditPage />)
       const selector = screen.getByLabelText('Project')
       await waitFor(() => expect(selector).toHaveValue('project-a'))
+      await userEvent.click(selector)
       expect(
         screen.queryByRole('option', { name: 'All projects' })
       ).not.toBeInTheDocument()
+      await userEvent.keyboard('{Escape}')
       if (role === 3) {
         await waitFor(() => expect(api.listAuditLogs).toHaveBeenCalled())
         expect(api.listAuditLogs).toHaveBeenLastCalledWith(
           expect.objectContaining({ project_id: 'project-a' }),
           expect.anything()
         )
-        fireEvent.change(selector, { target: { value: '' } })
+        act(() => useVdocContextStore.getState().setProjectId(''))
         await waitFor(() => expect(selector).toHaveValue('project-a'))
         expect(
           api.listAuditLogs.mock.calls.every(([query]) => query.project_id)

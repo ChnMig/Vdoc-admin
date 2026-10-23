@@ -7,6 +7,7 @@ import {
   fireEvent,
   render,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
@@ -70,13 +71,23 @@ async function page() {
       </LanguageProvider>
     </QueryClientProvider>
   )
-  await view.findByRole('button', { name: user.email })
+  await view.findByText(user.email)
   return view
+}
+function viewTokens(view: Awaited<ReturnType<typeof page>>, email: string) {
+  const row = view
+    .getAllByText(email)
+    .find((element) => element.closest('tr'))!
+    .closest('tr')!
+  return within(row).getByRole('button', {
+    name: /View tokens|查看凭证/,
+  })
 }
 describe('user token query state', () => {
   it('requests no tokens until a user is selected', async () => {
     const view = await page()
-    expect(view.getByText('No user tokens selected')).toBeInTheDocument()
+    expect(view.queryByText('Selected user MCP tokens')).not.toBeInTheDocument()
+    expect(view.getAllByRole('button', { name: 'View tokens' })).toHaveLength(2)
     expect(api.listUserMCPTokens).not.toHaveBeenCalled()
   })
 
@@ -84,7 +95,7 @@ describe('user token query state', () => {
     const pending = deferred<unknown>()
     api.listUserMCPTokens.mockReturnValue(pending.promise)
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     expect(await view.findByRole('status')).toHaveTextContent(
       'Loading backend data'
     )
@@ -102,7 +113,7 @@ describe('user token query state', () => {
     )
     api.listUserMCPTokens.mockResolvedValueOnce({ items: [token], total: 1 })
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     expect(await view.findByText('Network Error')).toBeInTheDocument()
     expect(view.getAllByText(user.email)).toHaveLength(2)
     expect(view.queryByText('No user tokens selected')).not.toBeInTheDocument()
@@ -120,7 +131,7 @@ describe('user token query state', () => {
   it('distinguishes a successful empty list from no selected user', async () => {
     api.listUserMCPTokens.mockResolvedValue({ items: [], total: 0 })
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     expect(
       await view.findByText(`No MCP tokens have been issued for ${user.email}.`)
     ).toBeInTheDocument()
@@ -131,7 +142,7 @@ describe('user token query state', () => {
   it('preserves a known token list after a background failure', async () => {
     api.listUserMCPTokens.mockResolvedValueOnce({ items: [token], total: 1 })
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     expect(await view.findByText(token.name)).toBeInTheDocument()
     api.listUserMCPTokens.mockRejectedValueOnce(
       new AxiosError('Network Error', 'ERR_NETWORK')
@@ -152,14 +163,14 @@ describe('user token query state', () => {
         : Promise.resolve({ items: [], total: 0 })
     )
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     await waitFor(() =>
       expect(api.listUserMCPTokens).toHaveBeenCalledWith(
         'admin',
         expect.anything()
       )
     )
-    fireEvent.click(view.getByRole('button', { name: otherUser.email }))
+    fireEvent.click(viewTokens(view, otherUser.email))
     expect(
       await view.findByText(
         `No MCP tokens have been issued for ${otherUser.email}.`
@@ -173,9 +184,30 @@ describe('user token query state', () => {
     document.cookie = 'vdoc-admin-language=zh-CN; Path=/'
     api.listUserMCPTokens.mockResolvedValue({ items: [], total: 0 })
     const view = await page()
-    fireEvent.click(view.getByRole('button', { name: user.email }))
+    fireEvent.click(viewTokens(view, user.email))
     expect(
       await view.findByText(`${user.email} 尚未签发 MCP 令牌。`)
     ).toBeInTheDocument()
+  })
+
+  it('marks the selected user and hides the token panel on request', async () => {
+    const pending = deferred<unknown>()
+    api.listUserMCPTokens.mockReturnValue(pending.promise)
+    const view = await page()
+    fireEvent.click(viewTokens(view, user.email))
+    expect(viewTokens(view, user.email)).toHaveAttribute('aria-pressed', 'true')
+    expect(view.getAllByText(user.email)[0].closest('tr')).toHaveAttribute(
+      'data-state',
+      'selected'
+    )
+    fireEvent.click(view.getByRole('button', { name: 'Hide tokens' }))
+    expect(view.queryByText('Selected user MCP tokens')).not.toBeInTheDocument()
+    expect(viewTokens(view, user.email)).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    expect(viewTokens(view, user.email)).toHaveFocus()
+    await act(async () => pending.resolve({ items: [token], total: 1 }))
+    expect(view.queryByText(token.name)).not.toBeInTheDocument()
   })
 })

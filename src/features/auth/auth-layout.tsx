@@ -17,7 +17,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         <LanguageSwitch />
         <ThemeSwitch />
       </div>
-      <div className='relative mx-auto grid w-full max-w-5xl items-center gap-8 self-center lg:grid-cols-[1fr_25rem]'>
+      <div className='relative mx-auto grid w-full max-w-5xl items-center gap-8 self-center lg:grid-cols-[1fr_26rem]'>
         <div className='hidden max-w-xl gap-5 lg:grid'>
           <div className='flex items-center gap-3'>
             <span className='flex size-10 items-center justify-center rounded-lg border bg-card text-primary shadow-[var(--shadow-card)]'>

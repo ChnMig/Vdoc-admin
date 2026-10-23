@@ -68,10 +68,14 @@ export function AIProviderPanel({
             : t('admin.statuses.disabled')}
         </Badge>
       </div>
-      <div className='grid gap-1 border-b pb-4 text-sm text-muted-foreground'>
-        <p>{providerConfigurationStatus(provider, t, scope)}</p>
-        <p>{providerKeyStatus(provider, t)}</p>
-        <p>
+      <div className='grid min-w-0 gap-3 border-y py-4 text-sm text-muted-foreground @2xl/provider-panel:grid-cols-3 @2xl/provider-panel:divide-x'>
+        <p className='min-w-0 break-words @2xl/provider-panel:pe-4'>
+          {providerConfigurationStatus(provider, t, scope)}
+        </p>
+        <p className='min-w-0 break-words @2xl/provider-panel:px-4'>
+          {providerKeyStatus(provider, t)}
+        </p>
+        <p className='min-w-0 break-words @2xl/provider-panel:ps-4'>
           {t('admin.ai.providerTestStatus', {
             status: providerTestStatusLabel(testResult.status, t),
           })}
@@ -151,7 +155,10 @@ export function AIProviderPanel({
             options={enabledOptions(t)}
           />
         </div>
-        <div className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
+        <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
+          <legend className='pe-3 text-sm font-medium'>
+            {t('admin.ai.tuningTitle')}
+          </legend>
           <AINumberField
             id={`${scope}-ai-provider-temperature`}
             label={t('admin.ai.temperature')}
@@ -182,8 +189,8 @@ export function AIProviderPanel({
             max={32000}
             step={1}
           />
-        </div>
-        <div className='flex flex-wrap gap-2'>
+        </fieldset>
+        <div className='flex flex-wrap gap-2 border-t pt-4'>
           <Button type='submit' disabled={disabled || pending}>
             {scope === 'system'
               ? t('admin.ai.saveSystemProvider')
@@ -228,6 +235,7 @@ export function AIProviderPanel({
       </form>
       {testResult.message && (
         <p
+          role={testResult.status === 'error' ? 'alert' : 'status'}
           className={
             testResult.status === 'error'
               ? 'rounded-md border border-destructive/30 bg-[var(--surface-control)] p-3 text-sm text-destructive'

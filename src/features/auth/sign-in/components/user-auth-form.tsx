@@ -76,6 +76,7 @@ export function UserAuthForm({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
+        noValidate
         className={cn('grid gap-3', className)}
         {...props}
       >
@@ -87,6 +88,7 @@ export function UserAuthForm({
               <FormLabel>{t('auth.email')}</FormLabel>
               <FormControl>
                 <Input
+                  type='email'
                   placeholder='admin@example.com'
                   autoComplete='email'
                   {...field}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -208,9 +209,10 @@ describe('DocumentSharePanel', () => {
     const screen = render(wrap(panel()))
 
     expect(screen.getByLabelText('Expiry')).toHaveValue('3_months')
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Published branch'),
-      branch.id
+      branch.id,
+      user
     )
     await user.type(
       screen.getByLabelText('Optional password (12–72 bytes)'),
@@ -242,9 +244,10 @@ describe('DocumentSharePanel', () => {
     const { wrap } = createHarness()
     const screen = render(wrap(panel()))
 
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Published branch'),
-      branch.id
+      branch.id,
+      user
     )
     const createButton = screen.getByRole('button', {
       name: 'Create share link',
@@ -293,14 +296,13 @@ describe('DocumentSharePanel', () => {
     )
     const branchSelect = screen.getByLabelText('Published branch')
 
+    await userEvent.click(branchSelect)
+    expect(screen.getByRole('option', { name: 'main' })).toBeInTheDocument()
     expect(
-      within(branchSelect).getByRole('option', { name: 'main' })
-    ).toBeInTheDocument()
-    expect(
-      within(branchSelect).queryByRole('option', { name: 'archived' })
+      screen.queryByRole('option', { name: 'archived' })
     ).not.toBeInTheDocument()
     expect(
-      within(branchSelect).queryByRole('option', { name: 'unpublished' })
+      screen.queryByRole('option', { name: 'unpublished' })
     ).not.toBeInTheDocument()
   })
 
@@ -357,9 +359,10 @@ describe('DocumentSharePanel', () => {
     const { wrap } = createHarness()
     const screen = render(wrap(panel()))
 
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Published branch'),
-      branch.id
+      branch.id,
+      user
     )
     await user.click(screen.getByRole('button', { name: 'Create share link' }))
     expect(await screen.findByText(/vdoc_share_/)).toBeInTheDocument()
@@ -374,9 +377,10 @@ describe('DocumentSharePanel', () => {
     const { wrap } = createHarness()
     const screen = render(wrap(panel()))
 
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Published branch'),
-      branch.id
+      branch.id,
+      user
     )
     await user.click(screen.getByRole('button', { name: 'Create share link' }))
     expect(await screen.findByText(/vdoc_share_/)).toBeInTheDocument()

@@ -78,6 +78,7 @@ const en = {
   common: {
     cancel: 'Cancel',
     continue: 'Continue',
+    selectRequired: 'Select an option.',
   },
   passwordInput: {
     show: 'Show password',
@@ -200,6 +201,15 @@ const en = {
     },
   },
   admin: {
+    dateTime: {
+      placeholder: 'Choose date and time',
+      loading: 'Loading calendar…',
+      month: 'Month',
+      year: 'Year',
+      hour: 'Hour',
+      minute: 'Minute',
+      done: 'Done',
+    },
     userTokens: {
       noneIssued: 'No MCP tokens have been issued for {user}.',
     },
@@ -218,6 +228,10 @@ const en = {
       to: 'Until (exclusive)',
     },
     common: {
+      copy: 'Copy',
+      copied: 'Copied',
+      copyFailed: 'Copy failed. Select the text and copy it manually.',
+      resetFilters: 'Reset filters',
       loading: 'Loading backend data...',
       error: 'Backend request failed',
       empty: 'No records returned by the backend.',
@@ -267,6 +281,9 @@ const en = {
       enableUser: 'Enable user',
       grantSuperAdmin: 'Grant SuperAdmin',
       revokeSuperAdmin: 'Revoke SuperAdmin',
+      addMember: 'Add member',
+      viewUserTokens: 'View tokens',
+      hideUserTokens: 'Hide tokens',
       removeMember: 'Remove member',
     },
     confirm: {
@@ -547,6 +564,16 @@ const en = {
         'The selected draft will be closed as rejected and cannot be edited again.',
     },
     draftEditor: {
+      sourceView: 'Source',
+      renderedView: 'Preview',
+      savedContent:
+        'Saved draft content; local edits appear here after saving.',
+      workspace: 'Workspace',
+      history: 'Draft history',
+      chooseFile: 'Choose file',
+      fileHint:
+        'YAML, JSON, or Markdown. The selected file replaces the editor content when saved.',
+      noFile: 'No file selected',
       unsavedDescription:
         'Unsaved edits are kept for this document while you switch selections on this page. Save before leaving the page.',
       conflictTitle: 'This draft changed on the server',
@@ -583,6 +610,7 @@ const en = {
         'Publish a version on one active source branch and keep a different active target branch before creating a promotion draft.',
     },
     ai: {
+      tuningTitle: 'Generation settings',
       badge: 'AI',
       panelTitle: 'AI summary and chat',
       panelDescription: 'Scoped to selected {ownerType}: {ownerId}',
@@ -821,6 +849,11 @@ const en = {
         'Vdoc did not switch to another record. These exact targets do not exist in your visible scope: {targets}',
     },
     skill: {
+      commandTitle: 'Install command',
+      packageStepTitle: 'Install adapter and Skill',
+      mcpStepTitle: 'Configure your AI client',
+      verifyStepTitle: 'Verify the connection',
+      installDetails: 'Installation details',
       installTitle: 'Install the official Skill',
       installDescription:
         'The Vdoc Skill teaches agents to query reviewed facts, compare versions, and submit drafts without bypassing human publication.',
@@ -1416,6 +1449,7 @@ const zhCN = {
   common: {
     cancel: '取消',
     continue: '继续',
+    selectRequired: '请选择一项。',
   },
   passwordInput: {
     show: '显示密码',
@@ -1527,6 +1561,15 @@ const zhCN = {
     },
   },
   admin: {
+    dateTime: {
+      placeholder: '选择日期和时间',
+      loading: '正在加载日历…',
+      month: '月',
+      year: '年',
+      hour: '时',
+      minute: '分',
+      done: '完成',
+    },
     userTokens: {
       noneIssued: '{user} 尚未签发 MCP 令牌。',
     },
@@ -1545,6 +1588,10 @@ const zhCN = {
       to: '结束时间（不含）',
     },
     common: {
+      copy: '复制',
+      copied: '已复制',
+      copyFailed: '复制失败，请手动选择并复制。',
+      resetFilters: '重置筛选',
       loading: '正在加载后端数据...',
       error: '后端请求失败',
       empty: '后端未返回记录。',
@@ -1594,6 +1641,9 @@ const zhCN = {
       enableUser: '启用用户',
       grantSuperAdmin: '授予超级管理员',
       revokeSuperAdmin: '撤销超级管理员',
+      addMember: '添加成员',
+      viewUserTokens: '查看凭证',
+      hideUserTokens: '收起凭证',
       removeMember: '移除成员',
     },
     confirm: {
@@ -1854,6 +1904,14 @@ const zhCN = {
         '所选草稿会以已拒绝状态关闭，之后不能继续编辑。',
     },
     draftEditor: {
+      sourceView: '源码',
+      renderedView: '预览',
+      savedContent: '显示已保存的草稿内容；本地修改保存后才会同步到此处。',
+      workspace: '工作区',
+      history: '草稿历史',
+      chooseFile: '选择文件',
+      fileHint: '支持 YAML、JSON 或 Markdown，保存时以所选文件替换编辑器内容。',
+      noFile: '尚未选择文件',
       unsavedDescription:
         '切换当前页面的文档或草稿时，会保留各自的未保存编辑。离开页面前请先保存。',
       conflictTitle: '服务器上的草稿已更新',
@@ -1887,6 +1945,7 @@ const zhCN = {
         '请先在有效源分支发布版本，并保留另一个不同的有效目标分支，再创建晋级草稿。',
     },
     ai: {
+      tuningTitle: '生成参数',
       badge: 'AI',
       panelTitle: 'AI 摘要和聊天',
       panelDescription: '作用于所选 {ownerType}：{ownerId}',
@@ -2110,6 +2169,11 @@ const zhCN = {
         'Vdoc 没有静默切换到其他记录。以下精确目标不存在或不在你的可见范围内：{targets}',
     },
     skill: {
+      commandTitle: '安装命令',
+      packageStepTitle: '安装适配器和 Skill',
+      mcpStepTitle: '配置 AI 客户端',
+      verifyStepTitle: '验证连接',
+      installDetails: '安装说明',
       installTitle: '安装官方 Skill',
       installDescription:
         'Vdoc Skill 指导智能体查询已审阅事实、比较版本并提交草稿，同时不绕过人工发布。',

@@ -1,6 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertCircle } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   addProjectMember,
@@ -16,8 +15,6 @@ import {
   type UserDTO,
 } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -26,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { OptionsSelect } from '@/components/options-select'
 import {
   PageChrome,
   LoadingErrorState,
@@ -276,10 +274,49 @@ export function ProjectsPage() {
       />
       <CollectionCard
         title={t('admin.sections.members')}
-        description={t('admin.pages.projects.next')}
         count={membersQuery.data?.items.length ?? 0}
+        actions={
+          canManageSelectedProject && (
+            <FormDialog
+              title={t('admin.actions.addMember')}
+              submitLabel={t('admin.common.add')}
+              pending={addMemberMutation.isPending}
+              disabled={
+                !projectId ||
+                memberCandidatesLoading ||
+                memberCandidatesIsError ||
+                !memberCandidateOptions.length
+              }
+              submissionScope={memberScope}
+              description={selectedProject?.name}
+              onSubmit={(formData) =>
+                addMemberMutation.mutateAsync({
+                  projectId,
+                  sessionVersion,
+                  userId: fieldValue(formData, 'user_id'),
+                  role: numberValue(formData, 'role', ROLE_READER),
+                })
+              }
+            >
+              <NativeSelect
+                name='user_id'
+                label={t('admin.fields.user')}
+                placeholder={t('admin.placeholders.selectUser')}
+                options={memberCandidateOptions}
+                required
+              />
+              <NativeSelect
+                name='role'
+                label={t('admin.fields.role')}
+                placeholder={t('admin.roles.reader')}
+                options={roleOptions(t)}
+                defaultValue={String(ROLE_READER)}
+              />
+            </FormDialog>
+          )
+        }
       >
-        <div className='@container/member-controls grid min-w-0 gap-5'>
+        <div className='grid min-w-0 gap-5'>
           <div className='max-w-md'>
             <NativeSelect
               label={t('admin.fields.project')}
@@ -298,28 +335,13 @@ export function ProjectsPage() {
                   error: memberCandidatesError,
                 }}
               />
-              {memberCandidateOptions.length ? (
-                <MemberAddForm
-                  key={memberScope}
-                  options={memberCandidateOptions}
-                  pending={addMemberMutation.isPending}
-                  disabled={!projectId || memberCandidatesLoading}
-                  onSubmit={(formData) =>
-                    addMemberMutation.mutateAsync({
-                      projectId,
-                      sessionVersion,
-                      userId: fieldValue(formData, 'user_id'),
-                      role: numberValue(formData, 'role', ROLE_READER),
-                    })
-                  }
-                />
-              ) : (
-                !memberCandidatesLoading && (
+              {!memberCandidatesLoading &&
+                !memberCandidatesIsError &&
+                !memberCandidateOptions.length && (
                   <p className='text-sm text-muted-foreground'>
                     {t('admin.emptyStates.memberCandidates.description')}
                   </p>
-                )
-              )}
+                )}
             </>
           )}
           <MembersTable
@@ -359,97 +381,6 @@ function ownsSession(sessionVersion: number) {
   return useAuthStore.getState().auth.sessionVersion === sessionVersion
 }
 
-function MemberAddForm({
-  options,
-  pending,
-  disabled,
-  onSubmit,
-}: {
-  options: Array<{ value: string; label: string }>
-  pending: boolean
-  disabled: boolean
-  onSubmit: (formData: FormData) => Promise<unknown>
-}) {
-  const { t } = useLanguage()
-  const [error, setError] = useState<Error>()
-  const mountedRef = useRef(false)
-  const editVersionRef = useRef(0)
-  const submitLockedRef = useRef(false)
-  useLayoutEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
-  return (
-    <form
-      className='grid min-w-0 gap-3 @2xl/member-controls:grid-cols-[minmax(0,1fr)_10rem_auto]'
-      onInputCapture={() => editVersionRef.current++}
-      onChangeCapture={() => editVersionRef.current++}
-      onSubmit={async (event) => {
-        event.preventDefault()
-        if (submitLockedRef.current || pending || disabled) return
-        submitLockedRef.current = true
-        const form = event.currentTarget
-        const values = new FormData(form)
-        const submittedEditVersion = editVersionRef.current
-        setError(undefined)
-        try {
-          await onSubmit(values)
-          if (
-            mountedRef.current &&
-            editVersionRef.current === submittedEditVersion &&
-            fieldValue(values, 'user_id') ===
-              fieldValue(new FormData(form), 'user_id') &&
-            fieldValue(values, 'role') ===
-              fieldValue(new FormData(form), 'role')
-          )
-            form.reset()
-        } catch (cause) {
-          if (mountedRef.current)
-            setError(
-              cause instanceof Error
-                ? cause
-                : new Error(t('toasts.somethingWrong'))
-            )
-        } finally {
-          submitLockedRef.current = false
-        }
-      }}
-    >
-      <NativeSelect
-        name='user_id'
-        label={t('admin.fields.user')}
-        placeholder={t('admin.placeholders.selectUser')}
-        options={options}
-        required
-      />
-      <NativeSelect
-        name='role'
-        label={t('admin.fields.role')}
-        placeholder={t('admin.roles.reader')}
-        options={roleOptions(t)}
-        defaultValue={String(ROLE_READER)}
-      />
-      <Button type='submit' className='self-end' disabled={disabled || pending}>
-        {t('admin.common.add')}
-      </Button>
-      {error && (
-        <Alert
-          className='@2xl/member-controls:col-span-3'
-          variant='destructive'
-          aria-live='polite'
-        >
-          <AlertCircle />
-          <AlertTitle>{t('admin.common.error')}</AlertTitle>
-          <AlertDescription>{error.message}</AlertDescription>
-        </Alert>
-      )}
-    </form>
-  )
-}
-
 function roleOptions(t: ReturnType<typeof useLanguage>['t']) {
   return [
     { value: String(ROLE_READER), label: t('admin.roles.reader') },
@@ -481,19 +412,14 @@ function MemberRoleControl({
 
   return (
     <div className='flex min-w-56 flex-wrap items-center gap-2'>
-      <select
-        className='h-9 rounded-md border border-input bg-background px-3 text-sm'
+      <OptionsSelect
+        className='w-32'
         value={String(nextRole)}
         aria-label={`${t('admin.fields.role')}: ${userLabel}`}
         disabled={pending}
-        onChange={(event) => setNextRole(Number(event.currentTarget.value))}
-      >
-        {roleOptions(t).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => setNextRole(Number(value))}
+        options={roleOptions(t)}
+      />
       {changed && (
         <ConfirmActionButton
           label={t('admin.common.save')}

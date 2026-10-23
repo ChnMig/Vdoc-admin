@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { selectOption } from '../helpers/select-option'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 const adminToken = 'business-workflow-session'
@@ -382,7 +383,8 @@ for (const width of [1280, 390]) {
           path.endsWith('/endpoints')
       )
     ).toBe(false)
-    await expect(page.getByLabel('Document', { exact: true })).toHaveValue(
+    await expect(page.getByLabel('Document', { exact: true })).toHaveAttribute(
+      'value',
       documentId
     )
   })
@@ -417,14 +419,18 @@ test('diff version pagination retains selected historical versions', async ({
     `/diffs/?project_id=${projectId}&document_id=${documentId}&from_version_id=${previousVersionId}&to_version_id=${latestVersionId}`
   )
   const from = page.getByLabel('From version', { exact: true })
-  await expect(from).toHaveValue(previousVersionId)
+  await expect(from).toHaveAttribute('value', previousVersionId)
+  await page
+    .getByRole('button', { name: 'Search versions', exact: true })
+    .click()
   await page
     .getByRole('navigation', { name: 'Pagination', exact: true })
     .getByRole('button', { name: 'Next', exact: true })
     .click()
   await expect.poll(() => offsets.includes('50')).toBe(true)
-  await expect(from).toHaveValue(previousVersionId)
-  await expect(page.getByLabel('To version', { exact: true })).toHaveValue(
+  await expect(from).toHaveAttribute('value', previousVersionId)
+  await expect(page.getByLabel('To version', { exact: true })).toHaveAttribute(
+    'value',
     latestVersionId
   )
 })
@@ -511,9 +517,11 @@ test('a comparison completed after document navigation stays in its original his
   await page.getByRole('button', { name: 'Compare', exact: true }).click()
   await expect.poll(() => comparisonStarted).toBe(true)
   const documentSelect = page.getByLabel('Document', { exact: true })
-  await documentSelect.selectOption(otherDocument.id)
-  await expect(documentSelect).toHaveValue(otherDocument.id)
-  await expect(page.getByLabel('From version', { exact: true })).toHaveValue('')
+  await selectOption(documentSelect, otherDocument.id)
+  await expect(documentSelect).toHaveAttribute('value', otherDocument.id)
+  await expect(
+    page.getByLabel('From version', { exact: true })
+  ).toHaveAttribute('value', '')
   const switchedUrl = page.url()
   const response = page.waitForResponse(
     (value) =>
@@ -523,11 +531,14 @@ test('a comparison completed after document navigation stays in its original his
   releaseComparison()
   await response
   await expect(page).toHaveURL(switchedUrl)
-  await expect(documentSelect).toHaveValue(otherDocument.id)
+  await expect(documentSelect).toHaveAttribute('value', otherDocument.id)
   await expect(
     page.getByText('Linked entity is unavailable', { exact: true })
   ).toHaveCount(0)
-  await documentSelect.selectOption(documentId)
+  await selectOption(documentSelect, documentId)
+  await page
+    .getByRole('tab', { name: 'Stored diff history', exact: true })
+    .click()
   const history = page.getByText(
     `${previousVersion.version_name} → ${latestVersion.version_name}`,
     { exact: true }
@@ -568,7 +579,7 @@ for (const viewport of [
     )
     await page.goto('/drafts/')
     const draftSelect = page.getByLabel('Draft', { exact: true })
-    await draftSelect.selectOption(editableDraftId)
+    await selectOption(draftSelect, editableDraftId)
     const content = page.getByLabel('Content', { exact: true })
     await expect(content).toHaveValue('# Original draft')
     await content.fill('# Local edits to retain')
@@ -576,8 +587,8 @@ for (const viewport of [
     const refetch = async (nextContent: string) => {
       serverContent = nextContent
       await page.clock.fastForward(11_000)
-      await draftSelect.selectOption('')
-      await draftSelect.selectOption(editableDraftId)
+      await selectOption(draftSelect, '')
+      await selectOption(draftSelect, editableDraftId)
       await expect(
         page.getByText('This draft changed on the server')
       ).toBeVisible()
@@ -672,9 +683,10 @@ for (const width of [1280, 390]) {
       await fulfillEnvelope(route, current)
     })
     await page.goto('/drafts/')
-    await page
-      .getByLabel('Draft', { exact: true })
-      .selectOption(editableDraftId)
+    await selectOption(
+      page.getByLabel('Draft', { exact: true }),
+      editableDraftId
+    )
     const content = page.getByLabel('Content', { exact: true })
     await expect(content).toHaveValue('# Original draft')
     await page
@@ -732,7 +744,7 @@ test('draft review confirms and approves the selected submitted draft', async ({
   await page.goto('/drafts/')
   const draftSelect = page.getByLabel('Draft', { exact: true })
   await expect(draftSelect).toBeVisible()
-  await draftSelect.selectOption(submittedDraftId)
+  await selectOption(draftSelect, submittedDraftId)
 
   const reviewNote = page.getByLabel('Review note', { exact: true })
   await expect(reviewNote).toBeEnabled()
@@ -806,9 +818,10 @@ for (const width of [1280, 390]) {
       await fulfillEnvelope(route, latestVersion)
     })
     await page.goto('/drafts/')
-    await page
-      .getByLabel('Draft', { exact: true })
-      .selectOption(submittedDraftId)
+    await selectOption(
+      page.getByLabel('Draft', { exact: true }),
+      submittedDraftId
+    )
     const note = page.getByLabel('Review note', { exact: true })
     await expect(note).toBeEnabled()
     await note.fill('Preserve this review note')
@@ -856,7 +869,7 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
 
   await page.goto('/versions/')
   const versionSelect = page.getByLabel('Version', { exact: true })
-  await expect(versionSelect).toHaveValue(latestVersionId)
+  await expect(versionSelect).toHaveAttribute('value', latestVersionId)
   const markdown = page.locator('article')
   await expect(
     markdown.getByRole('heading', { name: 'Release Notes' })
@@ -871,7 +884,7 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
     markdown.getByText(/Read internal details or public docs/)
   ).toBeVisible()
 
-  await versionSelect.selectOption(previousVersionId)
+  await selectOption(versionSelect, previousVersionId)
   await expect(
     markdown.getByRole('heading', { name: 'Previous Notes' })
   ).toBeVisible()
@@ -1019,8 +1032,8 @@ test('public share erases the fragment, unlocks, and switches history', async ({
     page.getByRole('heading', { name: 'Current Handbook' })
   ).toBeVisible()
   const versionSelect = page.getByLabel('Version', { exact: true })
-  await expect(versionSelect).toHaveValue(latestVersionId)
-  await versionSelect.selectOption(previousVersionId)
+  await expect(versionSelect).toHaveAttribute('value', latestVersionId)
+  await selectOption(versionSelect, previousVersionId)
   await expect(
     page.getByRole('heading', { name: 'Previous Handbook' })
   ).toBeVisible()
@@ -1061,18 +1074,22 @@ for (const size of [
     await page.goto(
       `/drafts/?project_id=${projectId}&document_id=${documentId}&branch_id=${branchId}&draft_id=${submittedDraftId}`
     )
-    await expect(page.getByLabel('Draft', { exact: true })).toHaveValue(
+    await expect(page.getByLabel('Draft', { exact: true })).toHaveAttribute(
+      'value',
       submittedDraftId
     )
     await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
+    await page.getByRole('tab', { name: 'Draft history', exact: true }).click()
     await page
       .getByRole('navigation', { name: 'Draft pages' })
       .getByRole('button', { name: 'Next', exact: true })
       .click()
     await expect.poll(() => offsets.includes('50')).toBe(true)
-    await expect(page.getByLabel('Draft', { exact: true })).toHaveValue(
+    await expect(page.getByLabel('Draft', { exact: true })).toHaveAttribute(
+      'value',
       submittedDraftId
     )
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click()
     await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
     await page.getByRole('button', { name: 'Approve', exact: true }).click()
     await expect(page.getByRole('alertdialog')).toContainText('Publish 2.0.0?')
@@ -1080,6 +1097,7 @@ for (const size of [
       .getByRole('alertdialog')
       .getByRole('button', { name: 'Cancel', exact: true })
       .click()
+    await page.getByRole('tab', { name: 'Draft history', exact: true }).click()
     await page
       .getByRole('navigation', { name: 'Draft pages' })
       .scrollIntoViewIfNeeded()
@@ -1157,9 +1175,9 @@ for (const size of [
     await page.goto(
       `/diffs/?project_id=${projectId}&document_id=${documentId}&diff_id=diff-selected`
     )
-    await expect(page.getByLabel('From version', { exact: true })).toHaveValue(
-      previousVersionId
-    )
+    await expect(
+      page.getByLabel('From version', { exact: true })
+    ).toHaveAttribute('value', previousVersionId)
     await expect(
       page
         .getByText('Schema compatibility requires manual review', {
@@ -1168,13 +1186,17 @@ for (const size of [
         .first()
     ).toBeVisible()
     await page
+      .getByRole('tab', { name: 'Stored diff history', exact: true })
+      .click()
+    await page
       .getByRole('navigation', { name: 'Diff history pages' })
       .getByRole('button', { name: 'Next', exact: true })
       .click()
     await expect.poll(() => offsets.includes('50')).toBe(true)
-    await expect(page.getByLabel('From version', { exact: true })).toHaveValue(
-      previousVersionId
-    )
+    await expect(
+      page.getByLabel('From version', { exact: true })
+    ).toHaveAttribute('value', previousVersionId)
+    await page.getByRole('tab', { name: 'Diff result', exact: true }).click()
     await expect(
       page
         .getByText('Schema compatibility requires manual review', {
@@ -1182,6 +1204,9 @@ for (const size of [
         })
         .first()
     ).toBeVisible()
+    await page
+      .getByRole('tab', { name: 'Stored diff history', exact: true })
+      .click()
     await page
       .getByRole('navigation', { name: 'Diff history pages' })
       .scrollIntoViewIfNeeded()

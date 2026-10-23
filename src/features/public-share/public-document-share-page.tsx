@@ -52,6 +52,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LanguageSwitch } from '@/components/language-switch'
+import { OptionsSelect } from '@/components/options-select'
 import { MarkdownDocumentViewer } from './markdown-document-viewer'
 import { OpenApiCodeViewer } from './openapi-code-viewer'
 
@@ -560,20 +561,15 @@ function PublicDocumentShareSession({
                     <Label htmlFor='public-version'>
                       {t('publicShare.version')}
                     </Label>
-                    <select
+                    <OptionsSelect
                       id='public-version'
-                      className='h-10 min-w-0 rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:text-sm'
                       value={versionId}
-                      onChange={(event) =>
-                        void handleVersionChange(event.currentTarget.value)
-                      }
-                    >
-                      {versions.map((version) => (
-                        <option key={version.id} value={version.id}>
-                          {version.version_name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => void handleVersionChange(value)}
+                      options={versions.map((version) => ({
+                        value: version.id,
+                        label: version.version_name,
+                      }))}
+                    />
                   </div>
                 </CardContent>
               )}

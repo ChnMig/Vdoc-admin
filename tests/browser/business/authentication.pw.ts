@@ -46,7 +46,17 @@ for (const [name, password] of [
     })
     await page.goto('/sign-in?redirect=%2Fterms')
     await page.getByLabel('Email', { exact: true }).fill('utf8@example.test')
-    await page.getByLabel('Password', { exact: true }).fill(password)
+    const passwordInput = page.getByLabel('Password', { exact: true })
+    await passwordInput.fill(password)
+    await page
+      .getByRole('button', { name: 'Show password', exact: true })
+      .click()
+    await expect(passwordInput).toHaveAttribute('type', 'text')
+    await expect(passwordInput).toHaveValue(password)
+    await page
+      .getByRole('button', { name: 'Hide password', exact: true })
+      .click()
+    await expect(passwordInput).toHaveAttribute('type', 'password')
     await page.getByRole('button', { name: 'Sign in to Vdoc' }).click()
     await expect(page).toHaveURL(/\/terms\/?$/)
     expect(credentials).toEqual([{ email: 'utf8@example.test', password }])

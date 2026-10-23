@@ -4,6 +4,7 @@ import { apiBaseUrl } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { CodeSnippet } from './code-snippet'
 import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
 import { vdocMcpReleaseVersion } from './page-utils'
@@ -58,24 +59,49 @@ export function SkillPage() {
           <div className='grid min-w-0 gap-6'>
             <ol className='grid gap-5'>
               {[
-                t(
-                  beta
-                    ? 'admin.skill.betaStepPackage'
-                    : 'admin.skill.stepPackage'
-                ),
-                t('admin.skill.stepMcp'),
-                t(
-                  beta ? 'admin.skill.betaStepVerify' : 'admin.skill.stepVerify'
-                ),
+                {
+                  title: t('admin.skill.packageStepTitle'),
+                  description: t(
+                    beta
+                      ? 'admin.skill.betaStepPackage'
+                      : 'admin.skill.stepPackage'
+                  ),
+                },
+                {
+                  title: t('admin.skill.mcpStepTitle'),
+                  description: t('admin.skill.stepMcp'),
+                },
+                {
+                  title: t('admin.skill.verifyStepTitle'),
+                  description: t(
+                    beta
+                      ? 'admin.skill.betaStepVerify'
+                      : 'admin.skill.stepVerify'
+                  ),
+                },
               ].map((step, index) => (
                 <li
-                  key={step}
+                  key={step.title}
                   className='grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-3 text-sm'
                 >
                   <Badge className='mt-0.5 justify-center' variant='outline'>
                     {index + 1}
                   </Badge>
-                  <span className='leading-6'>{step}</span>
+                  <div className='min-w-0 space-y-2'>
+                    <h3 className='leading-6 font-medium'>{step.title}</h3>
+                    {index === 0 ? (
+                      <details className='text-muted-foreground'>
+                        <summary className='w-fit cursor-pointer rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                          {t('admin.skill.installDetails')}
+                        </summary>
+                        <p className='pt-2 leading-6'>{step.description}</p>
+                      </details>
+                    ) : (
+                      <p className='leading-6 text-muted-foreground'>
+                        {step.description}
+                      </p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ol>
@@ -87,9 +113,12 @@ export function SkillPage() {
               </AlertDescription>
             </Alert>
           </div>
-          <pre className='min-w-0 overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
-            {beta ? vdocBetaSkillInstallSnippet : vdocSkillInstallSnippet}
-          </pre>
+          <CodeSnippet
+            title={t('admin.skill.commandTitle')}
+            content={
+              beta ? vdocBetaSkillInstallSnippet : vdocSkillInstallSnippet
+            }
+          />
         </div>
       </CollectionCard>
       <CollectionCard

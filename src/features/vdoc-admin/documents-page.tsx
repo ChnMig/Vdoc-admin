@@ -16,6 +16,7 @@ import {
 } from '@/lib/vdoc-api'
 import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -776,12 +777,11 @@ function BranchEditForm({
       />
       <div className='grid gap-3'>
         <label className='flex items-center gap-2 text-sm'>
-          <input
-            type='checkbox'
+          <Checkbox
             name='is_default'
             checked={branch.is_default || (edits.is_default ?? false)}
-            onChange={(event) => {
-              const is_default = event.target.checked
+            onCheckedChange={(checked) => {
+              const is_default = checked === true
               setEdits((current) => ({ ...current, is_default }))
             }}
             disabled={branch.is_default}
@@ -789,12 +789,11 @@ function BranchEditForm({
           {t('admin.fields.defaultBranch')}
         </label>
         <label className='flex items-center gap-2 text-sm'>
-          <input
-            type='checkbox'
+          <Checkbox
             name='is_protected'
             checked={edits.is_protected ?? branch.is_protected}
-            onChange={(event) => {
-              const is_protected = event.target.checked
+            onCheckedChange={(checked) => {
+              const is_protected = checked === true
               setEdits((current) => ({ ...current, is_protected }))
             }}
           />

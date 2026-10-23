@@ -1,6 +1,7 @@
 import { resolveAdminReleaseChannel } from '@/lib/release-channel'
 import { useLanguage } from '@/context/language-provider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CodeSnippet } from './code-snippet'
 import { stringify, vdocMcpSource } from './page-utils'
 
 export function MCPClientConfig({
@@ -65,9 +66,7 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
           <p className='text-sm text-muted-foreground'>
             <code>{path}</code> — {steps}
           </p>
-          <pre className='overflow-x-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed'>
-            {content}
-          </pre>
+          <CodeSnippet title={path} content={content} />
         </TabsContent>
       ))}
       <p className='mt-3 text-sm text-muted-foreground'>

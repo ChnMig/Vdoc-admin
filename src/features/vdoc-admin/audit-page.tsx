@@ -10,6 +10,7 @@ import {
 import { useLanguage } from '@/context/language-provider'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -18,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { DateTimePickerField } from '@/components/date-time-picker'
 import {
   PageChrome,
   NativeSelect,
@@ -107,6 +109,22 @@ export function AuditPage() {
         title={t('admin.audit.title')}
         description={t('admin.audit.description')}
         count={auditQuery.data?.total ?? 0}
+        actions={
+          (action || resourceType || from || to) && (
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={() => {
+                setAction('')
+                setResourceType('')
+                setFrom('')
+                setTo('')
+              }}
+            >
+              {t('admin.common.resetFilters')}
+            </Button>
+          )
+        }
       >
         <div className='@container/audit-filters grid min-w-0 gap-4 border-b pb-5'>
           <div className='grid min-w-0 gap-4 @xl/audit-filters:grid-cols-3'>
@@ -146,18 +164,16 @@ export function AuditPage() {
             />
           </div>
           <div className='grid max-w-2xl min-w-0 gap-4 @sm/audit-filters:grid-cols-2'>
-            <TextField
+            <DateTimePickerField
               id='audit-from'
               name='audit_from'
-              type='datetime-local'
               label={t('admin.pagination.from')}
               value={from}
               onChange={setFrom}
             />
-            <TextField
+            <DateTimePickerField
               id='audit-to'
               name='audit_to'
-              type='datetime-local'
               label={t('admin.pagination.to')}
               value={to}
               onChange={setTo}
@@ -228,16 +244,25 @@ function AuditLogTable({ logs }: { logs: AuditLogDTO[] }) {
               {formatDate(log.created_at)}
             </TableCell>
             <TableCell className='font-mono text-xs'>{log.action}</TableCell>
-            <TableCell className='max-w-44 truncate font-mono text-xs'>
+            <TableCell
+              className='max-w-44 truncate font-mono text-xs'
+              title={log.actor_user_id ?? log.actor_token_id ?? undefined}
+            >
               {log.actor_user_id ?? log.actor_token_id ?? '-'}
             </TableCell>
             <TableCell className='max-w-56'>
               <div className='font-mono text-xs'>{log.resource_type}</div>
-              <div className='truncate font-mono text-xs text-muted-foreground'>
+              <div
+                className='truncate font-mono text-xs text-muted-foreground'
+                title={log.resource_id ?? log.document_id ?? undefined}
+              >
                 {log.resource_id ?? log.document_id ?? '-'}
               </div>
             </TableCell>
-            <TableCell className='max-w-40 truncate font-mono text-xs'>
+            <TableCell
+              className='max-w-40 truncate font-mono text-xs'
+              title={log.project_id ?? undefined}
+            >
               {log.project_id ?? '-'}
             </TableCell>
             <TableCell>

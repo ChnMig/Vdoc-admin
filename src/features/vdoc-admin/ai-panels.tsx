@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { OptionsSelect } from '@/components/options-select'
 
 type AIContextPanelProps = {
   readonly target?: AISummaryTarget
@@ -264,18 +265,15 @@ function AIContextPanelContent({
               <Label htmlFor='ai-chat-session'>
                 {t('admin.ai.chatSession')}
               </Label>
-              <select
+              <OptionsSelect
                 id='ai-chat-session'
-                className='h-10 rounded-md border border-input bg-background px-3 text-sm'
                 value={activeSessionId}
-                onChange={(event) => setSessionId(event.currentTarget.value)}
-              >
-                {chatSessions.map((session) => (
-                  <option key={session.id} value={session.id}>
-                    {session.title || session.id}
-                  </option>
-                ))}
-              </select>
+                onChange={setSessionId}
+                options={chatSessions.map((session) => ({
+                  value: session.id,
+                  label: session.title || session.id,
+                }))}
+              />
             </div>
           )}
           <div className='grid max-h-56 gap-2 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-sm'>

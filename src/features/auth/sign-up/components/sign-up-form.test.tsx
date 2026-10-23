@@ -98,6 +98,20 @@ describe('SignUpForm', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows inline validation for a malformed email without creating an account', async () => {
+    await userEvent.type(emailInput, 'invalid-email')
+    await userEvent.type(passwordInput, 'correct horse battery')
+    await userEvent.type(confirmPasswordInput, 'correct horse battery')
+
+    await userEvent.click(submitButton)
+
+    await waitFor(() =>
+      expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+    )
+    expect(emailInput).toHaveAttribute('aria-describedby')
+    expect(mocks.register).not.toHaveBeenCalled()
+  })
+
   it('rejects a password outside the shared user policy', async () => {
     await userEvent.type(emailInput, 'a@b.com')
     await userEvent.type(passwordInput, '1234567')

@@ -90,6 +90,19 @@ describe('UserAuthForm', () => {
       expect(mocks.login).not.toHaveBeenCalled()
     })
 
+    it('shows inline validation for a malformed email without submitting credentials', async () => {
+      await userEvent.type(emailInput, 'invalid-email')
+      await userEvent.type(passwordInput, 'secret-password')
+
+      await userEvent.click(signInButton)
+
+      await waitFor(() =>
+        expect(emailInput).toHaveAttribute('aria-invalid', 'true')
+      )
+      expect(emailInput).toHaveAttribute('aria-describedby')
+      expect(mocks.login).not.toHaveBeenCalled()
+    })
+
     it('authenticates through Vdoc and navigates to default route on success', async () => {
       await userEvent.type(emailInput, 'a@b.com')
       await userEvent.type(passwordInput, '1234567')

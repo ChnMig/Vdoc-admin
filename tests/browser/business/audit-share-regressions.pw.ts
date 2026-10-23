@@ -1,5 +1,6 @@
 import { expect, test, type Route } from '@playwright/test'
 import { readFile, writeFile } from 'node:fs/promises'
+import { selectOption } from '../helpers/select-option'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 const headers = {
@@ -84,12 +85,12 @@ for (const width of [1280, 390]) {
     })
     await page.goto('/audit')
     const selector = page.getByLabel('Project', { exact: true })
-    await expect(selector).toHaveValue('project-a')
+    await expect(selector).toHaveAttribute('value', 'project-a')
     await expect.poll(() => requests.at(-1)?.project_id).toBe('project-a')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect.poll(() => requests.at(-1)?.cursor).toBe('older-page')
-    await selector.selectOption('')
-    await expect(selector).toHaveValue('')
+    await selectOption(selector, '')
+    await expect(selector).toHaveAttribute('value', '')
     await expect(page.getByText('global.latest', { exact: true })).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Previous', exact: true })
@@ -97,14 +98,14 @@ for (const width of [1280, 390]) {
     await page.getByLabel('Action', { exact: true }).fill('document.updated')
     await expect.poll(() => requests.at(-1)?.action).toBe('document.updated')
     expect(requests.at(-1)?.project_id).toBeUndefined()
-    await expect(selector).toHaveValue('')
+    await expect(selector).toHaveAttribute('value', '')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect.poll(() => requests.at(-1)?.cursor).toBe('older-page')
     expect(requests.at(-1)?.project_id).toBeUndefined()
-    await selector.selectOption('project-b')
+    await selectOption(selector, 'project-b')
     await expect.poll(() => requests.at(-1)?.project_id).toBe('project-b')
     expect(requests.at(-1)?.cursor).toBeUndefined()
-    await expect(selector).toHaveValue('project-b')
+    await expect(selector).toHaveAttribute('value', 'project-b')
     await writeFile(
       testInfo.outputPath('audit-requests.json'),
       JSON.stringify({ width, requests }, null, 2)

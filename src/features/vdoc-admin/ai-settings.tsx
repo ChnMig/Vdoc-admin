@@ -288,7 +288,7 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
           className='grid min-w-0 gap-6 data-[state=inactive]:hidden'
         >
           <div className='grid min-w-0 gap-4'>
-            <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
+            <div className='grid max-w-2xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
               <AINativeSelect
                 id='ai-project-scope'
                 label={t('admin.ai.projectScope')}

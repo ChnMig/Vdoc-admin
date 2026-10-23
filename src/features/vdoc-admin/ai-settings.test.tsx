@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
+import { selectOption } from '@/test/select-option'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthUser } from '@/stores/auth-store'
@@ -206,12 +207,12 @@ describe('AISettingsPanel project boundaries', () => {
     const screen = await renderSettings(superAdmin)
     const projectSelect = await screen.findByLabelText('Project provider scope')
 
-    expect(
-      await within(projectSelect).findByRole('option', {
-        name: 'Archived project — Archived',
-      })
-    ).toBeInTheDocument()
-    await user.selectOptions(projectSelect, archivedProject.id)
+    await user.click(projectSelect)
+    const archivedOption = await screen.findByRole('option', {
+      name: 'Archived project — Archived',
+    })
+    expect(archivedOption).toBeInTheDocument()
+    await user.click(archivedOption)
 
     expect(
       await screen.findByText('Archived project settings are read-only')
@@ -250,8 +251,9 @@ describe('AISettingsPanel project boundaries', () => {
     const projectSelect = await screen.findByLabelText('Project provider scope')
 
     expect(projectSelect).toHaveValue('')
+    await userEvent.click(projectSelect)
     expect(
-      await within(projectSelect).findByRole('option', {
+      await screen.findByRole('option', {
         name: 'Archived project — Archived',
       })
     ).toBeInTheDocument()
@@ -349,7 +351,7 @@ describe('AISettingsPanel project boundaries', () => {
     expect(
       await screen.findByDisplayValue('Provider project-active')
     ).toBeInTheDocument()
-    await user.selectOptions(projectSelect, projectB.id)
+    await selectOption(projectSelect, projectB.id, user)
 
     expect(
       await screen.findByText('Loading project AI settings…')
@@ -545,9 +547,10 @@ describe('AISettingsPanel project boundaries', () => {
         expect.any(Object)
       )
     )
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Project provider scope'),
-      projectB.id
+      projectB.id,
+      user
     )
     await screen.findByDisplayValue('Provider project-b')
     await act(async () => {

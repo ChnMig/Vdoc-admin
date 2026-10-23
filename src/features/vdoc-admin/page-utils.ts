@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
+import { getStoredLanguage, type Language } from '@/lib/i18n'
 import { type NativeSelectOption } from '@/lib/native-select-options'
 import {
   getVersion,
@@ -18,9 +19,9 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#8e360300dae363353e78408498c6f6135b473fe6'
+  'github:ChnMig/Vdoc-mcp#8037d90b2e3a33dd7be9652e9114e9ee1495b0a4'
 
-export const vdocMcpReleaseVersion = '0.3.17-beta.5'
+export const vdocMcpReleaseVersion = '0.3.17-beta.6'
 
 export const ACTIVE_STATUS = 1
 
@@ -123,11 +124,21 @@ export function numberValue(formData: FormData, key: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback
 }
 
-export function formatDate(value?: string) {
+export function formatDate(
+  value?: string,
+  language: Language = getStoredLanguage()
+) {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return new Intl.DateTimeFormat(language, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
 export function activeFirstId(items: Array<{ id: string; status: number }>) {

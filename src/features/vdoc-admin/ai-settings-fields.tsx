@@ -1,8 +1,8 @@
-import type { ChangeEvent } from 'react'
 import { withNativeSelectPlaceholder } from '@/lib/native-select-options'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { OptionsSelect } from '@/components/options-select'
 import type { SelectOption } from './ai-settings-types'
 
 export function AITextField({
@@ -47,6 +47,7 @@ export function AITextAreaField({
   defaultValue,
   disabled,
   required = false,
+  rows = 8,
 }: {
   readonly id?: string
   readonly label: string
@@ -54,6 +55,7 @@ export function AITextAreaField({
   readonly defaultValue: string
   readonly disabled: boolean
   readonly required?: boolean
+  readonly rows?: number
 }) {
   return (
     <div className='grid min-w-0 gap-2'>
@@ -64,7 +66,8 @@ export function AITextAreaField({
         defaultValue={defaultValue}
         disabled={disabled}
         required={required}
-        className='min-h-28'
+        rows={rows}
+        className='field-sizing-fixed min-h-28 resize-y'
       />
     </div>
   )
@@ -130,33 +133,20 @@ export function AINativeSelect({
   const controlId = id ?? name ?? label
   const selectOptions = withNativeSelectPlaceholder(options, placeholder)
   const selectionProps = onChange
-    ? {
-        value,
-        onChange: (event: ChangeEvent<HTMLSelectElement>) =>
-          onChange(event.currentTarget.value),
-      }
+    ? { value, onChange }
     : { defaultValue: value }
   return (
     <div className='grid min-w-0 gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
-      <select
+      <OptionsSelect
         id={controlId}
         name={name}
         disabled={disabled}
         required={required}
-        className='h-9 w-full max-w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/25'
+        options={selectOptions}
+        placeholder={placeholder}
         {...selectionProps}
-      >
-        {selectOptions.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            disabled={required && option.value === ''}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
+      />
     </div>
   )
 }

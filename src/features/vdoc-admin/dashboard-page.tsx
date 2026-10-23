@@ -304,70 +304,7 @@ export function DashboardPage() {
           options={documentOptions}
         />
       </SelectorGrid>
-      <section className='flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-lg border bg-card p-5 text-card-foreground'>
-        <div className='min-w-0 flex-1 space-y-2'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <h2 className='text-sm font-semibold'>
-              {t('admin.workbench.roleTitle')}
-            </h2>
-            <StatusBadge>{roleLabel}</StatusBadge>
-          </div>
-          <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
-            {roleGuidance}
-          </p>
-          {selectedProject && (
-            <p className='text-xs break-words text-muted-foreground'>
-              {selectedProject.name} ·{' '}
-              <span className='font-mono'>{selectedProject.id}</span>
-            </p>
-          )}
-        </div>
-        <StatusBadge muted={!healthQuery.data?.ready}>
-          {healthQuery.data?.ready
-            ? t('admin.statuses.ready')
-            : t('admin.statuses.degraded')}
-        </StatusBadge>
-      </section>
-      <dl className='grid grid-cols-2 rounded-lg border bg-card text-card-foreground lg:grid-cols-4'>
-        {[
-          [
-            t('nav.users'),
-            isSuperAdmin ? String(usersQuery.data?.total ?? '—') : '—',
-            t('admin.workbench.usersStat'),
-          ],
-          [
-            t('nav.teams'),
-            isSuperAdmin ? String(teamsQuery.data?.total ?? '—') : '—',
-            t('admin.workbench.teamsStat'),
-          ],
-          [
-            t('nav.projects'),
-            String(projectsQuery.data?.total ?? '—'),
-            t('admin.workbench.projectsStat'),
-          ],
-          [
-            t('nav.mcpTokens'),
-            String(tokensQuery.data?.total ?? '—'),
-            t('admin.workbench.tokensStat'),
-          ],
-        ].map(([title, value, description], index) => (
-          <div
-            key={title}
-            className={`min-w-0 p-4 ${index % 2 === 1 ? 'border-s' : ''} ${index > 1 ? 'border-t lg:border-t-0' : ''} ${index === 2 ? 'lg:border-s' : ''}`}
-          >
-            <dt className='text-sm text-muted-foreground'>{title}</dt>
-            <dd className='mt-1'>
-              <span className='text-xl font-semibold tabular-nums'>
-                {value}
-              </span>
-              <p className='mt-1 text-xs leading-5 text-muted-foreground'>
-                {description}
-              </p>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <section className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]'>
+      <section className='grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]'>
         <CollectionCard
           title={t('admin.workbench.nextStepsTitle')}
           description={t('admin.workbench.nextStepsDescription')}
@@ -417,47 +354,115 @@ export function DashboardPage() {
             })}
           </ol>
         </CollectionCard>
-        <CollectionCard
-          title={t('admin.pages.dashboard.health')}
-          description='/api/v1/open/health'
+        <aside
+          aria-label={t('admin.workbench.roleTitle')}
+          className='grid min-w-0 gap-5'
         >
-          <div className='grid gap-3 text-sm'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Server className='size-4 text-muted-foreground' />
-              <StatusBadge>
-                {healthQuery.data?.status ?? t('admin.common.unknown')}
-              </StatusBadge>
-              <StatusBadge muted={!healthQuery.data?.ready}>
-                {healthQuery.data?.ready
-                  ? t('admin.statuses.ready')
-                  : t('admin.statuses.degraded')}
-              </StatusBadge>
-            </div>
-            <p className='text-muted-foreground'>
-              {healthQuery.data?.uptime ?? '-'}
-            </p>
-            <div className='grid gap-2'>
-              {dependencyEntries.length ? (
-                dependencyEntries.map(([name, dependency]) => (
-                  <div
-                    key={name}
-                    className='flex min-w-0 flex-wrap items-center justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0 last:pb-0'
-                  >
-                    <span className='min-w-0 font-medium break-words'>
-                      {name}
-                    </span>
-                    <StatusBadge muted={!dependency.ready}>
-                      {dependency.status}
-                    </StatusBadge>
-                  </div>
-                ))
-              ) : (
-                <EmptyState />
+          <section className='grid min-w-0 gap-3 border-b pb-5 text-card-foreground'>
+            <div className='min-w-0 flex-1 space-y-2'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <h2 className='text-sm font-semibold'>
+                  {t('admin.workbench.roleTitle')}
+                </h2>
+                <StatusBadge>{roleLabel}</StatusBadge>
+              </div>
+              <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
+                {roleGuidance}
+              </p>
+              {selectedProject && (
+                <p className='text-xs break-words text-muted-foreground'>
+                  {selectedProject.name} ·{' '}
+                  <span className='font-mono'>{selectedProject.id}</span>
+                </p>
               )}
             </div>
-          </div>
-        </CollectionCard>
+            <StatusBadge muted={!healthQuery.data?.ready}>
+              {healthQuery.data?.ready
+                ? t('admin.statuses.ready')
+                : t('admin.statuses.degraded')}
+            </StatusBadge>
+          </section>
+          <CollectionCard
+            title={t('admin.pages.dashboard.health')}
+            description='/api/v1/open/health'
+          >
+            <div className='grid gap-3 text-sm'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Server className='size-4 text-muted-foreground' />
+                <StatusBadge>
+                  {healthQuery.data?.status ?? t('admin.common.unknown')}
+                </StatusBadge>
+                <StatusBadge muted={!healthQuery.data?.ready}>
+                  {healthQuery.data?.ready
+                    ? t('admin.statuses.ready')
+                    : t('admin.statuses.degraded')}
+                </StatusBadge>
+              </div>
+              <p className='text-muted-foreground'>
+                {healthQuery.data?.uptime ?? '-'}
+              </p>
+              <div className='grid gap-2'>
+                {dependencyEntries.length ? (
+                  dependencyEntries.map(([name, dependency]) => (
+                    <div
+                      key={name}
+                      className='flex min-w-0 flex-wrap items-center justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0 last:pb-0'
+                    >
+                      <span className='min-w-0 font-medium break-words'>
+                        {name}
+                      </span>
+                      <StatusBadge muted={!dependency.ready}>
+                        {dependency.status}
+                      </StatusBadge>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState />
+                )}
+              </div>
+            </div>
+          </CollectionCard>
+        </aside>
       </section>
+      <dl className='grid grid-cols-2 border-t text-card-foreground lg:grid-cols-4'>
+        {[
+          [
+            t('nav.users'),
+            isSuperAdmin ? String(usersQuery.data?.total ?? '—') : '—',
+            t('admin.workbench.usersStat'),
+          ],
+          [
+            t('nav.teams'),
+            isSuperAdmin ? String(teamsQuery.data?.total ?? '—') : '—',
+            t('admin.workbench.teamsStat'),
+          ],
+          [
+            t('nav.projects'),
+            String(projectsQuery.data?.total ?? '—'),
+            t('admin.workbench.projectsStat'),
+          ],
+          [
+            t('nav.mcpTokens'),
+            String(tokensQuery.data?.total ?? '—'),
+            t('admin.workbench.tokensStat'),
+          ],
+        ].map(([title, value, description], index) => (
+          <div
+            key={title}
+            className={`min-w-0 p-4 ${index % 2 === 1 ? 'border-s' : ''} ${index > 1 ? 'border-t lg:border-t-0' : ''} ${index === 2 ? 'lg:border-s' : ''}`}
+          >
+            <dt className='text-sm text-muted-foreground'>{title}</dt>
+            <dd className='mt-1'>
+              <span className='text-base font-semibold tabular-nums'>
+                {value}
+              </span>
+              <p className='mt-1 text-xs leading-5 text-muted-foreground'>
+                {description}
+              </p>
+            </dd>
+          </div>
+        ))}
+      </dl>
     </PageChrome>
   )
 }

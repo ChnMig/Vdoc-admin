@@ -47,6 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { OptionsSelect } from '@/components/options-select'
 
 export function DocumentSharePanel({
   projectId,
@@ -292,43 +293,39 @@ function DocumentSharePanelContent({
             }}
           >
             <ShareField label={t('publicShare.branch')} htmlFor='share-branch'>
-              <select
+              <OptionsSelect
                 id='share-branch'
                 name='branch_id'
                 required
-                className='h-10 rounded-md border border-input bg-background px-3 text-sm'
-              >
-                <option value=''>—</option>
-                {shareableBranches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '', label: '—' },
+                  ...shareableBranches.map((branch) => ({
+                    value: branch.id,
+                    label: branch.name,
+                  })),
+                ]}
+              />
             </ShareField>
             <ShareField label={t('publicShare.scope')} htmlFor='share-scope'>
-              <select
+              <OptionsSelect
                 id='share-scope'
                 name='version_scope'
-                className='h-10 rounded-md border border-input bg-background px-3 text-sm'
-              >
-                <option value='1'>{t('publicShare.latest')}</option>
-                <option value='2'>{t('publicShare.allVersions')}</option>
-              </select>
+                options={[
+                  { value: '1', label: t('publicShare.latest') },
+                  { value: '2', label: t('publicShare.allVersions') },
+                ]}
+              />
             </ShareField>
             <ShareField label={t('publicShare.expiry')} htmlFor='share-expiry'>
-              <select
+              <OptionsSelect
                 id='share-expiry'
                 name='expiry_preset'
-                className='h-10 rounded-md border border-input bg-background px-3 text-sm'
                 defaultValue='3_months'
-              >
-                {DOCUMENT_SHARE_EXPIRY_PRESETS.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {preset.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
+                options={DOCUMENT_SHARE_EXPIRY_PRESETS.map((preset) => ({
+                  value: preset,
+                  label: preset.replace(/_/g, ' '),
+                }))}
+              />
             </ShareField>
             <ShareField
               label={t('publicShare.passwordOptional')}

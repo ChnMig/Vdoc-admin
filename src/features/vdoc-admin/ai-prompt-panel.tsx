@@ -105,8 +105,13 @@ function PromptForm({
       }}
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <Badge variant='outline'>{prompt.prompt_key}</Badge>
-        <Badge variant={prompt.enabled ? 'outline' : 'secondary'}>
+        <code className='min-w-0 text-sm font-medium break-all'>
+          {prompt.prompt_key}
+        </code>
+        <Badge
+          className='shrink-0'
+          variant={prompt.enabled ? 'outline' : 'secondary'}
+        >
           {prompt.enabled
             ? t('admin.statuses.enabled')
             : t('admin.statuses.disabled')}
@@ -118,6 +123,7 @@ function PromptForm({
         name='system_prompt'
         defaultValue={prompt.system_prompt}
         disabled={pending}
+        rows={12}
         required
       />
       <AITextAreaField
@@ -126,6 +132,7 @@ function PromptForm({
         name='user_prompt_template'
         defaultValue={prompt.user_prompt_template}
         disabled={pending}
+        rows={7}
         required
       />
       <AINativeSelect

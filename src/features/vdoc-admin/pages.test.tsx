@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -359,12 +360,15 @@ describe('DashboardPage role boundaries', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Project')).toHaveValue('project-1')
     )
+    await userEvent.click(screen.getByLabelText('Project'))
     expect(
       screen.getByRole('option', { name: 'Archived project — Archived' })
     ).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     await waitFor(() =>
       expect(screen.getByLabelText('Document')).toHaveValue('document-1')
     )
+    await userEvent.click(screen.getByLabelText('Document'))
     expect(
       screen.getByRole('option', { name: 'Archived document — Archived' })
     ).toBeInTheDocument()
@@ -383,10 +387,10 @@ describe('DashboardPage role boundaries', () => {
     const user = userEvent.setup()
     const firstRender = renderDashboardPage()
 
-    await firstRender.findByRole('option', { name: secondProject.name })
-    await user.selectOptions(
+    await selectOption(
       firstRender.getByLabelText('Project'),
-      secondProject.id
+      secondProject.id,
+      user
     )
     expect(firstRender.getByLabelText('Project')).toHaveValue(secondProject.id)
     firstRender.unmount()
@@ -486,7 +490,7 @@ describe('DashboardPage role boundaries', () => {
   it('points the page guidance at the first incomplete lifecycle step', async () => {
     const screen = renderDashboardPage()
 
-    const guidance = screen.getByRole('complementary')
+    const guidance = screen.getByRole('complementary', { name: 'Next action' })
     expect(
       await within(guidance).findByText(
         'Continue with “Submit a draft”, the first incomplete check for this context.'
@@ -564,7 +568,7 @@ describe('DashboardPage role boundaries', () => {
     })
 
     const screen = renderDashboardPage()
-    const guidance = screen.getByRole('complementary')
+    const guidance = screen.getByRole('complementary', { name: 'Next action' })
 
     expect(
       await within(guidance).findByText('Lifecycle complete')
@@ -977,45 +981,41 @@ describe('ProjectsPage lifecycle boundaries', () => {
       /Leave this blank to make the current signed-in actor/i
     )
 
-    await waitFor(() =>
-      expect(
-        within(adminSelect).getByRole('option', {
-          name: 'Existing admin · existing@example.com',
-        })
-      ).toBeInTheDocument()
-    )
+    await user.click(adminSelect)
     expect(
-      within(adminSelect).getByRole('option', {
+      await screen.findByRole('option', {
+        name: 'Existing admin · existing@example.com',
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', {
         name: 'Available admin · available@example.com',
       })
     ).toBeInTheDocument()
     expect(
-      within(adminSelect).queryByRole('option', {
+      screen.queryByRole('option', {
         name: 'Admin · admin@example.com',
       })
     ).not.toBeInTheDocument()
 
+    await user.keyboard('{Escape}')
     await user.click(
       within(createProjectCard).getByRole('button', { name: 'Cancel' })
     )
 
-    let memberUserSelect: HTMLElement | undefined
-    await waitFor(() => {
-      memberUserSelect = screen
-        .getAllByLabelText('User')
-        .find((element) => element !== adminSelect)
-      expect(memberUserSelect).toBeDefined()
-    })
-    if (!(memberUserSelect instanceof HTMLElement))
-      throw new Error('missing member candidate select')
-    const resolvedMemberUserSelect = memberUserSelect
-    await waitFor(() =>
-      expect(
-        within(resolvedMemberUserSelect).queryByRole('option', {
-          name: 'Existing admin · existing@example.com',
-        })
-      ).not.toBeInTheDocument()
-    )
+    await user.click(screen.getByRole('button', { name: 'Add member' }))
+    const memberDialog = screen.getByRole('dialog', { name: 'Add member' })
+    await user.click(within(memberDialog).getByLabelText('User'))
+    expect(
+      await screen.findByRole('option', {
+        name: 'Available admin · available@example.com',
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('option', {
+        name: 'Existing admin · existing@example.com',
+      })
+    ).not.toBeInTheDocument()
   })
 
   it('keeps archived projects reachable without selecting one implicitly', async () => {
@@ -1029,6 +1029,7 @@ describe('ProjectsPage lifecycle boundaries', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Project')).toHaveValue('')
     )
+    await userEvent.click(screen.getByLabelText('Project'))
     expect(
       await screen.findByRole('option', {
         name: 'Archived project — Archived',
@@ -1173,6 +1174,37 @@ describe('ProjectsPage lifecycle boundaries', () => {
 })
 
 describe('MCPTokensPage secret lifecycle', () => {
+  async function selectExpiry(
+    screen: ReturnType<typeof renderMCPTokensPage>,
+    year: string,
+    hour = '00',
+    minute = '00'
+  ) {
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Expires at'))
+    const picker = screen.getByRole('dialog', { name: 'Expires at' })
+    await user.click(
+      await within(picker).findByRole(
+        'combobox',
+        { name: 'Year' },
+        { timeout: 5000 }
+      )
+    )
+    await user.click(screen.getByRole('option', { name: year }))
+    await user.click(within(picker).getByRole('combobox', { name: 'Month' }))
+    await user.click(screen.getByRole('option', { name: 'Jan' }))
+    await user.click(
+      within(picker).getByRole('button', {
+        name: new RegExp(`January 15.*, ${year}`),
+      })
+    )
+    await user.click(within(picker).getByRole('combobox', { name: 'Hour' }))
+    await user.click(screen.getByRole('option', { name: hour }))
+    await user.click(within(picker).getByRole('combobox', { name: 'Minute' }))
+    await user.click(screen.getByRole('option', { name: minute }))
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
+  }
+
   const token = {
     id: 'token-1',
     user_id: 'user-1',
@@ -1207,9 +1239,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     const card = screen.getByRole('dialog', { name: 'Create MCP token' })
     await user.type(within(card).getByLabelText('Name'), 'Scoped token')
     const apiRead = within(card).getAllByRole('checkbox')[0]
-    if (!(apiRead instanceof HTMLInputElement)) {
-      throw new Error('missing api:read checkbox')
-    }
+    expect(apiRead).toBeChecked()
     await user.click(apiRead)
     await user.click(within(card).getByRole('button', { name: 'Create' }))
 
@@ -1219,9 +1249,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
 
     await user.click(apiRead)
-    fireEvent.change(within(card).getByLabelText('Expires at'), {
-      target: { value: '2020-01-01T00:00' },
-    })
+    await selectExpiry(screen, '2020')
     await user.click(within(card).getByRole('button', { name: 'Create' }))
 
     expect(
@@ -1242,11 +1270,11 @@ describe('MCPTokensPage secret lifecycle', () => {
     const dialog = screen.getByRole('dialog', { name: 'Create MCP token' })
     await user.type(within(dialog).getByLabelText('Name'), 'Scoped token')
     const expiryInput = within(dialog).getByLabelText('Expires at')
-    expect(expiryInput).toHaveAttribute('type', 'datetime-local')
+    expect(expiryInput).toHaveAttribute('type', 'button')
     expect(expiryInput).toHaveAccessibleDescription(
       'Use your local date and time. Leave blank for no expiration.'
     )
-    fireEvent.change(expiryInput, { target: { value: expiry } })
+    if (expiry) await selectExpiry(screen, '2099', '18', '30')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
 
     await waitFor(() =>
@@ -1331,10 +1359,7 @@ describe('MCPTokensPage secret lifecycle', () => {
 
     const screen = renderMCPTokensPage()
 
-    expect(
-      await screen.findByText('Agent connection evidence found')
-    ).toBeInTheDocument()
-    const expiredName = screen.getByText('Expired token')
+    const expiredName = await screen.findByText('Expired token')
     const expiredRow = expiredName.closest('tr')
     if (!(expiredRow instanceof HTMLElement))
       throw new Error('missing expired token row')
@@ -1345,6 +1370,12 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect(
       within(expiredRow).getByRole('button', { name: 'Revoke' })
     ).toBeDisabled()
+    await userEvent.click(
+      screen.getByRole('tab', { name: 'Recent Agent activity' })
+    )
+    expect(
+      await screen.findByText('Agent connection evidence found')
+    ).toBeInTheDocument()
   })
 
   it('does not let an older reveal overwrite a newly created token', async () => {
@@ -1483,6 +1514,9 @@ describe('MCPTokensPage secret lifecycle', () => {
     })
     const screen = renderPage(<MCPTokensPage search={{ token_id: token.id }} />)
 
+    await userEvent.click(
+      screen.getByRole('tab', { name: 'Recent Agent activity' })
+    )
     expect(
       await screen.findByText('Agent connection evidence found')
     ).toBeInTheDocument()
@@ -1608,6 +1642,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     const user = userEvent.setup()
     const screen = renderPage(<TokenRouteHarness />)
 
+    await user.click(screen.getByRole('tab', { name: 'Recent Agent activity' }))
     expect(
       await screen.findByText('Agent connection evidence found')
     ).toBeInTheDocument()
@@ -1850,7 +1885,8 @@ describe('VersionsPage', () => {
     apiMocks.listVersions.mockImplementation(
       (_project, _document, _branch, options) =>
         Promise.resolve({
-          items: options?.page?.offset ? [older] : [first],
+          items:
+            options?.page?.offset || options?.page?.search ? [older] : [first],
           total: 51,
           hasMore: !options?.page?.offset,
         })
@@ -1874,6 +1910,12 @@ describe('VersionsPage', () => {
       'version-older',
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+    expect(screen.getByRole('tab', { name: 'Content viewer' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.queryByLabelText('Search versions')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Versions' }))
     await user.click(screen.getByRole('button', { name: 'Next' }))
     await waitFor(() =>
       expect(apiMocks.listVersions).toHaveBeenLastCalledWith(
@@ -1897,6 +1939,14 @@ describe('VersionsPage', () => {
         })
       )
     )
+    await user.click(await screen.findByRole('button', { name: 'v0' }))
+    expect(screen.getByRole('tab', { name: 'Content viewer' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.getByRole('tab', { name: 'Content viewer' })).toHaveFocus()
+    await user.click(screen.getByRole('tab', { name: 'Versions' }))
+    expect(screen.getByLabelText('Search versions')).toHaveValue('v0')
   })
 
   it('renders Markdown facts for Markdown versions without requesting endpoints', async () => {
@@ -1978,6 +2028,52 @@ describe('VersionsPage', () => {
       'session-version',
       'What changed?'
     )
+  })
+
+  it('opens the endpoint workspace for an exact endpoint deep link', async () => {
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [{ ...markdownDocumentFixture, document_type: 1 }],
+      total: 1,
+    })
+    const endpoint = {
+      id: 'endpoint-linked',
+      version_id: 'version-1',
+      method: 'GET',
+      path: '/widgets',
+      summary: 'List widgets',
+      tags: ['Widgets'],
+      deprecated: false,
+    }
+    apiMocks.listEndpoints.mockResolvedValue({ items: [endpoint], total: 1 })
+    apiMocks.getEndpoint.mockResolvedValue(endpoint)
+    const screen = renderPage(
+      <VersionsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          version_id: markdownVersionFixture.id,
+          endpoint_id: endpoint.id,
+        }}
+      />
+    )
+
+    expect(await screen.findByLabelText('Endpoint search')).toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'OpenAPI endpoints' })
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await screen.findByRole('heading', { name: /GET.*\/widgets/ })
+    ).toBeInTheDocument()
+    expect(getEndpoint).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      markdownVersionFixture.id,
+      endpoint.id,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    await userEvent.click(screen.getByRole('tab', { name: 'Content viewer' }))
+    expect(screen.getByLabelText('Content kind')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Endpoint search')).not.toBeInTheDocument()
   })
 
   it('opens an exact version deep link and does not fall back to the first version', async () => {
@@ -2083,6 +2179,7 @@ describe('VersionsPage', () => {
 
     const screen = renderVersionsPage()
 
+    await userEvent.click(screen.getByLabelText('Branch'))
     expect(
       await screen.findByRole('option', { name: 'legacy — Archived' })
     ).toBeInTheDocument()
@@ -2092,9 +2189,8 @@ describe('VersionsPage', () => {
     const screen = renderVersionsPage()
     const contentKind = await screen.findByLabelText('Content kind')
 
-    expect(
-      within(contentKind).getAllByRole('option', { name: 'Raw' })
-    ).toHaveLength(1)
+    await userEvent.click(contentKind)
+    expect(screen.getAllByRole('option', { name: 'Raw' })).toHaveLength(1)
   })
 })
 
@@ -2224,23 +2320,24 @@ describe('SettingsPage AI settings', () => {
     if (!systemProviderEnabled) {
       throw new Error('missing system provider enabled select')
     }
-    expect(
-      within(systemProviderEnabled).getAllByRole('option', { name: 'Enabled' })
-    ).toHaveLength(1)
-    await user.selectOptions(systemProviderEnabled, 'false')
+    await user.click(systemProviderEnabled)
+    expect(screen.getAllByRole('option', { name: 'Enabled' })).toHaveLength(1)
+    await user.click(screen.getByRole('option', { name: 'Disabled' }))
     const systemProviderApiMode = screen.getAllByLabelText('API mode')[0]
     if (!systemProviderApiMode) {
       throw new Error('missing system provider API mode select')
     }
+    await user.click(systemProviderApiMode)
     expect(
-      within(systemProviderApiMode).getByRole('option', {
+      screen.getByRole('option', {
         name: 'Chat Completions',
       })
-    ).toHaveValue('chat_completions')
-    expect(
-      within(systemProviderApiMode).getByRole('option', { name: 'Responses' })
-    ).toHaveValue('responses')
-    await user.selectOptions(systemProviderApiMode, 'responses')
+    ).toHaveAttribute('data-value', 'chat_completions')
+    expect(screen.getByRole('option', { name: 'Responses' })).toHaveAttribute(
+      'data-value',
+      'responses'
+    )
+    await user.click(screen.getByRole('option', { name: 'Responses' }))
 
     const saveSystemProvider = screen.getByRole('button', {
       name: 'Save system provider',
@@ -2364,9 +2461,10 @@ describe('SettingsPage AI settings', () => {
         expect.objectContaining({ name: 'openai' })
       )
     )
-    await user.selectOptions(
+    await selectOption(
       screen.getByLabelText('Project provider scope'),
-      'project-2'
+      'project-2',
+      user
     )
     await screen.findByDisplayValue('anthropic')
 
@@ -2542,9 +2640,10 @@ describe('SettingsPage AI settings', () => {
     if (!systemPromptForm) {
       throw new Error('missing system prompt form')
     }
-    await user.selectOptions(
+    await selectOption(
       within(systemPromptForm).getByLabelText('Enabled'),
-      'false'
+      'false',
+      user
     )
     await user.click(systemPromptButton)
     await user.click(screen.getByRole('tab', { name: 'Project override' }))
@@ -2668,10 +2767,10 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
+    await user.click(screen.getByRole('tab', { name: /^AI$/ }))
 
-    expect(await screen.findByText('AI summary for draft')).toBeInTheDocument()
+    expect(await screen.findByText('AI summary for draft')).toBeVisible()
 
     await waitFor(() =>
       expect(getAISummary).toHaveBeenCalledWith(
@@ -2686,17 +2785,73 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     )
   })
 
+  it('returns to the result when another diff deep link opens from history', async () => {
+    const linkedDiff = { ...diffFixture, id: 'diff-linked' }
+    apiMocks.listDiffs.mockResolvedValue({
+      items: [diffFixture, linkedDiff],
+      total: 2,
+    })
+    mockAIQueries('diff', diffFixture.id)
+    function Harness() {
+      const [search, setSearch] = useState<VdocRouteSearch>({
+        project_id: projectFixture.id,
+        document_id: markdownDocumentFixture.id,
+        diff_id: diffFixture.id,
+      })
+      return (
+        <>
+          <button
+            onClick={() =>
+              setSearch((current) => ({ ...current, diff_id: linkedDiff.id }))
+            }
+          >
+            Open linked diff
+          </button>
+          <DiffsPage
+            search={search}
+            onSearchChange={(patch) =>
+              setSearch((current) => ({ ...current, ...patch }))
+            }
+          />
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    const screen = renderPage(<Harness />)
+    await waitFor(() =>
+      expect(screen.getByLabelText('From version')).toHaveValue('version-0')
+    )
+    await user.click(screen.getByRole('tab', { name: 'Stored diff history' }))
+    await user.click(screen.getByRole('button', { name: 'Open linked diff' }))
+    expect(screen.getByRole('tab', { name: 'Diff result' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await waitFor(() =>
+      expect(apiMocks.getDiff).toHaveBeenCalledWith(
+        projectFixture.id,
+        markdownDocumentFixture.id,
+        linkedDiff.id,
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+  })
+
   it('scopes DiffsPage AI panel to the active diff', async () => {
     mockAIQueries('diff', 'diff-1')
     const user = userEvent.setup()
     const screen = renderDiffsPage()
 
-    await waitFor(() =>
-      expect(screen.getAllByRole('option', { name: 'v0' })).toHaveLength(2)
-    )
-    expect(screen.getAllByRole('option', { name: 'v1' })).toHaveLength(2)
-    await user.selectOptions(screen.getByLabelText('From version'), 'version-0')
-    await user.selectOptions(screen.getByLabelText('To version'), 'version-1')
+    for (const label of ['From version', 'To version']) {
+      await user.click(screen.getByLabelText(label))
+      expect(
+        await screen.findByRole('option', { name: 'v0' })
+      ).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'v1' })).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+    }
+    await selectOption(screen.getByLabelText('From version'), 'version-0', user)
+    await selectOption(screen.getByLabelText('To version'), 'version-1', user)
     await user.click(screen.getByRole('button', { name: 'Compare' }))
 
     expect(await screen.findByText('AI summary for diff')).toBeInTheDocument()
@@ -2775,30 +2930,35 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       if (navigation === 'unmount') {
         screen.unmount()
       } else if (navigation === 'version') {
-        await user.selectOptions(
+        await selectOption(
           screen.getByLabelText('From version'),
-          'version-1'
+          'version-1',
+          user
         )
       } else {
-        await user.selectOptions(
+        await selectOption(
           screen.getByLabelText('Document'),
-          'document-2'
+          'document-2',
+          user
         )
         await waitFor(() =>
           expect(screen.getByLabelText('Document')).toHaveValue('document-2')
         )
         if (navigation === 'round-trip') {
-          await user.selectOptions(
+          await selectOption(
             screen.getByLabelText('Document'),
-            'document-1'
+            'document-1',
+            user
           )
-          await user.selectOptions(
+          await selectOption(
             screen.getByLabelText('From version'),
-            'version-0'
+            'version-0',
+            user
           )
-          await user.selectOptions(
+          await selectOption(
             screen.getByLabelText('To version'),
-            'version-1'
+            'version-1',
+            user
           )
         }
       }
@@ -2857,6 +3017,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
         diff_id: 'diff-1',
       })
     )
+    await user.click(screen.getByRole('tab', { name: 'Stored diff history' }))
     expect(await screen.findByText('v0 → v1')).toBeInTheDocument()
   })
 
@@ -2901,7 +3062,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
         expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
       )
       await user.click(screen.getByRole('button', { name: 'Compare' }))
-      await user.selectOptions(screen.getByLabelText('To version'), 'version-2')
+      await selectOption(screen.getByLabelText('To version'), 'version-2', user)
       expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
       await user.click(screen.getByRole('button', { name: 'Compare' }))
       const latestDiff = {
@@ -2940,14 +3101,67 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     apiMocks.listDiffs.mockResolvedValue({ items: [diffFixture], total: 1 })
     const screen = renderDiffsPage()
 
+    await userEvent.click(
+      screen.getByRole('tab', { name: 'Stored diff history' })
+    )
     expect(await screen.findByText('v0 → v1')).toHaveClass('font-medium')
     expect(
       screen.getByText('Version IDs version-0 → version-1 · Diff ID diff-1')
     ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /v0 → v1/ }))
+    expect(screen.getByRole('tab', { name: 'Diff result' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.getByRole('tab', { name: 'Diff result' })).toHaveFocus()
     const reviewFilter = screen.getByLabelText('Review filter')
-    expect(
-      within(reviewFilter).getAllByRole('option', { name: 'All changes' })
-    ).toHaveLength(1)
+    await userEvent.click(reviewFilter)
+    expect(screen.getAllByRole('option', { name: 'All changes' })).toHaveLength(
+      1
+    )
+  })
+
+  it('reveals version search without clearing the chosen comparison pair', async () => {
+    const user = userEvent.setup()
+    const screen = renderPage(
+      <DiffsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          from_version_id: fromVersionFixture.id,
+          to_version_id: markdownVersionFixture.id,
+        }}
+      />
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('From version')).toHaveValue(
+        fromVersionFixture.id
+      )
+    )
+    expect(screen.queryByLabelText('Search versions')).not.toBeInTheDocument()
+    const searchToggle = screen.getByRole('button', { name: 'Search versions' })
+    await user.click(searchToggle)
+    await user.type(screen.getByLabelText('Search versions'), 'v0')
+    await waitFor(() =>
+      expect(listVersions).toHaveBeenLastCalledWith(
+        projectFixture.id,
+        markdownDocumentFixture.id,
+        undefined,
+        expect.objectContaining({
+          page: { page_size: 50, offset: 0, search: 'v0' },
+        })
+      )
+    )
+    await user.click(searchToggle)
+    expect(screen.queryByLabelText('Search versions')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('From version')).toHaveValue(
+      fromVersionFixture.id
+    )
+    expect(screen.getByLabelText('To version')).toHaveValue(
+      markdownVersionFixture.id
+    )
+    await user.click(searchToggle)
+    expect(screen.getByLabelText('Search versions')).toHaveValue('v0')
   })
 
   it('maps all backend change types and localizes backend diff messages', async () => {
@@ -2983,11 +3197,15 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     const user = userEvent.setup()
     const screen = renderDiffsPage()
 
-    await waitFor(() =>
-      expect(screen.getAllByRole('option', { name: 'v0' })).toHaveLength(2)
-    )
-    await user.selectOptions(screen.getByLabelText('源版本'), 'version-0')
-    await user.selectOptions(screen.getByLabelText('目标版本'), 'version-1')
+    for (const label of ['源版本', '目标版本']) {
+      await user.click(screen.getByLabelText(label))
+      expect(
+        await screen.findByRole('option', { name: 'v0' })
+      ).toBeInTheDocument()
+      await user.keyboard('{Escape}')
+    }
+    await selectOption(screen.getByLabelText('源版本'), 'version-0', user)
+    await selectOption(screen.getByLabelText('目标版本'), 'version-1', user)
     await user.click(screen.getByRole('button', { name: '比较' }))
 
     for (const label of [
@@ -3057,8 +3275,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       </QueryClientProvider>
     )
     const user = userEvent.setup()
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     await screen.findByText('Edit selected draft')
     await user.clear(screen.getByLabelText('Content'))
     await user.type(screen.getByLabelText('Content'), '# My unsaved edits')
@@ -3150,6 +3367,145 @@ describe('DraftsPage lifecycle boundaries', () => {
     expect(screen.queryByText(/Unsaved edits are kept/)).not.toBeInTheDocument()
   })
 
+  it('preserves unsaved editor content and selected files across workspace tabs', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+    )
+    const content = screen.getByLabelText('Content')
+    await user.type(content, '# Unsaved workspace content')
+    await user.upload(
+      screen.getByLabelText('Schema or Markdown file'),
+      new File(['# Uploaded content'], 'local-draft.md', {
+        type: 'text/markdown',
+      })
+    )
+    await user.click(screen.getByRole('tab', { name: 'Draft history' }))
+    expect(content).not.toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: /^Create$/ })
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Search draft versions')).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: /^AI$/ }))
+    expect(
+      screen.getByRole('button', { name: 'Send AI message' })
+    ).toBeDisabled()
+    await user.click(screen.getByRole('tab', { name: 'Workspace' }))
+    expect(content).toBeVisible()
+    expect(content).toHaveValue('# Unsaved workspace content')
+    expect(screen.getByText('local-draft.md')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Remove file' }))
+    expect(screen.queryByText('local-draft.md')).not.toBeInTheDocument()
+    expect(content).toHaveValue('# Unsaved workspace content')
+  })
+
+  it('moves keyboard focus to the workspace tab after opening a history row', async () => {
+    mockAIQueries('draft', 'draft-1')
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: 'Draft history' }))
+    const historyDraft = await screen.findByRole('button', { name: 'draft v1' })
+    historyDraft.focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('tab', { name: 'Workspace' })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'Workspace' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(
+      screen.queryByRole('button', { name: 'draft v1' })
+    ).not.toBeInTheDocument()
+    expect(await screen.findByText('Edit selected draft')).toBeVisible()
+  })
+
+  it('returns an external draft deep-link change to the workspace and retains local edits', async () => {
+    mockAIQueries('draft', 'draft-1')
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [
+        { ...draftFixture, status: 1 },
+        { ...draftFixture, id: 'draft-2', status: 1, version_name: 'draft v2' },
+      ],
+      total: 2,
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const onSearchChange = vi.fn()
+    const renderLinkedPage = (draftId: string) => (
+      <QueryClientProvider client={client}>
+        <LanguageProvider>
+          <DraftsPage
+            search={{
+              project_id: 'project-1',
+              document_id: 'document-1',
+              branch_id: 'branch-1',
+              draft_id: draftId,
+            }}
+            onSearchChange={onSearchChange}
+          />
+        </LanguageProvider>
+      </QueryClientProvider>
+    )
+    const screen = render(renderLinkedPage('draft-1'))
+    const user = userEvent.setup()
+    await screen.findByText('Edit selected draft')
+    await user.clear(screen.getByLabelText('Content'))
+    await user.type(screen.getByLabelText('Content'), '# Draft one local edits')
+    await user.click(screen.getByRole('tab', { name: 'Draft history' }))
+    screen.rerender(renderLinkedPage('draft-2'))
+    expect(screen.getByRole('tab', { name: 'Workspace' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Version name')).toHaveValue('draft v2')
+    )
+    screen.rerender(renderLinkedPage('draft-1'))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Content')).toHaveValue(
+        '# Draft one local edits'
+      )
+    )
+  })
+
+  it('switches saved content between source and preview without changing unsaved edits', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
+    await waitFor(() =>
+      expect(screen.getByLabelText('Content')).toHaveValue(
+        '# Loaded raw content'
+      )
+    )
+    await user.clear(screen.getByLabelText('Content'))
+    await user.type(screen.getByLabelText('Content'), '# Local unsaved edits')
+    await user.click(screen.getByRole('tab', { name: 'Preview' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Loaded raw content' })
+    ).toBeVisible()
+    expect(screen.getByLabelText('Content')).toHaveValue(
+      '# Local unsaved edits'
+    )
+    await user.click(screen.getByRole('tab', { name: 'Source' }))
+    expect(
+      screen.getByText('# Loaded raw content', { selector: 'pre' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: 'Loaded raw content' })
+    ).not.toBeInTheDocument()
+    expect(apiMocks.updateDraft).not.toHaveBeenCalled()
+  })
+
   it('isolates a new draft form when the document changes', async () => {
     apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
     apiMocks.listDocuments.mockResolvedValue({
@@ -3187,15 +3543,16 @@ describe('DraftsPage lifecycle boundaries', () => {
       '# Only belongs to document one'
     )
     await user.type(screen.getByLabelText('Version name'), 'document-one-draft')
-    await user.selectOptions(
+    await selectOption(
       screen.getAllByLabelText('Branch', { exact: true })[1],
-      'branch-1'
+      'branch-1',
+      user
     )
     await user.upload(
       screen.getByLabelText('Schema or Markdown file'),
       new File(['# File one'], 'one.md', { type: 'text/markdown' })
     )
-    await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+    await selectOption(screen.getByLabelText('Document'), 'document-2', user)
     await waitFor(() =>
       expect(screen.getByLabelText('Document')).toHaveValue('document-2')
     )
@@ -3206,7 +3563,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     )
     expect(screen.queryByText('one.md')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('Content'), '# Document two')
-    await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+    await selectOption(screen.getByLabelText('Document'), 'document-1', user)
     expect(screen.getByLabelText('Content')).toHaveValue(
       '# Only belongs to document one'
     )
@@ -3245,17 +3602,20 @@ describe('DraftsPage lifecycle boundaries', () => {
       })
     const screen = renderDraftsPage()
     const user = userEvent.setup()
-    await screen.findAllByRole('option', { name: 'main' })
-    await user.selectOptions(
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+    )
+    await selectOption(
       screen.getAllByLabelText('Branch', { exact: true })[1],
-      'branch-1'
+      'branch-1',
+      user
     )
     await user.type(screen.getByLabelText('Version name'), 'v-file')
     await user.upload(screen.getByLabelText('Schema or Markdown file'), file)
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(screen.getByLabelText('Content')).toBeDisabled()
     expect(apiMocks.createDraft).not.toHaveBeenCalled()
-    await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+    await selectOption(screen.getByLabelText('Document'), 'document-2', user)
     await act(async () => {
       finishRead('# Delayed upload')
     })
@@ -3272,7 +3632,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     )
     expect(screen.getByLabelText('Document')).toHaveValue('document-2')
     expect(screen.getByLabelText('Content')).toHaveValue('')
-    await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+    await selectOption(screen.getByLabelText('Document'), 'document-1', user)
     expect(screen.getByLabelText('Version name')).toHaveValue('')
     expect(screen.queryByText('delayed.md')).not.toBeInTheDocument()
   })
@@ -3324,9 +3684,11 @@ describe('DraftsPage lifecycle boundaries', () => {
       })
       const screen = renderPage(<DraftsPage />, queryClient)
       const user = userEvent.setup()
-      await screen.findAllByRole('option', { name: 'main' })
+      await waitFor(() =>
+        expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+      )
       if (operation === 'update') {
-        await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+        await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
         await screen.findByText('Edit selected draft')
         await waitFor(() =>
           expect(screen.getByLabelText('Content')).toHaveValue(
@@ -3335,9 +3697,10 @@ describe('DraftsPage lifecycle boundaries', () => {
         )
         await user.clear(screen.getByLabelText('Version name'))
       } else {
-        await user.selectOptions(
+        await selectOption(
           screen.getAllByLabelText('Branch', { exact: true })[1],
-          'branch-1'
+          'branch-1',
+          user
         )
       }
       await user.type(screen.getByLabelText('Version name'), 'v-file')
@@ -3348,7 +3711,7 @@ describe('DraftsPage lifecycle boundaries', () => {
         })
       )
       expect(save).not.toHaveBeenCalled()
-      await user.selectOptions(screen.getByLabelText('Document'), 'document-2')
+      await selectOption(screen.getByLabelText('Document'), 'document-2', user)
       await waitFor(() =>
         expect(
           apiMocks.listDrafts.mock.calls.some(
@@ -3371,7 +3734,8 @@ describe('DraftsPage lifecycle boundaries', () => {
           (call) => call[1] === 'document-2'
         )
       ).toHaveLength(otherDocumentReads)
-      await user.selectOptions(screen.getByLabelText('Document'), 'document-1')
+      await selectOption(screen.getByLabelText('Document'), 'document-1', user)
+      await user.click(screen.getByLabelText('Draft'))
       expect(
         await screen.findByRole('option', { name: 'v-file' })
       ).toBeInTheDocument()
@@ -3392,8 +3756,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       const user = userEvent.setup()
       const screen = renderDraftsPage()
 
-      await screen.findByRole('option', { name: 'draft v1' })
-      await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+      await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
       const editorTitle = await screen.findByText('Edit selected draft')
       const editorCard = editorTitle.closest('[data-slot="card"]')
       if (!(editorCard instanceof HTMLElement))
@@ -3433,8 +3796,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     const reviewNote = screen.getByLabelText('Review note')
     await user.type(reviewNote, 'Reviewed the selected draft')
     await user.click(screen.getByRole('button', { name: 'Approve' }))
@@ -3470,8 +3832,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     const diffTitle = await screen.findByText('Draft diff preview')
     const contentTitle = screen.getByText('Content viewer', {
       selector: '[data-slot="card-title"]',
@@ -3514,8 +3875,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       .mockResolvedValueOnce(markdownVersionFixture)
     const user = userEvent.setup()
     const screen = renderDraftsPage()
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     const note = screen.getByLabelText('Review note')
     await waitFor(() => expect(note).toBeEnabled())
     await user.type(note, 'Keep my review context')
@@ -3576,8 +3936,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     })
     const user = userEvent.setup()
     const screen = renderDraftsPage()
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     await screen.findByText('Review content is not ready')
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
     expect(apiMocks.approveDraft).not.toHaveBeenCalled()
@@ -3600,8 +3959,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     await user.type(screen.getByLabelText('Review note'), 'Captured note')
     await user.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('alertdialog')
@@ -3653,12 +4011,11 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
     const draftSelect = screen.getByLabelText('Draft')
-    await user.selectOptions(draftSelect, 'draft-1')
+    await selectOption(draftSelect, 'draft-1', user)
     const reviewNote = screen.getByLabelText('Review note')
     await user.type(reviewNote, 'Only for draft one')
-    await user.selectOptions(draftSelect, 'draft-2')
+    await selectOption(draftSelect, 'draft-2', user)
 
     expect(reviewNote).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'Approve' }))
@@ -3691,8 +4048,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       const user = userEvent.setup()
       const screen = renderDraftsPage()
 
-      await screen.findByRole('option', { name: 'draft v1' })
-      await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+      await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
       const readOnlyTitle = await screen.findByText(
         'Selected draft is read-only'
       )
@@ -3750,8 +4106,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     })
     const screen = renderPage(<DraftsPage />, queryClient)
     const user = userEvent.setup()
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     await waitFor(() =>
       expect(screen.getByLabelText('Content')).toHaveValue(serverContent)
     )
@@ -3817,8 +4172,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     })
     const user = userEvent.setup()
     const screen = renderDraftsPage()
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     await screen.findByText(
       'The editable draft could not be loaded. Refresh the page before saving.'
     )
@@ -3835,8 +4189,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
-    await screen.findByRole('option', { name: 'draft v1' })
-    await user.selectOptions(screen.getByLabelText('Draft'), 'draft-1')
+    await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
     const editorTitle = await screen.findByText('Edit selected draft')
     const editorCard = editorTitle.closest('[data-slot="card"]')
     if (!(editorCard instanceof HTMLElement))
@@ -3917,6 +4270,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const user = userEvent.setup()
     const screen = renderDraftsPage()
 
+    await user.click(screen.getByRole('tab', { name: 'Draft history' }))
     const promoteTitle = await screen.findByText(
       'Create a promotion draft from a published branch'
     )
@@ -3926,32 +4280,30 @@ describe('DraftsPage lifecycle boundaries', () => {
     const source = within(promoteCard).getByLabelText('Source branch')
     const target = within(promoteCard).getByLabelText('Target branch')
 
+    await user.click(source)
     expect(
-      within(source).getByRole('option', { name: 'main' })
+      await screen.findByRole('option', { name: 'main' })
     ).toBeInTheDocument()
     expect(
-      within(source).queryByRole('option', { name: 'release' })
+      screen.queryByRole('option', { name: 'release' })
     ).not.toBeInTheDocument()
     expect(
-      within(source).queryByRole('option', { name: 'next' })
+      screen.queryByRole('option', { name: 'next' })
     ).not.toBeInTheDocument()
     expect(
-      within(source).queryByRole('option', { name: 'legacy' })
+      screen.queryByRole('option', { name: 'legacy' })
     ).not.toBeInTheDocument()
 
-    await user.selectOptions(source, 'branch-1')
+    await user.click(screen.getByRole('option', { name: 'main' }))
     expect(target).not.toBeDisabled()
+    await user.click(target)
     expect(
-      within(target).queryByRole('option', { name: 'main' })
+      screen.queryByRole('option', { name: 'main' })
     ).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'release' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'next' })).toBeInTheDocument()
     expect(
-      within(target).getByRole('option', { name: 'release' })
-    ).toBeInTheDocument()
-    expect(
-      within(target).getByRole('option', { name: 'next' })
-    ).toBeInTheDocument()
-    expect(
-      within(target).queryByRole('option', { name: 'legacy' })
+      screen.queryByRole('option', { name: 'legacy' })
     ).not.toBeInTheDocument()
   })
 

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Route } from '@playwright/test'
+import { selectOption } from '../helpers/select-option'
 
 const admin = {
   id: 'admin',
@@ -66,7 +67,15 @@ for (const width of [1280, 390]) {
       return envelope(route, [])
     })
     await page.goto('/users')
-    await page.getByRole('button', { name: admin.email, exact: true }).click()
+    await expect(
+      page.getByText('Selected user MCP tokens', { exact: true })
+    ).toHaveCount(0)
+    const viewTokens = page.getByRole('button', {
+      name: 'View tokens',
+      exact: true,
+    })
+    await viewTokens.click()
+    await expect(viewTokens).toHaveAttribute('aria-pressed', 'true')
     await expect(
       page.getByText('Request failed with status code 403', { exact: true })
     ).toBeVisible()
@@ -82,6 +91,11 @@ for (const width of [1280, 390]) {
     expect(tokenRequests).toBe(2)
     await expect(
       page.getByText('Request failed with status code 403', { exact: true })
+    ).toHaveCount(0)
+    await page.getByRole('button', { name: 'Hide tokens', exact: true }).click()
+    await expect(viewTokens).toHaveAttribute('aria-pressed', 'false')
+    await expect(
+      page.getByText('Selected user MCP tokens', { exact: true })
     ).toHaveCount(0)
     expect(
       (await new AxeBuilder({ page }).include('main#content').analyze())
@@ -166,30 +180,41 @@ for (const width of [1280, 390]) {
     await page.goto('/projects')
     const project = page.getByLabel('Project', { exact: true })
     const role = () => page.getByLabel('Role', { exact: true })
-    await expect(project).toHaveValue('a')
-    await page
-      .getByLabel('Role: existing@example.test', { exact: true })
-      .selectOption('1')
-    await project.selectOption('b')
+    await expect(project).toHaveAttribute('value', 'a')
+    await selectOption(
+      page.getByLabel('Role: existing@example.test', { exact: true }),
+      '1'
+    )
+    await selectOption(project, 'b')
     await expect(
       page.getByLabel('Role: existing@example.test', { exact: true })
-    ).toHaveValue('2')
-    await project.selectOption('a')
-    await page.getByLabel('User', { exact: true }).selectOption('candidate')
-    await role().selectOption('2')
+    ).toHaveAttribute('value', '2')
+    await selectOption(project, 'a')
+    await expect(page.getByLabel('User', { exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Add member', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Add member', exact: true })
+    await selectOption(page.getByLabel('User', { exact: true }), 'candidate')
+    await selectOption(role(), '2')
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     await expect.poll(() => additions.length).toBe(1)
-    await project.selectOption('b')
-    await page.getByLabel('User', { exact: true }).selectOption('candidate')
-    await role().selectOption('3')
+    await selectOption(role(), '3')
     releaseAdd()
     await expect(
       page.getByRole('button', { name: 'Add', exact: true })
     ).toBeEnabled()
-    await expect(role()).toHaveValue('3')
-    await expect(page.getByLabel('User', { exact: true })).toHaveValue(
+    await expect(role()).toHaveAttribute('value', '3')
+    await expect(page.getByLabel('User', { exact: true })).toHaveAttribute(
+      'value',
       'candidate'
     )
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await selectOption(project, 'b')
+    await page.getByRole('button', { name: 'Add member', exact: true }).click()
+    await expect(page.getByLabel('User', { exact: true })).toHaveAttribute(
+      'value',
+      ''
+    )
+    await expect(role()).toHaveAttribute('value', '1')
     expect(additions).toEqual([{ project: 'a', role: 2 }])
     expect(
       await page.evaluate(

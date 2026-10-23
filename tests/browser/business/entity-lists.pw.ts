@@ -3,6 +3,7 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { selectOption } from '../helpers/select-option'
 
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const evidenceRoot = resolve(
@@ -417,7 +418,9 @@ for (const width of [1280, 768, 640, 390]) {
     const geometry = await dialog.evaluate((element) => {
       const box = element.getBoundingClientRect()
       const controls = Array.from(
-        element.querySelectorAll('select, input')
+        element.querySelectorAll(
+          'button[role=combobox], input:not([type=hidden])'
+        )
       ).map((control) => {
         const rect = control.getBoundingClientRect()
         const id = control.id
@@ -453,6 +456,14 @@ for (const width of [1280, 768, 640, 390]) {
       expect(control.top - (control.labelBottom ?? 0)).toBeGreaterThanOrEqual(6)
       expect(control.top - (control.labelBottom ?? 0)).toBeLessThanOrEqual(10)
     }
+    // Read colors from the settled dialog, after its entrance fade completes.
+    await dialog.evaluate(async (element) => {
+      await Promise.all(
+        element
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished)
+      )
+    })
     const a11y = await new AxeBuilder({ page })
       .include('[role="dialog"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
@@ -497,10 +508,10 @@ test('document/branch/user/token creation returns to updated lists', async ({
       title: 'Create project',
       name: 'Created workspace',
       fill: async () => {
-        await page
-          .getByRole('dialog')
-          .getByLabel('Team', { exact: true })
-          .selectOption('list-team')
+        await selectOption(
+          page.getByRole('dialog').getByLabel('Team', { exact: true }),
+          'list-team'
+        )
       },
     },
     {

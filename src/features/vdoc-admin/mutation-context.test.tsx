@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -146,9 +147,7 @@ describe('document create completion', () => {
       await waitFor(() => expect(api.createDocument).toHaveBeenCalledOnce())
       if (scenario === 'new-project') {
         // External context updates can happen while the modal blocks background clicks.
-        fireEvent.change(view.getByLabelText('Project'), {
-          target: { value: 'project-b' },
-        })
+        act(() => useVdocContextStore.getState().setProjectId('project-b'))
         await waitFor(() =>
           expect(view.getByLabelText('Project')).toHaveValue('project-b')
         )
@@ -244,13 +243,13 @@ describe('branch create completion', () => {
     const changesContext = !scenario.startsWith('normal-')
     if (changesContext) {
       // Model an external route/context change rather than clicking through the modal.
-      fireEvent.change(document, { target: { value: documentB.id } })
+      act(() => useVdocContextStore.getState().setDocumentId(documentB.id))
       await waitFor(() => expect(document).toHaveValue(documentB.id))
       if (
         scenario === 'returned-document-error' ||
         scenario === 'settled-error-roundtrip'
       ) {
-        fireEvent.change(document, { target: { value: documentA.id } })
+        act(() => useVdocContextStore.getState().setDocumentId(documentA.id))
         await waitFor(() => expect(document).toHaveValue(documentA.id))
       }
       expect(view.queryByRole('dialog')).not.toBeInTheDocument()
@@ -297,9 +296,11 @@ describe('delayed draft file uploads', () => {
       save.mockImplementation(() => request.promise)
       const view = renderPage(<DraftsPage />)
       const user = userEvent.setup()
-      await view.findAllByRole('option', { name: 'main' })
+      await user.click(view.getAllByLabelText('Branch', { exact: true })[0])
+      await view.findByRole('option', { name: 'main' })
+      await user.keyboard('{Escape}')
       if (operation === 'update') {
-        await user.selectOptions(view.getByLabelText('Draft'), draft.id)
+        await selectOption(view.getByLabelText('Draft'), draft.id, user)
         await waitFor(() =>
           expect(view.getByLabelText('Content')).toHaveValue(
             '# Existing content'
@@ -307,9 +308,10 @@ describe('delayed draft file uploads', () => {
         )
         await user.clear(view.getByLabelText('Version name'))
       } else {
-        await user.selectOptions(
+        await selectOption(
           view.getAllByLabelText('Branch', { exact: true })[1],
-          branch.id
+          branch.id,
+          user
         )
       }
       await user.type(view.getByLabelText('Version name'), 'Submitted draft')
@@ -376,18 +378,21 @@ describe('delayed draft file uploads', () => {
           file.text = () => read.promise
           const view = renderPage(<DraftsPage />, client)
           const user = userEvent.setup()
-          await view.findAllByRole('option', { name: 'main' })
+          await user.click(view.getAllByLabelText('Branch', { exact: true })[0])
+          await view.findByRole('option', { name: 'main' })
+          await user.keyboard('{Escape}')
           if (operation === 'update') {
-            await user.selectOptions(view.getByLabelText('Draft'), draft.id)
+            await selectOption(view.getByLabelText('Draft'), draft.id, user)
             await waitFor(() =>
               expect(view.getByLabelText('Content')).toHaveValue(
                 '# Existing content'
               )
             )
           } else {
-            await user.selectOptions(
+            await selectOption(
               view.getAllByLabelText('Branch', { exact: true })[1],
-              branch.id
+              branch.id,
+              user
             )
             await user.type(view.getByLabelText('Version name'), 'New draft')
           }
@@ -493,22 +498,23 @@ describe('promotion completion', () => {
       })
       const view = renderPage(<DraftsPage />, client)
       const user = userEvent.setup()
+      await user.click(view.getByRole('tab', { name: 'Draft history' }))
       const source = await view.findByLabelText('Source branch')
       const target = view.getByLabelText('Target branch')
       const form = source.closest('form')!
       const version = within(form).getByLabelText('Version name')
       const changelog = within(form).getByLabelText('Changelog')
-      await user.selectOptions(source, branch.id)
-      await user.selectOptions(target, 'release-a')
+      await selectOption(source, branch.id, user)
+      await selectOption(target, 'release-a', user)
       await user.type(version, 'Promotion A')
       await user.click(
         within(form).getByRole('button', { name: 'Create promotion draft' })
       )
       await waitFor(() => expect(api.promoteDraft).toHaveBeenCalledOnce())
       if (scenario === 'new-document') {
-        await user.selectOptions(view.getByLabelText('Document'), documentB.id)
-        await user.selectOptions(source, 'main-b')
-        await user.selectOptions(target, 'release-b')
+        await selectOption(view.getByLabelText('Document'), documentB.id, user)
+        await selectOption(source, 'main-b', user)
+        await selectOption(target, 'release-b', user)
       }
       if (scenario !== 'unchanged') {
         fireEvent.change(version, { target: { value: 'Unsaved promotion' } })

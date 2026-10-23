@@ -27,7 +27,7 @@ describe('PasswordInput', () => {
 
   it('toggles the password visibility when the show password button is clicked', async () => {
     const { getByPlaceholderText, getByRole } = await render(
-      <PasswordInput placeholder='password' />
+      <PasswordInput placeholder='password' defaultValue='secret-value' />
     )
 
     const passwordInput = getByPlaceholderText('password')
@@ -39,12 +39,14 @@ describe('PasswordInput', () => {
     await userEvent.click(showPasswordButton)
 
     expect(passwordInput).toHaveAttribute('type', 'text')
+    expect(passwordInput).toHaveValue('secret-value')
     const hidePasswordButton = getByRole('button', { name: /hide password/i })
     expect(hidePasswordButton).toBeInTheDocument()
 
     await userEvent.click(hidePasswordButton)
 
     expect(passwordInput).toHaveAttribute('type', 'password')
+    expect(passwordInput).toHaveValue('secret-value')
     expect(getByRole('button', { name: /show password/i })).toBeInTheDocument()
   })
 

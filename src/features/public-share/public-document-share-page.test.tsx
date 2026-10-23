@@ -1,4 +1,5 @@
 import { clearCookies } from '@/test-utils/cookies'
+import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -332,7 +333,7 @@ describe('PublicDocumentSharePage', () => {
 
     expect(await screen.findByText('Version one')).toBeInTheDocument()
     const versionSelect = screen.getByLabelText('Version')
-    await user.selectOptions(versionSelect, secondVersionId)
+    await selectOption(versionSelect, secondVersionId, user)
 
     expect(
       await screen.findByText(
@@ -438,8 +439,8 @@ describe('PublicDocumentSharePage', () => {
     )
 
     expect(await screen.findByText('Version one')).toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Version'), secondVersionId)
-    await user.selectOptions(screen.getByLabelText('Version'), thirdVersionId)
+    await selectOption(screen.getByLabelText('Version'), secondVersionId, user)
+    await selectOption(screen.getByLabelText('Version'), thirdVersionId, user)
 
     act(() => {
       third.resolve({ version_id: thirdVersionId, content: 'Version three' })
@@ -709,9 +710,10 @@ describe('PublicDocumentSharePage', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({ unlockProof: 'proof-1' })
       )
-      await user.selectOptions(
+      await selectOption(
         screen.getByLabelText('Version'),
-        secondVersionId
+        secondVersionId,
+        user
       )
       await screen.findByText(
         'Your password session expired. Enter the password again to continue.'

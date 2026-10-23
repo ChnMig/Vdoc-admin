@@ -28,7 +28,7 @@ export function SignIn() {
 
   return (
     <AuthLayout>
-      <Card className='max-w-sm gap-4'>
+      <Card className='w-full gap-5'>
         <CardHeader>
           <CardTitle className='text-lg tracking-tight'>
             {t('auth.signIn.title')}
@@ -75,7 +75,7 @@ export function SignIn() {
           <UserAuthForm redirectTo={redirect} />
         </CardContent>
         <CardFooter>
-          <p className='px-8 text-center text-sm text-muted-foreground'>
+          <p className='text-center text-xs leading-5 text-muted-foreground'>
             {t('auth.signIn.footerPrefix')}{' '}
             <a
               href='/terms'

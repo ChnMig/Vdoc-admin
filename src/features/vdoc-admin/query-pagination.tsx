@@ -24,7 +24,7 @@ export function QueryPagination({
   return (
     <nav
       aria-label={label ?? t('admin.pagination.label')}
-      className='flex flex-wrap items-center justify-between gap-3 py-3'
+      className='flex flex-wrap items-center justify-between gap-3 border-t pt-3'
     >
       <p role='status' className='text-sm text-muted-foreground'>
         {t('admin.pagination.range', {
