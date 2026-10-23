@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { DateTimePickerField } from './date-time-picker'
 
 describe('DateTimePickerField form behavior', () => {
+  // Include the cold lazy import in the CI interaction budget, without preloading it.
   it('keeps local time when selecting a date, tracks edits, clears, and resets', async () => {
     const user = userEvent.setup()
     const input = vi.fn()
@@ -38,7 +39,7 @@ describe('DateTimePickerField form behavior', () => {
     await user.click(screen.getByRole('button', { name: 'Reset' }))
     expect(new FormData(form).get('expires_at')).toBe('2099-01-15T18:30')
     expect(trigger).toHaveTextContent('2099-01-15 18:30')
-  })
+  }, 10_000)
 
   it('closes an open picker when disabled and excludes its value from submission', async () => {
     const user = userEvent.setup()

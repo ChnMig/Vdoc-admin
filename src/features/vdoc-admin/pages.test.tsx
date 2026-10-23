@@ -1232,6 +1232,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     })
   })
 
+  // The first calendar import and its full selection flow share this CI budget.
   it('requires an explicit scope and a future expiry before creating a token', async () => {
     const user = userEvent.setup()
     const screen = renderMCPTokensPage()
@@ -1258,7 +1259,7 @@ describe('MCPTokensPage secret lifecycle', () => {
       )
     ).toBeInTheDocument()
     expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
-  })
+  }, 10_000)
 
   it.each([
     ['a local expiration', '2099-01-15T18:30'],
