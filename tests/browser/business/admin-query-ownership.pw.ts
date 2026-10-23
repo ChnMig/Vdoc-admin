@@ -34,6 +34,10 @@ for (const width of [1280, 390]) {
   test(`selected user token errors remain recoverable at ${width}px`, async ({
     page,
   }) => {
+    const selectedUser = {
+      ...admin,
+      email: 'operations.administrator.with.a.long.address@example.test',
+    }
     await page.setViewportSize({ width, height: 900 })
     await page.addInitScript(() =>
       sessionStorage.setItem(
@@ -47,7 +51,7 @@ for (const width of [1280, 390]) {
         return route.fulfill({ status: 204, headers })
       const path = new URL(route.request().url()).pathname
       if (path.endsWith('/identity/me')) return envelope(route, admin)
-      if (path.endsWith('/system/users')) return envelope(route, [admin])
+      if (path.endsWith('/system/users')) return envelope(route, [selectedUser])
       if (path.endsWith('/users/admin/mcp-tokens')) {
         tokenRequests += 1
         if (tokenRequests === 1) {
@@ -84,14 +88,52 @@ for (const width of [1280, 390]) {
     ).toHaveCount(0)
     await page.getByRole('button', { name: 'Try again', exact: true }).click()
     await expect(
-      page.getByText(`No MCP tokens have been issued for ${admin.email}.`, {
-        exact: true,
-      })
+      page.getByText(
+        `No MCP tokens have been issued for ${selectedUser.email}.`,
+        {
+          exact: true,
+        }
+      )
     ).toBeVisible()
     expect(tokenRequests).toBe(2)
     await expect(
       page.getByText('Request failed with status code 403', { exact: true })
     ).toHaveCount(0)
+    const tokenCard = page
+      .getByText('Selected user MCP tokens', { exact: true })
+      .locator('xpath=ancestor::*[@data-slot="card"][1]')
+    const hideTokens = page.getByRole('button', {
+      name: 'Hide tokens',
+      exact: true,
+    })
+    for (const tokenWidth of width === 390 ? [390, 320] : [width]) {
+      await page.setViewportSize({ width: tokenWidth, height: 900 })
+      const bounds = await tokenCard.evaluate((card) => {
+        const action = card.querySelector('button')!
+        const header = card.querySelector('[data-slot="card-header"]')!
+        const description = card.querySelector(
+          '[data-slot="card-description"]'
+        )!
+        const cardBox = card.getBoundingClientRect()
+        const actionBox = action.getBoundingClientRect()
+        return {
+          actionInsideCard:
+            actionBox.left >= cardBox.left &&
+            actionBox.right <= cardBox.right &&
+            actionBox.top >= cardBox.top &&
+            actionBox.bottom <= cardBox.bottom,
+          headerFits: header.scrollWidth <= header.clientWidth,
+          descriptionFits: description.scrollWidth <= description.clientWidth,
+        }
+      })
+      expect(bounds, `token header fits its card at ${tokenWidth}px`).toEqual({
+        actionInsideCard: true,
+        headerFits: true,
+        descriptionFits: true,
+      })
+      await hideTokens.click({ trial: true })
+    }
+    await page.setViewportSize({ width, height: 900 })
     await page.getByRole('button', { name: 'Hide tokens', exact: true }).click()
     await expect(viewTokens).toHaveAttribute('aria-pressed', 'false')
     await expect(

@@ -707,9 +707,9 @@ export function CollectionCard({
   const { t } = useLanguage()
   return (
     <Card className='min-w-0 gap-0 overflow-hidden py-0'>
-      <CardHeader className='border-b px-4 py-3 sm:px-5 [.border-b]:pb-3'>
+      <CardHeader className='min-w-0 grid-cols-[minmax(0,1fr)] border-b px-4 py-3 sm:px-5 [.border-b]:pb-3'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
-          <div className='grid min-w-0 flex-1 gap-1'>
+          <div className='grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-1'>
             <div className='flex min-w-0 flex-wrap items-center gap-2'>
               <CardTitle className='text-sm leading-6'>{title}</CardTitle>
               {typeof count === 'number' && (
@@ -719,13 +719,13 @@ export function CollectionCard({
               )}
             </div>
             {description && (
-              <CardDescription className='max-w-3xl leading-5'>
+              <CardDescription className='max-w-3xl leading-5 [overflow-wrap:anywhere]'>
                 {description}
               </CardDescription>
             )}
           </div>
           {actions && (
-            <div className='flex max-w-full flex-wrap items-center gap-2'>
+            <div className='flex max-w-full shrink-0 flex-wrap items-center gap-2'>
               {actions}
             </div>
           )}
