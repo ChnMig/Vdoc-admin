@@ -279,67 +279,71 @@ export function ProjectsPage() {
         description={t('admin.pages.projects.next')}
         count={membersQuery.data?.items.length ?? 0}
       >
-        <NativeSelect
-          label={t('admin.fields.project')}
-          value={projectId}
-          onChange={setProjectId}
-          placeholder={t('admin.placeholders.selectProject')}
-          options={projectOptions}
-        />
-        {canManageSelectedProject && (
-          <>
-            <LoadingErrorState
-              state={{
-                isLoading: memberCandidatesLoading,
-                isError: memberCandidatesIsError,
-                error: memberCandidatesError,
-              }}
+        <div className='@container/member-controls grid min-w-0 gap-5'>
+          <div className='max-w-md'>
+            <NativeSelect
+              label={t('admin.fields.project')}
+              value={projectId}
+              onChange={setProjectId}
+              placeholder={t('admin.placeholders.selectProject')}
+              options={projectOptions}
             />
-            {memberCandidateOptions.length ? (
-              <MemberAddForm
-                key={memberScope}
-                options={memberCandidateOptions}
-                pending={addMemberMutation.isPending}
-                disabled={!projectId || memberCandidatesLoading}
-                onSubmit={(formData) =>
-                  addMemberMutation.mutateAsync({
-                    projectId,
-                    sessionVersion,
-                    userId: fieldValue(formData, 'user_id'),
-                    role: numberValue(formData, 'role', ROLE_READER),
-                  })
-                }
+          </div>
+          {canManageSelectedProject && (
+            <>
+              <LoadingErrorState
+                state={{
+                  isLoading: memberCandidatesLoading,
+                  isError: memberCandidatesIsError,
+                  error: memberCandidatesError,
+                }}
               />
-            ) : (
-              !memberCandidatesLoading && (
-                <p className='text-sm text-muted-foreground'>
-                  {t('admin.emptyStates.memberCandidates.description')}
-                </p>
-              )
-            )}
-          </>
-        )}
-        <MembersTable
-          key={memberScope}
-          members={membersQuery.data?.items ?? []}
-          users={[
-            ...(usersQuery.data?.items ?? []),
-            ...(memberCandidatesQuery.data?.items ?? []),
-          ]}
-          onRole={(userId, role) =>
-            roleMutation.mutateAsync({
-              projectId,
-              sessionVersion,
-              userId,
-              role,
-            })
-          }
-          onRemove={(userId) =>
-            removeMutation.mutateAsync({ projectId, sessionVersion, userId })
-          }
-          pending={roleMutation.isPending || removeMutation.isPending}
-          readOnly={!canManageSelectedProject}
-        />
+              {memberCandidateOptions.length ? (
+                <MemberAddForm
+                  key={memberScope}
+                  options={memberCandidateOptions}
+                  pending={addMemberMutation.isPending}
+                  disabled={!projectId || memberCandidatesLoading}
+                  onSubmit={(formData) =>
+                    addMemberMutation.mutateAsync({
+                      projectId,
+                      sessionVersion,
+                      userId: fieldValue(formData, 'user_id'),
+                      role: numberValue(formData, 'role', ROLE_READER),
+                    })
+                  }
+                />
+              ) : (
+                !memberCandidatesLoading && (
+                  <p className='text-sm text-muted-foreground'>
+                    {t('admin.emptyStates.memberCandidates.description')}
+                  </p>
+                )
+              )}
+            </>
+          )}
+          <MembersTable
+            key={memberScope}
+            members={membersQuery.data?.items ?? []}
+            users={[
+              ...(usersQuery.data?.items ?? []),
+              ...(memberCandidatesQuery.data?.items ?? []),
+            ]}
+            onRole={(userId, role) =>
+              roleMutation.mutateAsync({
+                projectId,
+                sessionVersion,
+                userId,
+                role,
+              })
+            }
+            onRemove={(userId) =>
+              removeMutation.mutateAsync({ projectId, sessionVersion, userId })
+            }
+            pending={roleMutation.isPending || removeMutation.isPending}
+            readOnly={!canManageSelectedProject}
+          />
+        </div>
       </CollectionCard>
     </PageChrome>
   )
@@ -380,7 +384,7 @@ function MemberAddForm({
 
   return (
     <form
-      className='grid gap-3 md:grid-cols-[1fr_12rem_auto]'
+      className='grid min-w-0 gap-3 @2xl/member-controls:grid-cols-[minmax(0,1fr)_10rem_auto]'
       onInputCapture={() => editVersionRef.current++}
       onChangeCapture={() => editVersionRef.current++}
       onSubmit={async (event) => {
@@ -433,7 +437,7 @@ function MemberAddForm({
       </Button>
       {error && (
         <Alert
-          className='md:col-span-3'
+          className='@2xl/member-controls:col-span-3'
           variant='destructive'
           aria-live='polite'
         >

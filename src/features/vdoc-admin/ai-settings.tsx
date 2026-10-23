@@ -20,13 +20,7 @@ import {
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AIPromptPanel } from './ai-prompt-panel'
 import { AIProviderPanel } from './ai-provider-panel'
 import {
@@ -44,9 +38,11 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
   const [projectId, setProjectId] = useState('')
+  const [scope, setScope] = useState('system')
   const storedAuthUser = useAuthStore((state) => state.auth.user)
   const authUser = user ?? storedAuthUser
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
+  const selectedScope = isSuperAdmin ? scope : 'project'
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: ({ signal }) => listProjects({ signal }),
@@ -198,196 +194,232 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
       : undefined
 
   return (
-    <Card className='overflow-hidden'>
-      <CardHeader className='border-b pb-5'>
-        <div className='grid gap-2'>
-          <Badge className='w-fit' variant='secondary'>
-            {t('admin.ai.badge')}
-          </Badge>
-          <CardTitle>{t('admin.ai.settingsTitle')}</CardTitle>
-          <CardDescription>{t('admin.ai.settingsDescription')}</CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className='grid gap-5 p-5'>
-        {isSuperAdmin && systemProviderQuery.isLoading && (
-          <p role='status' className='text-sm text-muted-foreground'>
-            {t('admin.ai.loadingSystemProvider')}
-          </p>
-        )}
-        {isSuperAdmin && systemProviderQuery.isError && (
-          <SettingsErrorAlert
-            title={t('admin.ai.systemProviderLoadErrorTitle')}
-            description={t('admin.ai.systemProviderLoadErrorDescription')}
-          />
-        )}
-        {isSuperAdmin && systemProviderQuery.data && (
-          <>
-            <AIProviderPanel
-              scope='system'
-              provider={systemProviderQuery.data}
-              pending={updateSystemProviderMutation.isPending}
-              testing={testSystemProviderMutation.isPending}
-              testResult={systemProviderTest.state}
-              onSave={(payload) =>
-                updateSystemProviderMutation.mutateAsync(payload)
-              }
-              onTest={(payload) => {
-                return testSystemProviderMutation.mutateAsync(
-                  systemProviderTest.begin('system', '', payload)
-                )
-              }}
-              onTestPayloadChange={systemProviderTest.reset}
-            />
-            {updateSystemProviderMutation.isError && (
-              <MutationErrorAlert error={updateSystemProviderMutation.error} />
+    <section className='grid min-w-0 gap-6'>
+      <div className='grid gap-1'>
+        <h2 className='text-lg font-semibold tracking-tight'>
+          {t('admin.ai.settingsTitle')}
+        </h2>
+        <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
+          {t('admin.ai.settingsDescription')}
+        </p>
+      </div>
+      <Tabs
+        value={selectedScope}
+        onValueChange={setScope}
+        className='min-w-0 gap-6'
+      >
+        <TabsList
+          aria-label={t('admin.ai.scopeLabel')}
+          className='h-10 max-w-full'
+        >
+          {isSuperAdmin && (
+            <TabsTrigger value='system' className='px-4'>
+              {t('admin.ai.systemScope')}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value='project' className='px-4'>
+            {t('admin.ai.projectScopeTab')}
+          </TabsTrigger>
+        </TabsList>
+        {isSuperAdmin && (
+          <TabsContent
+            value='system'
+            hidden={selectedScope !== 'system'}
+            forceMount
+            className='grid min-w-0 gap-6 data-[state=inactive]:hidden'
+          >
+            {isSuperAdmin && systemProviderQuery.isLoading && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                {t('admin.ai.loadingSystemProvider')}
+              </p>
             )}
-          </>
-        )}
-        <section className='grid gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
-          <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
-            <AINativeSelect
-              id='ai-project-scope'
-              label={t('admin.ai.projectScope')}
-              value={selectedProjectId}
-              options={projectOptions}
-              placeholder={t('admin.placeholders.selectProject')}
-              onChange={(nextProjectId) => {
-                projectProviderTest.reset()
-                setProjectId(nextProjectId)
-              }}
-            />
-            {selectedProject && (
-              <Badge
-                className='mb-1 w-fit'
-                variant={projectIsActive ? 'outline' : 'secondary'}
-              >
-                {projectIsActive
-                  ? t('admin.statuses.active')
-                  : t('admin.statuses.archived')}
-              </Badge>
+            {isSuperAdmin && systemProviderQuery.isError && (
+              <SettingsErrorAlert
+                title={t('admin.ai.systemProviderLoadErrorTitle')}
+                description={t('admin.ai.systemProviderLoadErrorDescription')}
+              />
             )}
-          </div>
-          {!projectsQuery.isLoading && projectOptions.length === 0 && (
-            <p className='rounded-md border bg-background p-4 text-sm text-muted-foreground'>
-              {t('admin.ai.noReadableProjects')}
-            </p>
-          )}
-          {projectsQuery.isLoading && (
-            <p role='status' className='text-sm text-muted-foreground'>
-              {t('admin.ai.loadingProjects')}
-            </p>
-          )}
-          {projectsQuery.isError && (
-            <SettingsErrorAlert
-              title={t('admin.ai.projectsLoadErrorTitle')}
-              description={t('admin.ai.projectsLoadErrorDescription')}
-            />
-          )}
-          {selectedProject && !projectPermissionResolved && (
-            <p role='status' className='text-sm text-muted-foreground'>
-              {t('admin.ai.checkingProjectPermission')}
-            </p>
-          )}
-          {selectedProject && !projectIsActive && canManageProject && (
-            <Alert>
-              <Archive />
-              <AlertTitle>{t('admin.ai.archivedSettingsTitle')}</AlertTitle>
-              <AlertDescription>
-                {t('admin.ai.archivedSettingsDescription')}
-              </AlertDescription>
-            </Alert>
-          )}
-          {selectedProject &&
-            projectPermissionResolved &&
-            !projectMembersQuery.isError &&
-            !canManageProject && (
+            {isSuperAdmin && systemProviderQuery.data && (
+              <>
+                <AIProviderPanel
+                  scope='system'
+                  provider={systemProviderQuery.data}
+                  pending={updateSystemProviderMutation.isPending}
+                  testing={testSystemProviderMutation.isPending}
+                  testResult={systemProviderTest.state}
+                  onSave={(payload) =>
+                    updateSystemProviderMutation.mutateAsync(payload)
+                  }
+                  onTest={(payload) => {
+                    return testSystemProviderMutation.mutateAsync(
+                      systemProviderTest.begin('system', '', payload)
+                    )
+                  }}
+                  onTestPayloadChange={systemProviderTest.reset}
+                />
+                {updateSystemProviderMutation.isError && (
+                  <MutationErrorAlert
+                    error={updateSystemProviderMutation.error}
+                  />
+                )}
+              </>
+            )}
+            {isSuperAdmin && (
+              <AIPromptPanel
+                scope='system'
+                prompts={systemPromptsQuery.data?.items ?? []}
+                loading={systemPromptsQuery.isLoading}
+                error={systemPromptsQuery.error}
+                pending={updateSystemPromptMutation.isPending}
+                onSave={(promptKey, payload) =>
+                  updateSystemPromptMutation.mutateAsync({ promptKey, payload })
+                }
+              />
+            )}
+            {isSuperAdmin && updateSystemPromptMutation.isError && (
+              <MutationErrorAlert error={updateSystemPromptMutation.error} />
+            )}
+          </TabsContent>
+        )}
+        <TabsContent
+          value='project'
+          hidden={selectedScope !== 'project'}
+          forceMount
+          className='grid min-w-0 gap-6 data-[state=inactive]:hidden'
+        >
+          <div className='grid min-w-0 gap-4'>
+            <div className='grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end'>
+              <AINativeSelect
+                id='ai-project-scope'
+                label={t('admin.ai.projectScope')}
+                value={selectedProjectId}
+                options={projectOptions}
+                placeholder={t('admin.placeholders.selectProject')}
+                onChange={(nextProjectId) => {
+                  projectProviderTest.reset()
+                  setProjectId(nextProjectId)
+                }}
+              />
+              {selectedProject && (
+                <Badge
+                  className='mb-1 w-fit'
+                  variant={projectIsActive ? 'outline' : 'secondary'}
+                >
+                  {projectIsActive
+                    ? t('admin.statuses.active')
+                    : t('admin.statuses.archived')}
+                </Badge>
+              )}
+            </div>
+            {!projectsQuery.isLoading && projectOptions.length === 0 && (
+              <p className='rounded-md border bg-background p-4 text-sm text-muted-foreground'>
+                {t('admin.ai.noReadableProjects')}
+              </p>
+            )}
+            {projectsQuery.isLoading && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                {t('admin.ai.loadingProjects')}
+              </p>
+            )}
+            {projectsQuery.isError && (
+              <SettingsErrorAlert
+                title={t('admin.ai.projectsLoadErrorTitle')}
+                description={t('admin.ai.projectsLoadErrorDescription')}
+              />
+            )}
+            {selectedProject && !projectPermissionResolved && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                {t('admin.ai.checkingProjectPermission')}
+              </p>
+            )}
+            {selectedProject && !projectIsActive && canManageProject && (
               <Alert>
-                <Eye />
-                <AlertTitle>{t('admin.ai.readOnlySettingsTitle')}</AlertTitle>
+                <Archive />
+                <AlertTitle>{t('admin.ai.archivedSettingsTitle')}</AlertTitle>
                 <AlertDescription>
-                  {t('admin.ai.readOnlySettingsDescription')}
+                  {t('admin.ai.archivedSettingsDescription')}
                 </AlertDescription>
               </Alert>
             )}
-          {selectedProject && projectMembersQuery.isError && !isSuperAdmin && (
-            <Alert variant='destructive'>
-              <TriangleAlert />
-              <AlertTitle>
-                {t('admin.ai.permissionCheckFailedTitle')}
-              </AlertTitle>
-              <AlertDescription>
-                {t('admin.ai.permissionCheckFailedDescription')}
-              </AlertDescription>
-            </Alert>
-          )}
-          {selectedProjectId && projectProviderQuery.isLoading && (
-            <p role='status' className='text-sm text-muted-foreground'>
-              {t('admin.ai.loadingProjectSettings')}
-            </p>
-          )}
-          {selectedProjectId && projectProviderQuery.isError && (
-            <Alert variant='destructive'>
-              <TriangleAlert />
-              <AlertTitle>{t('admin.ai.projectSettingsErrorTitle')}</AlertTitle>
-              <AlertDescription>
-                {t('admin.ai.projectSettingsErrorDescription')}
-              </AlertDescription>
-            </Alert>
-          )}
-          {selectedProjectId && projectProviderQuery.data && (
-            <>
-              <AIProviderPanel
-                key={projectProviderFormIdentity}
-                scope='project'
-                provider={projectProviderQuery.data}
-                projectId={selectedProjectId}
-                readOnly={!canChangeProjectAI}
-                pending={projectProviderSavePending}
-                testing={projectProviderTestPending}
-                testResult={projectProviderTest.state}
-                onSave={(payload) => {
-                  if (!canChangeProjectAI) return Promise.resolve()
-                  return updateProjectProviderMutation.mutateAsync({
-                    projectId: selectedProjectId,
-                    payload,
-                  })
-                }}
-                onTest={(payload) => {
-                  if (!canChangeProjectAI) return Promise.resolve()
-                  const request = projectProviderTest.begin(
-                    'project',
-                    selectedProjectId,
-                    payload
-                  )
-                  return testProjectProviderMutation.mutateAsync({
-                    ...request,
-                    projectId: selectedProjectId,
-                  })
-                }}
-                onTestPayloadChange={projectProviderTest.reset}
-              />
-              {projectProviderSaveError && (
-                <MutationErrorAlert error={projectProviderSaveError} />
+            {selectedProject &&
+              projectPermissionResolved &&
+              !projectMembersQuery.isError &&
+              !canManageProject && (
+                <Alert>
+                  <Eye />
+                  <AlertTitle>{t('admin.ai.readOnlySettingsTitle')}</AlertTitle>
+                  <AlertDescription>
+                    {t('admin.ai.readOnlySettingsDescription')}
+                  </AlertDescription>
+                </Alert>
               )}
-            </>
-          )}
-        </section>
-        <div className='grid min-w-0 gap-4'>
-          {isSuperAdmin && (
-            <AIPromptPanel
-              scope='system'
-              prompts={systemPromptsQuery.data?.items ?? []}
-              loading={systemPromptsQuery.isLoading}
-              error={systemPromptsQuery.error}
-              pending={updateSystemPromptMutation.isPending}
-              onSave={(promptKey, payload) =>
-                updateSystemPromptMutation.mutateAsync({ promptKey, payload })
-              }
-            />
-          )}
-          {isSuperAdmin && updateSystemPromptMutation.isError && (
-            <MutationErrorAlert error={updateSystemPromptMutation.error} />
-          )}
+            {selectedProject &&
+              projectMembersQuery.isError &&
+              !isSuperAdmin && (
+                <Alert variant='destructive'>
+                  <TriangleAlert />
+                  <AlertTitle>
+                    {t('admin.ai.permissionCheckFailedTitle')}
+                  </AlertTitle>
+                  <AlertDescription>
+                    {t('admin.ai.permissionCheckFailedDescription')}
+                  </AlertDescription>
+                </Alert>
+              )}
+            {selectedProjectId && projectProviderQuery.isLoading && (
+              <p role='status' className='text-sm text-muted-foreground'>
+                {t('admin.ai.loadingProjectSettings')}
+              </p>
+            )}
+            {selectedProjectId && projectProviderQuery.isError && (
+              <Alert variant='destructive'>
+                <TriangleAlert />
+                <AlertTitle>
+                  {t('admin.ai.projectSettingsErrorTitle')}
+                </AlertTitle>
+                <AlertDescription>
+                  {t('admin.ai.projectSettingsErrorDescription')}
+                </AlertDescription>
+              </Alert>
+            )}
+            {selectedProjectId && projectProviderQuery.data && (
+              <>
+                <AIProviderPanel
+                  key={projectProviderFormIdentity}
+                  scope='project'
+                  provider={projectProviderQuery.data}
+                  projectId={selectedProjectId}
+                  readOnly={!canChangeProjectAI}
+                  pending={projectProviderSavePending}
+                  testing={projectProviderTestPending}
+                  testResult={projectProviderTest.state}
+                  onSave={(payload) => {
+                    if (!canChangeProjectAI) return Promise.resolve()
+                    return updateProjectProviderMutation.mutateAsync({
+                      projectId: selectedProjectId,
+                      payload,
+                    })
+                  }}
+                  onTest={(payload) => {
+                    if (!canChangeProjectAI) return Promise.resolve()
+                    const request = projectProviderTest.begin(
+                      'project',
+                      selectedProjectId,
+                      payload
+                    )
+                    return testProjectProviderMutation.mutateAsync({
+                      ...request,
+                      projectId: selectedProjectId,
+                    })
+                  }}
+                  onTestPayloadChange={projectProviderTest.reset}
+                />
+                {projectProviderSaveError && (
+                  <MutationErrorAlert error={projectProviderSaveError} />
+                )}
+              </>
+            )}
+          </div>
           {selectedProjectId && canManageProject && (
             <AIPromptPanel
               key={`project-prompts-${selectedProjectId}`}
@@ -411,9 +443,9 @@ export function AISettingsPanel({ user }: { readonly user?: AuthUser }) {
           {projectPromptSaveError && (
             <MutationErrorAlert error={projectPromptSaveError} />
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </TabsContent>
+      </Tabs>
+    </section>
   )
 }
 

@@ -106,7 +106,10 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function renderSettings(user: AuthUser) {
+async function renderSettings(
+  user: AuthUser,
+  scope: 'system' | 'project' = 'project'
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -118,7 +121,11 @@ function renderSettings(user: AuthUser) {
       <LanguageProvider>{children}</LanguageProvider>
     </QueryClientProvider>
   )
-  return render(wrap(<AISettingsPanel user={user} />))
+  const screen = render(wrap(<AISettingsPanel user={user} />))
+  if (user.is_super_admin && scope === 'project') {
+    await userEvent.click(screen.getByRole('tab', { name: 'Project override' }))
+  }
+  return screen
 }
 
 describe('AISettingsPanel project boundaries', () => {
@@ -142,9 +149,61 @@ describe('AISettingsPanel project boundaries', () => {
     apiMocks.listProjectMembers.mockResolvedValue({ items: [], total: 0 })
   })
 
+  it('groups each scope and preserves provider and prompt drafts when switching scopes', async () => {
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const systemModel = await screen.findByLabelText('Model', {
+      selector: '#system-ai-provider-model',
+    })
+    const systemPrompt = await screen.findByLabelText('System prompt', {
+      selector: '#system-page_chat-system-prompt',
+    })
+    await user.clear(systemModel)
+    await user.type(systemModel, 'unsaved-system-model')
+    await user.clear(systemPrompt)
+    await user.type(systemPrompt, 'Unsaved system instructions')
+    expect(
+      screen.getByRole('button', { name: 'Save system provider' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Save project provider' })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Project override' }))
+    const projectModel = await screen.findByLabelText('Model', {
+      selector: '#project-ai-provider-model',
+    })
+    const projectPrompt = await screen.findByLabelText('System prompt', {
+      selector: '#project-page_chat-system-prompt',
+    })
+    await user.clear(projectModel)
+    await user.type(projectModel, 'unsaved-project-model')
+    await user.clear(projectPrompt)
+    await user.type(projectPrompt, 'Unsaved project instructions')
+    expect(
+      screen.getByRole('button', { name: 'Save project provider' })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Save system provider' })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'System defaults' }))
+    expect(systemModel).toHaveValue('unsaved-system-model')
+    expect(systemPrompt).toHaveValue('Unsaved system instructions')
+    expect(systemModel).toBeVisible()
+    expect(projectModel).not.toBeVisible()
+    await user.click(screen.getByRole('tab', { name: 'Project override' }))
+    expect(projectModel).toHaveValue('unsaved-project-model')
+    expect(projectPrompt).toHaveValue('Unsaved project instructions')
+    expect(apiMocks.updateSystemAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.updateProjectAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.updateSystemAIPrompt).not.toHaveBeenCalled()
+    expect(apiMocks.updateProjectAIPrompt).not.toHaveBeenCalled()
+  })
+
   it('keeps archived project configuration reachable but disables every mutation', async () => {
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
     const projectSelect = await screen.findByLabelText('Project provider scope')
 
     expect(
@@ -187,7 +246,7 @@ describe('AISettingsPanel project boundaries', () => {
       total: 1,
     })
 
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
     const projectSelect = await screen.findByLabelText('Project provider scope')
 
     expect(projectSelect).toHaveValue('')
@@ -219,7 +278,7 @@ describe('AISettingsPanel project boundaries', () => {
       ],
       total: 1,
     })
-    const screen = renderSettings(reader)
+    const screen = await renderSettings(reader)
 
     expect(
       await screen.findByText('Project AI configuration is restricted')
@@ -232,6 +291,12 @@ describe('AISettingsPanel project boundaries', () => {
     ).not.toBeInTheDocument()
     expect(apiMocks.getProjectAIProvider).not.toHaveBeenCalled()
     expect(apiMocks.listProjectAIPrompts).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('tab', { name: 'System defaults' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Project override' })
+    ).toHaveAttribute('aria-selected', 'true')
     expect(apiMocks.getSystemAIProvider).not.toHaveBeenCalled()
     expect(apiMocks.listSystemAIPrompts).not.toHaveBeenCalled()
   })
@@ -256,7 +321,7 @@ describe('AISettingsPanel project boundaries', () => {
       total: 1,
     })
 
-    const screen = renderSettings(reader)
+    const screen = await renderSettings(reader)
 
     expect(
       await screen.findByText('Project AI configuration is restricted')
@@ -278,7 +343,7 @@ describe('AISettingsPanel project boundaries', () => {
         : Promise.resolve(provider(projectId))
     )
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
     const projectSelect = await screen.findByLabelText('Project provider scope')
 
     expect(
@@ -321,7 +386,7 @@ describe('AISettingsPanel project boundaries', () => {
       content: 'System fallback reached.',
     })
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
 
     expect(
       await screen.findByText(
@@ -355,7 +420,7 @@ describe('AISettingsPanel project boundaries', () => {
       timeout_ms: 30000,
       max_output_tokens: 1000,
     })
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
 
     expect(await screen.findByLabelText('Project API key')).toBeRequired()
   })
@@ -367,7 +432,7 @@ describe('AISettingsPanel project boundaries', () => {
     apiMocks.listSystemAIPrompts.mockRejectedValueOnce(
       new Error('System prompts unavailable')
     )
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin, 'system')
 
     expect(
       await screen.findByText('System AI provider could not be loaded')
@@ -385,7 +450,7 @@ describe('AISettingsPanel project boundaries', () => {
       new Error('Provider persistence failed')
     )
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin, 'system')
     const model = await screen.findByLabelText('Model', {
       selector: '#system-ai-provider-model',
     })
@@ -408,7 +473,7 @@ describe('AISettingsPanel project boundaries', () => {
       new Error('Prompt persistence failed')
     )
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin, 'system')
     const prompt = await screen.findByLabelText('System prompt', {
       selector: '#system-page_chat-system-prompt',
     })
@@ -431,7 +496,7 @@ describe('AISettingsPanel project boundaries', () => {
     const promptSave = deferred<AIPromptTemplateDTO>()
     apiMocks.updateSystemAIProvider.mockReturnValueOnce(providerSave.promise)
     apiMocks.updateSystemAIPrompt.mockReturnValueOnce(promptSave.promise)
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin, 'system')
     const providerButton = await screen.findByRole('button', {
       name: 'Save system provider',
     })
@@ -468,7 +533,7 @@ describe('AISettingsPanel project boundaries', () => {
     })
     apiMocks.updateProjectAIProvider.mockReturnValueOnce(save.promise)
     const user = userEvent.setup()
-    const screen = renderSettings(superAdmin)
+    const screen = await renderSettings(superAdmin)
     const saveButton = await screen.findByRole('button', {
       name: 'Save project provider',
     })

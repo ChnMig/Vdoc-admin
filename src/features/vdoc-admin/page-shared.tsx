@@ -1,5 +1,11 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowRight, Plus, ShieldCheck } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowRight,
+  ChevronDown,
+  Plus,
+  ShieldCheck,
+} from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { withNativeSelectPlaceholder } from '@/lib/native-select-options'
@@ -77,6 +83,8 @@ export function PageChrome({
   guidance?: PageGuidance
 }) {
   const { t } = useLanguage()
+  const guideId = useId()
+  const [guideOpen, setGuideOpen] = useState(false)
   const projectId = useVdocContextStore((state) => state.projectId)
   const documentId = useVdocContextStore((state) => state.documentId)
   const resolvedGuidance =
@@ -98,55 +106,94 @@ export function PageChrome({
         <ProfileDropdown />
       </Header>
       <Main>
-        <section className='mb-5 grid gap-4 rounded-lg border bg-card p-5 text-card-foreground shadow-[var(--shadow-card)] panel-control md:grid-cols-[minmax(0,1fr)_21rem]'>
-          <div className='grid gap-4'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Badge
-                className='border-primary/20 bg-primary/8 text-primary'
-                variant='outline'
+        <section className='mb-6 grid min-w-0 gap-4'>
+          <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2'>
+            <h1 className='min-w-0 text-2xl font-semibold tracking-tight'>
+              {t(`admin.pages.${page}.title`)}
+            </h1>
+            {!guidance && (
+              <button
+                type='button'
+                aria-expanded={guideOpen}
+                aria-controls={guideId}
+                onClick={() => setGuideOpen((open) => !open)}
+                className='col-start-2 row-start-1 flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
               >
-                {t(`admin.pages.${page}.stage`)}
-              </Badge>
-              <span className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
-                {t('app.consoleLabel')}
-              </span>
-            </div>
-            <div className='grid gap-2'>
-              <h1 className='text-2xl font-semibold tracking-[-0.025em] text-balance'>
-                {t(`admin.pages.${page}.title`)}
-              </h1>
-              <p className='max-w-3xl text-sm leading-6 text-pretty text-muted-foreground'>
-                {t(`admin.pages.${page}.description`)}
-              </p>
-            </div>
-            <p className='max-w-3xl border-t pt-3 text-sm text-muted-foreground'>
-              {t(`admin.pages.${page}.cue`)}
-            </p>
-          </div>
-          <aside className='grid content-start gap-3 rounded-md border bg-[var(--surface-control)] p-4 text-sm shadow-[var(--shadow-panel)]'>
-            <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
-              {resolvedGuidance.title}
-            </p>
-            <p className='leading-6 text-muted-foreground'>
-              {resolvedGuidance.description}
-            </p>
-            {resolvedGuidance.action && (
-              <Button asChild size='sm' variant='outline' className='w-fit'>
-                <a
-                  href={contextualHref(
-                    resolvedGuidance.action.href,
-                    projectId,
-                    documentId
-                  )}
-                >
-                  {resolvedGuidance.action.label}
-                  <ArrowRight />
-                </a>
-              </Button>
+                {t('admin.common.pageHelp')}
+                <ChevronDown
+                  aria-hidden
+                  className={`size-4 shrink-0 transition-transform ${guideOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
             )}
-          </aside>
+            <p className='col-span-full max-w-3xl text-sm leading-6 text-pretty text-muted-foreground'>
+              {t(`admin.pages.${page}.description`)}
+            </p>
+            {!guidance && (
+              <div id={guideId} hidden={!guideOpen} className='col-span-full'>
+                <div className='grid gap-3 rounded-md border bg-card p-4 text-sm text-muted-foreground'>
+                  <p className='leading-6'>{t(`admin.pages.${page}.cue`)}</p>
+                  <p className='leading-6'>{resolvedGuidance.description}</p>
+                  {resolvedGuidance.action && (
+                    <Button
+                      asChild
+                      size='sm'
+                      variant='outline'
+                      className='w-fit max-w-full'
+                    >
+                      <a
+                        href={contextualHref(
+                          resolvedGuidance.action.href,
+                          projectId,
+                          documentId
+                        )}
+                      >
+                        {resolvedGuidance.action.label}
+                        <ArrowRight aria-hidden />
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {guidance && (
+            <aside className='flex min-w-0 flex-wrap items-start justify-between gap-3 rounded-md border bg-card px-4 py-3 text-sm'>
+              <details open className='group min-w-0 flex-1'>
+                <summary className='flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden'>
+                  {resolvedGuidance.title}
+                  <ChevronDown
+                    aria-hidden
+                    className='size-4 shrink-0 transition-transform group-open:rotate-180'
+                  />
+                </summary>
+                <p className='max-w-3xl pt-2 text-sm leading-6 text-muted-foreground'>
+                  {resolvedGuidance.description}
+                </p>
+              </details>
+              {resolvedGuidance.action && (
+                <Button
+                  asChild
+                  size='sm'
+                  variant='outline'
+                  className='max-w-full shrink-0'
+                >
+                  <a
+                    href={contextualHref(
+                      resolvedGuidance.action.href,
+                      projectId,
+                      documentId
+                    )}
+                  >
+                    {resolvedGuidance.action.label}
+                    <ArrowRight aria-hidden />
+                  </a>
+                </Button>
+              )}
+            </aside>
+          )}
         </section>
-        <div className='grid gap-5'>{children}</div>
+        <div className='grid min-w-0 gap-6'>{children}</div>
       </Main>
     </>
   )
@@ -287,7 +334,7 @@ export function NativeSelect({
         required={required}
         aria-describedby={hint ? `${controlId}-hint` : undefined}
         onChange={(event) => onChange?.(event.currentTarget.value)}
-        className='h-9 w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
+        className='h-9 w-full max-w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden dark:bg-input/25'
       >
         {selectOptions.map((option) => (
           <option
@@ -311,38 +358,14 @@ export function NativeSelect({
 export function SelectorGrid({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage()
   return (
-    <section className='grid gap-3 rounded-lg border bg-card p-4 panel-control'>
-      <p className='font-mono text-[0.68rem] font-semibold tracking-wide text-muted-foreground uppercase'>
-        {t('admin.common.selectedContext')}
-      </p>
-      <div className='grid gap-4 md:grid-cols-3 xl:grid-cols-4'>{children}</div>
+    <section
+      aria-label={t('admin.common.selectedContext')}
+      className='grid min-w-0 gap-3 border-b pb-5'
+    >
+      <div className='grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4'>
+        {children}
+      </div>
     </section>
-  )
-}
-
-export function StatCard({
-  title,
-  value,
-  description,
-}: {
-  title: string
-  value: string
-  description: string
-}) {
-  return (
-    <Card className='gap-3 py-5'>
-      <CardHeader className='gap-2 pb-0'>
-        <CardDescription className='font-mono text-[0.68rem] font-semibold tracking-wide uppercase'>
-          {title}
-        </CardDescription>
-        <CardTitle className='text-2xl font-semibold tracking-[-0.02em] tabular-nums'>
-          {value}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className='text-sm text-muted-foreground'>
-        {description}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -488,18 +511,9 @@ export function FormCard({
   )
   if (presentation === 'dialog') return form
   return (
-    <Card className='border-primary/25'>
-      <CardHeader className='border-b pb-5'>
-        <Badge
-          className='w-fit border-primary/20 bg-primary/8 text-primary'
-          variant='outline'
-        >
-          {t('admin.common.operationPanel')}
-        </Badge>
+    <Card className='min-w-0'>
+      <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>
-          {t('admin.common.operationPanelDescription')}
-        </CardDescription>
       </CardHeader>
       <CardContent>{form}</CardContent>
     </Card>
@@ -700,7 +714,7 @@ export function CollectionCard({
 }) {
   const { t } = useLanguage()
   return (
-    <Card className='gap-0 overflow-hidden py-0'>
+    <Card className='min-w-0 gap-0 overflow-hidden py-0'>
       <CardHeader className='border-b p-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div className='grid min-w-0 gap-2'>
@@ -717,7 +731,7 @@ export function CollectionCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className='grid gap-4 p-5'>{children}</CardContent>
+      <CardContent className='grid min-w-0 gap-4 p-5'>{children}</CardContent>
     </Card>
   )
 }
@@ -1004,14 +1018,15 @@ export function DiffSummaryCards({
         ],
       ]
   return (
-    <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+    <section className='grid min-w-0 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4'>
       {cards.map(([title, value, description]) => (
-        <StatCard
-          key={String(title)}
-          title={String(title)}
-          value={String(value)}
-          description={String(description)}
-        />
+        <div key={String(title)} className='grid min-w-0 gap-2 bg-card p-4'>
+          <p className='text-sm text-muted-foreground'>{title}</p>
+          <p className='text-xl font-semibold tabular-nums'>{value}</p>
+          <p className='text-xs leading-5 text-muted-foreground'>
+            {description}
+          </p>
+        </div>
       ))}
     </section>
   )
@@ -1038,14 +1053,14 @@ export function DiffReviewList({
 
   if (isMarkdown) {
     return (
-      <section className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
+      <section className='grid min-w-0 gap-3'>
         <div>
           <p className='font-medium'>{t('admin.diff.unifiedDiff')}</p>
           <p className='text-xs text-muted-foreground'>
             {items.length} {t('admin.diff.changeCount')}
           </p>
         </div>
-        <div className='overflow-hidden rounded-md border bg-background font-mono text-xs'>
+        <div className='min-w-0 overflow-hidden rounded-md border bg-background font-mono text-xs'>
           {items.map((item) => (
             <div key={item.id} className='border-b last:border-b-0'>
               <div className='bg-muted/50 px-3 py-2 text-muted-foreground'>
@@ -1077,12 +1092,9 @@ export function DiffReviewList({
   }
 
   return (
-    <div className='grid gap-4'>
+    <div className='grid min-w-0 gap-6'>
       {groups.map(([severity, severityItems]) => (
-        <section
-          key={severity}
-          className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'
-        >
+        <section key={severity} className='grid min-w-0 gap-3'>
           <div className='flex flex-wrap items-center justify-between gap-2'>
             <div>
               <p className='font-medium'>{severity}</p>
@@ -1096,23 +1108,23 @@ export function DiffReviewList({
             {severityItems.map((item) => (
               <article
                 key={item.id}
-                className='grid gap-3 rounded-md border bg-background p-4'
+                className='grid min-w-0 gap-4 rounded-md border bg-background p-4'
               >
                 <div className='flex flex-wrap items-start justify-between gap-3'>
-                  <div className='grid gap-1'>
+                  <div className='grid min-w-0 gap-1'>
                     <div className='flex flex-wrap items-center gap-2'>
                       <Badge variant='outline'>
                         {methodLabel(item.method)}
                       </Badge>
-                      <code className='font-mono text-xs'>
+                      <code className='min-w-0 font-mono text-xs break-all'>
                         {item.path ?? item.location ?? t('admin.common.none')}
                       </code>
                     </div>
-                    <p className='font-medium'>
+                    <p className='font-medium break-words'>
                       {diffMessageLabel(item.message, t)}
                     </p>
                     {item.frontend_impact && (
-                      <p className='text-sm text-muted-foreground'>
+                      <p className='text-sm break-words text-muted-foreground'>
                         {item.frontend_impact === item.message
                           ? diffMessageLabel(item.frontend_impact, t)
                           : item.frontend_impact}
@@ -1135,8 +1147,8 @@ export function DiffReviewList({
                     )}
                   </div>
                 </div>
-                <div className='grid gap-3 md:grid-cols-2'>
-                  <div className='grid gap-2'>
+                <div className='grid min-w-0 gap-3 md:grid-cols-2'>
+                  <div className='grid min-w-0 gap-2'>
                     <p className='text-xs font-medium text-muted-foreground'>
                       {t('admin.diff.oldValue')}
                     </p>
@@ -1144,7 +1156,7 @@ export function DiffReviewList({
                       {jsonPreview(item.old_value, item.old_value_json)}
                     </pre>
                   </div>
-                  <div className='grid gap-2'>
+                  <div className='grid min-w-0 gap-2'>
                     <p className='text-xs font-medium text-muted-foreground'>
                       {t('admin.diff.newValue')}
                     </p>

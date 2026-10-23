@@ -33,7 +33,6 @@ import {
   NativeSelect,
   FormDialog,
   TextField,
-  StatCard,
   CollectionCard,
   StatusBadge,
   ConfirmActionButton,
@@ -351,48 +350,45 @@ export function DocumentsPage({
       />
       {documentId && <LoadingErrorState state={overviewQuery} />}
       {documentId && (
-        <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-          <StatCard
-            title={t('admin.sections.versions')}
-            value={
+        <dl className='grid min-w-0 grid-cols-2 gap-5 rounded-lg border bg-card p-5 text-sm lg:grid-cols-4'>
+          {[
+            [
+              t('admin.sections.versions'),
               overviewQuery.data
                 ? String(overviewQuery.data.version_count)
-                : '—'
-            }
-            description={t('admin.pages.versions.cue')}
-          />
-          <StatCard
-            title={t('admin.fields.versionName')}
-            value={latestDocumentVersion?.version_name ?? '—'}
-            description={t('admin.pages.versions.next')}
-          />
-          <StatCard
-            title={
-              documentsQuery.data?.items.find((item) => item.id === documentId)
-                ?.document_type === DOCUMENT_TYPE_MARKDOWN
+                : '—',
+            ],
+            [
+              t('admin.fields.versionName'),
+              latestDocumentVersion?.version_name ?? '—',
+            ],
+            [
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
                 ? t('admin.markdownFacts.lineCount', {
                     count: String(overviewQuery.data?.raw_line_count ?? '—'),
                   })
-                : t('admin.sections.endpoints')
-            }
-            value={
-              documentsQuery.data?.items.find((item) => item.id === documentId)
-                ?.document_type === DOCUMENT_TYPE_MARKDOWN
+                : t('admin.sections.endpoints'),
+              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
                 ? overviewQuery.data
                   ? `${overviewQuery.data.raw_size_bytes} B`
                   : '—'
                 : overviewQuery.data
                   ? String(overviewQuery.data.endpoint_count)
-                  : '—'
-            }
-            description={t('admin.pages.documents.cue')}
-          />
-          <StatCard
-            title={t('admin.sections.branches')}
-            value={String(branchesQuery.data?.total ?? 0)}
-            description={t('admin.pages.documents.next')}
-          />
-        </section>
+                  : '—',
+            ],
+            [
+              t('admin.sections.branches'),
+              String(branchesQuery.data?.total ?? 0),
+            ],
+          ].map(([label, value]) => (
+            <div key={label} className='min-w-0 space-y-2'>
+              <dt className='text-muted-foreground'>{label}</dt>
+              <dd className='font-semibold break-words tabular-nums'>
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       )}
       <BranchesTable
         key={`${authSessionVersion}:${projectId}:${documentId}`}

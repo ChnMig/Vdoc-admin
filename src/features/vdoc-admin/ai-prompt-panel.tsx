@@ -23,9 +23,9 @@ export function AIPromptPanel({
   const disabled =
     readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   return (
-    <section className='@container/prompt-panel grid min-w-0 content-start gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
+    <section className='@container/prompt-panel grid min-w-0 content-start gap-4'>
       <div className='grid gap-1'>
-        <h3 className='font-medium'>
+        <h3 className='font-semibold'>
           {scope === 'system'
             ? t('admin.ai.systemPromptsTitle')
             : t('admin.ai.projectPromptsTitle')}
@@ -89,7 +89,7 @@ function PromptForm({
   return (
     <form
       key={`${prompt.prompt_key}-${prompt.system_prompt}-${prompt.user_prompt_template}`}
-      className='grid min-w-0 content-start gap-3 rounded-md border bg-background p-4 only:col-span-full'
+      className='grid min-w-0 content-start gap-4 rounded-lg border bg-card p-5 only:col-span-full'
       onSubmit={(event) => {
         event.preventDefault()
         if (saveLockedRef.current) return
@@ -138,6 +138,7 @@ function PromptForm({
         options={enabledOptions(t)}
       />
       <Button
+        className='w-fit'
         type='submit'
         disabled={pending}
         aria-label={

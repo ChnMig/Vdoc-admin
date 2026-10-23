@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { isUnauthenticatedError } from '@/lib/auth-errors'
 import type { TFunction } from '@/lib/i18n'
 import { userPasswordError } from '@/lib/user-password'
+import { cn } from '@/lib/utils'
 import { changePassword, VdocApiError } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
@@ -69,15 +70,29 @@ function createFormSchema(t: TFunction) {
     })
 }
 
-export function ChangePasswordPanel() {
+export function ChangePasswordPanel({
+  embedded = false,
+}: {
+  embedded?: boolean
+}) {
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   // A new session gets an empty form, even if its token or user happens to match.
   return (
-    <ChangePasswordForm key={sessionVersion} sessionVersion={sessionVersion} />
+    <ChangePasswordForm
+      key={sessionVersion}
+      sessionVersion={sessionVersion}
+      embedded={embedded}
+    />
   )
 }
 
-function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
+function ChangePasswordForm({
+  sessionVersion,
+  embedded,
+}: {
+  sessionVersion: number
+  embedded: boolean
+}) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -90,6 +105,9 @@ function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
   const [errorMessage, setErrorMessage] = useState('')
   const mounted = useRef(false)
   const activeRequest = useRef<AbortController | null>(null)
+  const Container = embedded ? 'section' : Card
+  const PanelHeader = embedded ? 'div' : CardHeader
+  const Content = embedded ? 'div' : CardContent
 
   useEffect(() => {
     mounted.current = true
@@ -166,14 +184,22 @@ function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
   }
 
   return (
-    <Card className='w-full max-w-md min-w-0'>
-      <CardHeader>
-        <CardTitle>{t('auth.changePassword.title')}</CardTitle>
-        <CardDescription>
+    <Container
+      className={cn(
+        'w-full max-w-md min-w-0',
+        embedded &&
+          'grid max-w-none items-start gap-5 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-8'
+      )}
+    >
+      <PanelHeader className={cn(embedded && 'grid gap-2')}>
+        <CardTitle>
+          <h2>{t('auth.changePassword.title')}</h2>
+        </CardTitle>
+        <CardDescription className='leading-6'>
           {t('auth.changePassword.description')}
         </CardDescription>
-      </CardHeader>
-      <CardContent>
+      </PanelHeader>
+      <Content className={cn(embedded && 'w-full max-w-md min-w-0 px-0')}>
         <Form {...form}>
           <form
             aria-label={t('auth.changePassword.title')}
@@ -246,7 +272,7 @@ function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
             </Button>
           </form>
         </Form>
-      </CardContent>
-    </Card>
+      </Content>
+    </Container>
   )
 }

@@ -25,7 +25,7 @@ export function AITextField({
   readonly placeholder?: string
 }) {
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 gap-2'>
       <Label htmlFor={id ?? name}>{label}</Label>
       <Input
         id={id ?? name}
@@ -56,7 +56,7 @@ export function AITextAreaField({
   readonly required?: boolean
 }) {
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 gap-2'>
       <Label htmlFor={id ?? name}>{label}</Label>
       <Textarea
         id={id ?? name}
@@ -90,7 +90,7 @@ export function AINumberField({
   readonly step: number
 }) {
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 gap-2'>
       <Label htmlFor={id ?? name}>{label}</Label>
       <Input
         id={id ?? name}
@@ -137,14 +137,14 @@ export function AINativeSelect({
       }
     : { defaultValue: value }
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 gap-2'>
       <Label htmlFor={controlId}>{label}</Label>
       <select
         id={controlId}
         name={name}
         disabled={disabled}
         required={required}
-        className='h-9 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/25'
+        className='h-9 w-full max-w-full min-w-0 rounded-md border border-input bg-background/75 px-3 text-sm shadow-[0_1px_1px_oklch(0_0_0_/_4%)] transition-[background-color,border-color,color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/25'
         {...selectionProps}
       >
         {selectOptions.map((option) => (

@@ -249,6 +249,7 @@ const en = {
         'Use this panel for the next controlled change in the Vdoc lifecycle.',
       resourceCollection: 'Resource collection',
       selectedContext: 'Selected context',
+      pageHelp: 'Page guide',
       nextAction: 'Next action',
       openNextAction: 'Open next step',
       endpoint: 'Endpoint',
@@ -633,6 +634,9 @@ const en = {
       projectPromptsErrorTitle: 'Project prompts could not be loaded',
       projectPromptsErrorDescription:
         'Prompt history for the selected project is unavailable. Refresh or select another project.',
+      scopeLabel: 'Configuration scope',
+      systemScope: 'System defaults',
+      projectScopeTab: 'Project override',
       systemProviderTitle: 'System AI provider',
       projectProviderTitle: 'Project AI provider override',
       systemProviderDescription:
@@ -687,6 +691,29 @@ const en = {
       savePrompt: 'Save prompt',
       keyUnset: 'Key set: no',
       keyStatus: 'Key set: {yes} · last4: {last4}',
+    },
+    settings: {
+      description:
+        'Manage your account, appearance, AI configuration, and deployment.',
+      navigation: 'Settings categories',
+      tabs: {
+        account: 'Account',
+        appearance: 'Appearance',
+        ai: 'AI',
+        version: 'Version',
+      },
+      accountTitle: 'Account details',
+      accountDescription: 'Your current account and workspace role.',
+      role: 'Role',
+      member: 'Member',
+      appearanceTitle: 'Color theme',
+      appearanceDescription:
+        'Choose a theme or follow your device. Changes apply to this browser immediately.',
+      languageDescription: 'Choose the language used throughout the workbench.',
+      serviceTitle: 'Service connection',
+      serviceDescription:
+        'Connection details for this deployment, useful when troubleshooting.',
+      healthFailed: 'Unable to connect',
     },
     release: {
       title: 'Version and updates',
@@ -1549,6 +1576,7 @@ const zhCN = {
         '在此面板中执行 Vdoc 生命周期的下一次受控变更。',
       resourceCollection: '资源集合',
       selectedContext: '当前上下文',
+      pageHelp: '使用说明',
       nextAction: '下一步',
       openNextAction: '打开下一步',
       endpoint: '端点',
@@ -1909,6 +1937,9 @@ const zhCN = {
       projectPromptsErrorTitle: '无法加载项目提示词',
       projectPromptsErrorDescription:
         '所选项目的提示词历史当前不可用，请刷新或选择其他项目。',
+      scopeLabel: '配置范围',
+      systemScope: '系统默认',
+      projectScopeTab: '项目覆盖',
       systemProviderTitle: '系统 AI 提供商',
       projectProviderTitle: '项目 AI 提供商覆盖',
       systemProviderDescription: '用于超级管理员系统工作流的默认提供商。',
@@ -1959,6 +1990,26 @@ const zhCN = {
       savePrompt: '保存提示词',
       keyUnset: '密钥状态：未设置',
       keyStatus: '密钥状态：已设置 · 尾号：{last4}',
+    },
+    settings: {
+      description: '管理账号、界面偏好、AI 配置与部署版本。',
+      navigation: '设置分类',
+      tabs: {
+        account: '账号',
+        appearance: '外观',
+        ai: 'AI 配置',
+        version: '版本',
+      },
+      accountTitle: '账号信息',
+      accountDescription: '当前登录账号及其工作区角色。',
+      role: '角色',
+      member: '普通成员',
+      appearanceTitle: '界面主题',
+      appearanceDescription: '选择浅色、深色或跟随系统，立即应用到当前浏览器。',
+      languageDescription: '选择工作台使用的界面语言。',
+      serviceTitle: '服务连接',
+      serviceDescription: '当前部署的连接信息，可在排查问题时查看。',
+      healthFailed: '无法连接服务',
     },
     release: {
       title: '版本与更新',

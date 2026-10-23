@@ -501,13 +501,6 @@ export function DiffsPage({
           {t('admin.diff.compareHint')}
         </p>
       </div>
-      <LoadingErrorState
-        state={{
-          isLoading: diffHistoryQuery.isLoading,
-          isError: diffHistoryQuery.isError,
-          error: diffHistoryQuery.error,
-        }}
-      />
       {comparisonIsCurrent && diffMutation.isError && (
         <Alert variant='destructive' aria-live='polite'>
           <AlertCircle />
@@ -515,82 +508,6 @@ export function DiffsPage({
           <AlertDescription>{diffMutation.error.message}</AlertDescription>
         </Alert>
       )}
-      <CollectionCard
-        title={t('admin.diff.historyTitle')}
-        description={t('admin.diff.historyDescription')}
-        count={diffHistoryQuery.data?.total ?? 0}
-      >
-        <div className='mb-4 grid gap-2'>
-          <Label htmlFor='diff-history-search'>
-            {t('admin.pagination.searchDiffs')}
-          </Label>
-          <Input
-            id='diff-history-search'
-            value={historySearch}
-            onChange={(event) => setHistorySearch(event.currentTarget.value)}
-          />
-        </div>
-        {diffHistoryQuery.data?.items.length ? (
-          <div className='grid gap-2'>
-            {diffHistoryQuery.data.items.map((item) => {
-              const fromVersionLabel =
-                versionLabelById.get(item.from_version_id ?? '') ??
-                item.from_version_id ??
-                '-'
-              const toVersionLabel =
-                versionLabelById.get(item.to_version_id ?? '') ??
-                item.to_version_id ??
-                '-'
-              return (
-                <button
-                  key={item.id}
-                  type='button'
-                  className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
-                  onClick={() => {
-                    setFromVersionId(item.from_version_id ?? '')
-                    setToVersionId(item.to_version_id ?? '')
-                    setDiff(item)
-                    onSearchChange?.({
-                      from_version_id: item.from_version_id || undefined,
-                      to_version_id: item.to_version_id || undefined,
-                      diff_id: item.id,
-                    })
-                  }}
-                >
-                  <span className='text-sm font-medium'>
-                    {fromVersionLabel} → {toVersionLabel}
-                  </span>
-                  <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
-                    {t('admin.diff.historyIdentifiers', {
-                      from: item.from_version_id ?? '-',
-                      to: item.to_version_id ?? '-',
-                      diff: item.id,
-                    })}
-                  </span>
-                  <span className='text-xs text-muted-foreground'>
-                    {formatDate(item.created_at)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <EmptyState preset='diffs' />
-        )}
-        <QueryPagination
-          label={t('admin.pagination.diffs')}
-          offset={historyOffset}
-          count={diffHistoryQuery.data?.items.length ?? 0}
-          total={diffHistoryQuery.data?.total}
-          hasMore={
-            historyOffset + (diffHistoryQuery.data?.items.length ?? 0) <
-            (diffHistoryQuery.data?.total ?? 0)
-          }
-          busy={diffHistoryQuery.isFetching}
-          onPrevious={() => setHistoryOffset(historyOffset - 50)}
-          onNext={() => setHistoryOffset(historyOffset + 50)}
-        />
-      </CollectionCard>
       <LoadingErrorState
         state={{
           isLoading: search?.diff_id
@@ -655,6 +572,89 @@ export function DiffsPage({
         ) : (
           <EmptyState preset='diffs' />
         )}
+      </CollectionCard>
+      <LoadingErrorState
+        state={{
+          isLoading: diffHistoryQuery.isLoading,
+          isError: diffHistoryQuery.isError,
+          error: diffHistoryQuery.error,
+        }}
+      />
+      <CollectionCard
+        title={t('admin.diff.historyTitle')}
+        description={t('admin.diff.historyDescription')}
+        count={diffHistoryQuery.data?.total ?? 0}
+      >
+        <div className='grid max-w-md gap-2'>
+          <Label htmlFor='diff-history-search'>
+            {t('admin.pagination.searchDiffs')}
+          </Label>
+          <Input
+            id='diff-history-search'
+            value={historySearch}
+            onChange={(event) => setHistorySearch(event.currentTarget.value)}
+          />
+        </div>
+        {diffHistoryQuery.data?.items.length ? (
+          <div className='grid gap-2'>
+            {diffHistoryQuery.data.items.map((item) => {
+              const fromVersionLabel =
+                versionLabelById.get(item.from_version_id ?? '') ??
+                item.from_version_id ??
+                '-'
+              const toVersionLabel =
+                versionLabelById.get(item.to_version_id ?? '') ??
+                item.to_version_id ??
+                '-'
+              return (
+                <button
+                  key={item.id}
+                  type='button'
+                  className='grid min-w-0 gap-1 rounded-md border bg-[var(--surface-control)] p-3 text-start hover:bg-muted/50'
+                  onClick={() => {
+                    setFromVersionId(item.from_version_id ?? '')
+                    setToVersionId(item.to_version_id ?? '')
+                    setDiff(item)
+                    onSearchChange?.({
+                      from_version_id: item.from_version_id || undefined,
+                      to_version_id: item.to_version_id || undefined,
+                      diff_id: item.id,
+                    })
+                  }}
+                >
+                  <span className='text-sm font-medium break-words'>
+                    {fromVersionLabel} → {toVersionLabel}
+                  </span>
+                  <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
+                    {t('admin.diff.historyIdentifiers', {
+                      from: item.from_version_id ?? '-',
+                      to: item.to_version_id ?? '-',
+                      diff: item.id,
+                    })}
+                  </span>
+                  <span className='text-xs text-muted-foreground'>
+                    {formatDate(item.created_at)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyState preset='diffs' />
+        )}
+        <QueryPagination
+          label={t('admin.pagination.diffs')}
+          offset={historyOffset}
+          count={diffHistoryQuery.data?.items.length ?? 0}
+          total={diffHistoryQuery.data?.total}
+          hasMore={
+            historyOffset + (diffHistoryQuery.data?.items.length ?? 0) <
+            (diffHistoryQuery.data?.total ?? 0)
+          }
+          busy={diffHistoryQuery.isFetching}
+          onPrevious={() => setHistoryOffset(historyOffset - 50)}
+          onNext={() => setHistoryOffset(historyOffset + 50)}
+        />
       </CollectionCard>
       <AIContextPanel
         target={activeDiffAITarget}

@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/table'
 import {
   PageChrome,
-  SelectorGrid,
   NativeSelect,
   TextField,
   LoadingErrorState,
@@ -104,83 +103,87 @@ export function AuditPage() {
 
   return (
     <PageChrome page='audit'>
-      <SelectorGrid>
-        <NativeSelect
-          label={t('admin.fields.project')}
-          value={projectId}
-          onChange={(value) => {
-            setAllProjectsSelection(
-              value === ''
-                ? { userId: authUser?.id, sessionVersion }
-                : undefined
-            )
-            setProjectId(value)
-          }}
-          placeholder={
-            isSuperAdmin
-              ? t('admin.audit.allProjects')
-              : t('admin.placeholders.selectProject')
-          }
-          options={projectOptions}
-        />
-        <TextField
-          id='audit-action'
-          label={t('admin.audit.action')}
-          name='audit_action'
-          placeholder={t('admin.audit.actionPlaceholder')}
-          value={action}
-          onChange={setAction}
-        />
-        <TextField
-          id='audit-resource-type'
-          label={t('admin.audit.resourceType')}
-          name='audit_resource_type'
-          placeholder={t('admin.audit.resourceTypePlaceholder')}
-          value={resourceType}
-          onChange={setResourceType}
-        />
-        <TextField
-          id='audit-from'
-          name='audit_from'
-          type='datetime-local'
-          label={t('admin.pagination.from')}
-          value={from}
-          onChange={setFrom}
-        />
-        <TextField
-          id='audit-to'
-          name='audit_to'
-          type='datetime-local'
-          label={t('admin.pagination.to')}
-          value={to}
-          onChange={setTo}
-        />
-      </SelectorGrid>
-      {!isSuperAdmin &&
-      projectId &&
-      !membersQuery.isLoading &&
-      !isProjectAdmin ? (
-        <Alert variant='destructive'>
-          <ShieldCheck />
-          <AlertTitle>{t('errors.forbiddenTitle')}</AlertTitle>
-          <AlertDescription>
-            {t('admin.audit.projectAdminRequired')}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <LoadingErrorState
-          state={{
-            isLoading: membersQuery.isLoading || auditQuery.isLoading,
-            isError: membersQuery.isError || auditQuery.isError,
-            error: (membersQuery.error ?? auditQuery.error) as Error | null,
-          }}
-        />
-      )}
       <CollectionCard
         title={t('admin.audit.title')}
         description={t('admin.audit.description')}
         count={auditQuery.data?.total ?? 0}
       >
+        <div className='@container/audit-filters grid min-w-0 gap-4 border-b pb-5'>
+          <div className='grid min-w-0 gap-4 @xl/audit-filters:grid-cols-3'>
+            <NativeSelect
+              label={t('admin.fields.project')}
+              value={projectId}
+              onChange={(value) => {
+                setAllProjectsSelection(
+                  value === ''
+                    ? { userId: authUser?.id, sessionVersion }
+                    : undefined
+                )
+                setProjectId(value)
+              }}
+              placeholder={
+                isSuperAdmin
+                  ? t('admin.audit.allProjects')
+                  : t('admin.placeholders.selectProject')
+              }
+              options={projectOptions}
+            />
+            <TextField
+              id='audit-action'
+              label={t('admin.audit.action')}
+              name='audit_action'
+              placeholder={t('admin.audit.actionPlaceholder')}
+              value={action}
+              onChange={setAction}
+            />
+            <TextField
+              id='audit-resource-type'
+              label={t('admin.audit.resourceType')}
+              name='audit_resource_type'
+              placeholder={t('admin.audit.resourceTypePlaceholder')}
+              value={resourceType}
+              onChange={setResourceType}
+            />
+          </div>
+          <div className='grid max-w-2xl min-w-0 gap-4 @sm/audit-filters:grid-cols-2'>
+            <TextField
+              id='audit-from'
+              name='audit_from'
+              type='datetime-local'
+              label={t('admin.pagination.from')}
+              value={from}
+              onChange={setFrom}
+            />
+            <TextField
+              id='audit-to'
+              name='audit_to'
+              type='datetime-local'
+              label={t('admin.pagination.to')}
+              value={to}
+              onChange={setTo}
+            />
+          </div>
+        </div>
+        {!isSuperAdmin &&
+        projectId &&
+        !membersQuery.isLoading &&
+        !isProjectAdmin ? (
+          <Alert variant='destructive'>
+            <ShieldCheck />
+            <AlertTitle>{t('errors.forbiddenTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('admin.audit.projectAdminRequired')}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <LoadingErrorState
+            state={{
+              isLoading: membersQuery.isLoading || auditQuery.isLoading,
+              isError: membersQuery.isError || auditQuery.isError,
+              error: (membersQuery.error ?? auditQuery.error) as Error | null,
+            }}
+          />
+        )}
         {auditQuery.data?.items.length ? (
           <AuditLogTable logs={auditQuery.data.items} />
         ) : (

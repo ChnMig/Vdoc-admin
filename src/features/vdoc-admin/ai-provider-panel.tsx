@@ -48,7 +48,7 @@ export function AIProviderPanel({
       AI_PROVIDER_DEFAULT_TUNING.max_output_tokens,
   }
   return (
-    <section className='grid gap-4 rounded-md border bg-background p-4'>
+    <section className='@container/provider-panel grid min-w-0 gap-5 rounded-lg border bg-card p-5'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
         <div className='grid gap-1'>
           <h3 className='font-medium'>
@@ -56,7 +56,7 @@ export function AIProviderPanel({
               ? t('admin.ai.systemProviderTitle')
               : t('admin.ai.projectProviderTitle')}
           </h3>
-          <p className='text-sm text-muted-foreground'>
+          <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
             {scope === 'system'
               ? t('admin.ai.systemProviderDescription')
               : t('admin.ai.projectProviderDescription')}
@@ -68,7 +68,7 @@ export function AIProviderPanel({
             : t('admin.statuses.disabled')}
         </Badge>
       </div>
-      <div className='grid gap-2 rounded-md border bg-[var(--surface-control)] p-3 text-sm text-muted-foreground'>
+      <div className='grid gap-1 border-b pb-4 text-sm text-muted-foreground'>
         <p>{providerConfigurationStatus(provider, t, scope)}</p>
         <p>{providerKeyStatus(provider, t)}</p>
         <p>
@@ -92,7 +92,7 @@ export function AIProviderPanel({
         }}
         onChange={onTestPayloadChange}
       >
-        <div className='grid gap-4 md:grid-cols-2'>
+        <div className='grid min-w-0 gap-4 @xl/provider-panel:grid-cols-2'>
           <AITextField
             id={`${scope}-ai-provider-name`}
             label={t('admin.ai.providerName')}
@@ -150,6 +150,8 @@ export function AIProviderPanel({
             placeholder={t('admin.statuses.enabled')}
             options={enabledOptions(t)}
           />
+        </div>
+        <div className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
           <AINumberField
             id={`${scope}-ai-provider-temperature`}
             label={t('admin.ai.temperature')}

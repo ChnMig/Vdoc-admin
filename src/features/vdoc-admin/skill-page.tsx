@@ -54,34 +54,44 @@ export function SkillPage() {
             : 'admin.skill.installDescription'
         )}
       >
-        <ol className='grid gap-3'>
-          {[
-            t(beta ? 'admin.skill.betaStepPackage' : 'admin.skill.stepPackage'),
-            t('admin.skill.stepMcp'),
-            t(beta ? 'admin.skill.betaStepVerify' : 'admin.skill.stepVerify'),
-          ].map((step, index) => (
-            <li
-              key={step}
-              className='grid grid-cols-[2rem_1fr] items-start gap-3 rounded-md border bg-[var(--surface-control)] p-4 text-sm'
-            >
-              <Badge className='justify-center' variant='outline'>
-                {index + 1}
-              </Badge>
-              <span className='leading-6'>{step}</span>
-            </li>
-          ))}
-        </ol>
-        <pre className='overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
-          {beta ? vdocBetaSkillInstallSnippet : vdocSkillInstallSnippet}
-        </pre>
+        <div className='grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]'>
+          <div className='grid min-w-0 gap-6'>
+            <ol className='grid gap-5'>
+              {[
+                t(
+                  beta
+                    ? 'admin.skill.betaStepPackage'
+                    : 'admin.skill.stepPackage'
+                ),
+                t('admin.skill.stepMcp'),
+                t(
+                  beta ? 'admin.skill.betaStepVerify' : 'admin.skill.stepVerify'
+                ),
+              ].map((step, index) => (
+                <li
+                  key={step}
+                  className='grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-3 text-sm'
+                >
+                  <Badge className='mt-0.5 justify-center' variant='outline'>
+                    {index + 1}
+                  </Badge>
+                  <span className='leading-6'>{step}</span>
+                </li>
+              ))}
+            </ol>
+            <Alert className='rounded-none border-0 border-t bg-transparent px-0 pt-5 pb-0'>
+              <ShieldCheck />
+              <AlertTitle>{t('admin.skill.boundaryTitle')}</AlertTitle>
+              <AlertDescription>
+                {t('admin.skill.boundaryDescription')}
+              </AlertDescription>
+            </Alert>
+          </div>
+          <pre className='min-w-0 overflow-x-auto rounded-md border bg-background p-4 text-xs leading-relaxed'>
+            {beta ? vdocBetaSkillInstallSnippet : vdocSkillInstallSnippet}
+          </pre>
+        </div>
       </CollectionCard>
-      <Alert>
-        <ShieldCheck />
-        <AlertTitle>{t('admin.skill.boundaryTitle')}</AlertTitle>
-        <AlertDescription>
-          {t('admin.skill.boundaryDescription')}
-        </AlertDescription>
-      </Alert>
       <CollectionCard
         title={t('admin.token.configTitle')}
         description={t('admin.token.configDescription')}

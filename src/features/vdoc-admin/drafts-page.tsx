@@ -635,6 +635,55 @@ export function DraftsPage({
           }
         />
       )}
+      <section className='grid min-w-0 gap-4'>
+        <div className='grid gap-2'>
+          <Label htmlFor='draft-history-search'>
+            {t('admin.pagination.searchDrafts')}
+          </Label>
+          <Input
+            id='draft-history-search'
+            value={draftSearch}
+            onChange={(event) => setDraftSearch(event.currentTarget.value)}
+          />
+        </div>
+        <LoadingErrorState
+          state={{
+            isLoading: draftsQuery.isLoading,
+            isError: draftsQuery.isError,
+            error: draftsQuery.error,
+          }}
+        />
+        <DraftsTable
+          total={draftsQuery.data?.total ?? 0}
+          drafts={draftsQuery.data?.items ?? []}
+          selected={draftId}
+          onSelect={handleDraftSelect}
+          onAction={(id, action) =>
+            actionMutation.mutate({
+              projectId,
+              documentId,
+              draftId: id,
+              action,
+            })
+          }
+          canDraft={canDraft}
+          pending={actionMutation.isPending}
+          activeBranchIds={activeBranchIds}
+        />
+        <QueryPagination
+          label={t('admin.pagination.drafts')}
+          offset={draftOffset}
+          count={draftsQuery.data?.items.length ?? 0}
+          total={draftsQuery.data?.total}
+          hasMore={
+            draftOffset + (draftsQuery.data?.items.length ?? 0) <
+            (draftsQuery.data?.total ?? 0)
+          }
+          busy={draftsQuery.isFetching}
+          onPrevious={() => setDraftOffset(draftOffset - 50)}
+          onNext={() => setDraftOffset(draftOffset + 50)}
+        />
+      </section>
       {canPublish && (
         <>
           <LoadingErrorState state={overviewQuery} />
@@ -714,53 +763,6 @@ export function DraftsPage({
           )}
         </>
       )}
-      <div className='grid gap-2'>
-        <Label htmlFor='draft-history-search'>
-          {t('admin.pagination.searchDrafts')}
-        </Label>
-        <Input
-          id='draft-history-search'
-          value={draftSearch}
-          onChange={(event) => setDraftSearch(event.currentTarget.value)}
-        />
-      </div>
-      <LoadingErrorState
-        state={{
-          isLoading: draftsQuery.isLoading,
-          isError: draftsQuery.isError,
-          error: draftsQuery.error,
-        }}
-      />
-      <DraftsTable
-        total={draftsQuery.data?.total ?? 0}
-        drafts={draftsQuery.data?.items ?? []}
-        selected={draftId}
-        onSelect={handleDraftSelect}
-        onAction={(id, action) =>
-          actionMutation.mutate({
-            projectId,
-            documentId,
-            draftId: id,
-            action,
-          })
-        }
-        canDraft={canDraft}
-        pending={actionMutation.isPending}
-        activeBranchIds={activeBranchIds}
-      />
-      <QueryPagination
-        label={t('admin.pagination.drafts')}
-        offset={draftOffset}
-        count={draftsQuery.data?.items.length ?? 0}
-        total={draftsQuery.data?.total}
-        hasMore={
-          draftOffset + (draftsQuery.data?.items.length ?? 0) <
-          (draftsQuery.data?.total ?? 0)
-        }
-        busy={draftsQuery.isFetching}
-        onPrevious={() => setDraftOffset(draftOffset - 50)}
-        onNext={() => setDraftOffset(draftOffset + 50)}
-      />
       {actionMutation.isError &&
         actionMutation.variables?.action === 'submit' && (
           <Alert variant='destructive' aria-live='polite'>

@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRight,
   BookOpenText,
-  CircleDot,
   FileText,
   GitCompareArrows,
   KeyRound,
@@ -27,14 +26,12 @@ import {
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   PageChrome,
   LoadingErrorState,
   SelectorGrid,
   NativeSelect,
   StatusBadge,
-  StatCard,
   CollectionCard,
   EmptyState,
 } from './page-shared'
@@ -307,104 +304,104 @@ export function DashboardPage() {
           options={documentOptions}
         />
       </SelectorGrid>
-      <Card className='overflow-hidden'>
-        <CardContent className='grid gap-5 p-5 lg:grid-cols-[1.25fr_0.75fr]'>
-          <div className='grid gap-4'>
-            <div className='flex flex-wrap items-center gap-2'>
-              <Badge
-                className='w-fit border-primary/20 bg-primary/8 text-primary'
-                variant='outline'
-              >
-                {t('admin.workbench.eyebrow')}
-              </Badge>
-              <StatusBadge muted={!healthQuery.data?.ready}>
-                {healthQuery.data?.ready
-                  ? t('admin.statuses.ready')
-                  : t('admin.statuses.degraded')}
-              </StatusBadge>
-            </div>
-            <div className='grid gap-3'>
-              <h2 className='max-w-3xl text-2xl font-semibold tracking-[-0.025em] text-balance'>
-                {t('admin.workbench.title')}
-              </h2>
-              <p className='max-w-3xl text-sm leading-6 text-pretty text-muted-foreground'>
-                {t('admin.workbench.description')}
-              </p>
-            </div>
+      <section className='flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-lg border bg-card p-5 text-card-foreground'>
+        <div className='min-w-0 flex-1 space-y-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <h2 className='text-sm font-semibold'>
+              {t('admin.workbench.roleTitle')}
+            </h2>
+            <StatusBadge>{roleLabel}</StatusBadge>
           </div>
-          <div className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4 shadow-[var(--shadow-panel)]'>
-            <div className='flex flex-wrap items-center justify-between gap-2'>
-              <p className='text-sm font-medium'>
-                {t('admin.workbench.roleTitle')}
-              </p>
-              <StatusBadge>{roleLabel}</StatusBadge>
-            </div>
-            <p className='text-sm text-muted-foreground'>{roleGuidance}</p>
-            {selectedProject && (
-              <p className='font-mono text-xs text-muted-foreground'>
-                {selectedProject.name} · {selectedProject.id}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      <section className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-        <StatCard
-          title={t('nav.users')}
-          value={isSuperAdmin ? String(usersQuery.data?.total ?? '-') : '-'}
-          description={t('admin.workbench.usersStat')}
-        />
-        <StatCard
-          title={t('nav.teams')}
-          value={isSuperAdmin ? String(teamsQuery.data?.total ?? '-') : '—'}
-          description={t('admin.workbench.teamsStat')}
-        />
-        <StatCard
-          title={t('nav.projects')}
-          value={String(projectsQuery.data?.total ?? '-')}
-          description={t('admin.workbench.projectsStat')}
-        />
-        <StatCard
-          title={t('nav.mcpTokens')}
-          value={String(tokensQuery.data?.total ?? '-')}
-          description={t('admin.workbench.tokensStat')}
-        />
+          <p className='max-w-3xl text-sm leading-6 text-muted-foreground'>
+            {roleGuidance}
+          </p>
+          {selectedProject && (
+            <p className='text-xs break-words text-muted-foreground'>
+              {selectedProject.name} ·{' '}
+              <span className='font-mono'>{selectedProject.id}</span>
+            </p>
+          )}
+        </div>
+        <StatusBadge muted={!healthQuery.data?.ready}>
+          {healthQuery.data?.ready
+            ? t('admin.statuses.ready')
+            : t('admin.statuses.degraded')}
+        </StatusBadge>
       </section>
-      <section className='grid gap-4 lg:grid-cols-[1.25fr_0.75fr]'>
+      <dl className='grid grid-cols-2 rounded-lg border bg-card text-card-foreground lg:grid-cols-4'>
+        {[
+          [
+            t('nav.users'),
+            isSuperAdmin ? String(usersQuery.data?.total ?? '—') : '—',
+            t('admin.workbench.usersStat'),
+          ],
+          [
+            t('nav.teams'),
+            isSuperAdmin ? String(teamsQuery.data?.total ?? '—') : '—',
+            t('admin.workbench.teamsStat'),
+          ],
+          [
+            t('nav.projects'),
+            String(projectsQuery.data?.total ?? '—'),
+            t('admin.workbench.projectsStat'),
+          ],
+          [
+            t('nav.mcpTokens'),
+            String(tokensQuery.data?.total ?? '—'),
+            t('admin.workbench.tokensStat'),
+          ],
+        ].map(([title, value, description], index) => (
+          <div
+            key={title}
+            className={`min-w-0 p-4 ${index % 2 === 1 ? 'border-s' : ''} ${index > 1 ? 'border-t lg:border-t-0' : ''} ${index === 2 ? 'lg:border-s' : ''}`}
+          >
+            <dt className='text-sm text-muted-foreground'>{title}</dt>
+            <dd className='mt-1'>
+              <span className='text-xl font-semibold tabular-nums'>
+                {value}
+              </span>
+              <p className='mt-1 text-xs leading-5 text-muted-foreground'>
+                {description}
+              </p>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <section className='grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]'>
         <CollectionCard
           title={t('admin.workbench.nextStepsTitle')}
           description={t('admin.workbench.nextStepsDescription')}
         >
-          <div className='grid gap-3 md:grid-cols-2'>
+          <ol className='divide-y'>
             {onboardingSteps.map((step, index) => {
               const Icon = step.icon
               return (
-                <div
+                <li
                   key={step.key}
-                  className='rounded-md border bg-[var(--surface-control)] p-4 shadow-[var(--shadow-panel)]'
+                  className='grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 py-4 first:pt-0 last:pb-0 sm:grid-cols-[1.25rem_minmax(0,1fr)_auto]'
                 >
-                  <div className='mb-3 flex items-center justify-between gap-3'>
-                    <div className='flex items-center gap-2'>
-                      <span className='flex size-8 items-center justify-center rounded-md border bg-background text-primary'>
-                        <Icon className='size-4' />
+                  <Icon
+                    aria-hidden
+                    className='mt-1 size-4 text-muted-foreground'
+                  />
+                  <div className='min-w-0 space-y-1'>
+                    <p className='flex flex-wrap items-center gap-2 text-sm font-medium'>
+                      <span>
+                        {t(`admin.workbench.steps.${step.key}.title`)}
                       </span>
                       <Badge variant={step.done ? 'outline' : 'secondary'}>
                         {step.done ? t('admin.workbench.done') : `${index + 1}`}
                       </Badge>
-                    </div>
-                    <CircleDot className='size-4 text-muted-foreground' />
+                    </p>
+                    <p className='text-sm leading-6 text-muted-foreground'>
+                      {t(`admin.workbench.steps.${step.key}.description`)}
+                    </p>
                   </div>
-                  <p className='font-medium'>
-                    {t(`admin.workbench.steps.${step.key}.title`)}
-                  </p>
-                  <p className='mt-2 text-sm text-muted-foreground'>
-                    {t(`admin.workbench.steps.${step.key}.description`)}
-                  </p>
                   <Button
                     asChild
                     variant='link'
                     size='sm'
-                    className='mt-3 h-auto p-0'
+                    className='col-start-2 h-auto justify-start p-0 text-sm sm:col-start-3 sm:mt-1'
                   >
                     <a href={contextualHref(step.href, projectId, documentId)}>
                       {t(
@@ -415,10 +412,10 @@ export function DashboardPage() {
                       <ArrowRight />
                     </a>
                   </Button>
-                </div>
+                </li>
               )
             })}
-          </div>
+          </ol>
         </CollectionCard>
         <CollectionCard
           title={t('admin.pages.dashboard.health')}
@@ -444,9 +441,11 @@ export function DashboardPage() {
                 dependencyEntries.map(([name, dependency]) => (
                   <div
                     key={name}
-                    className='flex items-center justify-between gap-3 rounded-lg border p-3'
+                    className='flex min-w-0 flex-wrap items-center justify-between gap-3 border-t py-3 first:border-t-0 first:pt-0 last:pb-0'
                   >
-                    <span className='font-medium'>{name}</span>
+                    <span className='min-w-0 font-medium break-words'>
+                      {name}
+                    </span>
                     <StatusBadge muted={!dependency.ready}>
                       {dependency.status}
                     </StatusBadge>

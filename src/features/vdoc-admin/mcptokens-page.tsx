@@ -39,7 +39,6 @@ import {
   TokenTable,
   CollectionCard,
   EmptyState,
-  ContentViewer,
   StatusBadge,
 } from './page-shared'
 import {
@@ -377,7 +376,7 @@ export function MCPTokensPage({
           <AlertTitle>{t('admin.token.secretAvailable')}</AlertTitle>
           <AlertDescription className='grid gap-3'>
             <p>{t('admin.token.secretGuidance')}</p>
-            <code className='mt-2 block rounded-md border bg-muted p-3 text-xs'>
+            <code className='mt-2 block min-w-0 rounded-md border bg-muted p-3 text-xs break-all'>
               {visibleToken}
             </code>
             <Button
@@ -576,10 +575,14 @@ export function MCPTokensPage({
         )}
       </CollectionCard>
       {selectedToken && (
-        <ContentViewer
-          title={t('admin.sections.tokenDetails')}
-          content={stringify(tokenDetails(selectedToken))}
-        />
+        <details className='min-w-0 rounded-lg border bg-card'>
+          <summary className='cursor-pointer rounded-lg px-5 py-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+            {t('admin.sections.tokenDetails')}
+          </summary>
+          <pre className='max-h-[32rem] overflow-auto border-t p-5 text-xs leading-relaxed'>
+            {stringify(tokenDetails(selectedToken))}
+          </pre>
+        </details>
       )}
       <CollectionCard
         title={t('admin.token.configTitle')}

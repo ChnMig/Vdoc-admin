@@ -18,13 +18,6 @@ import { useLanguage } from '@/context/language-provider'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageOffset } from '@/hooks/use-page-offset'
 import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -45,7 +38,6 @@ import {
   DeepLinkAlert,
   SelectorGrid,
   NativeSelect,
-  StatCard,
   ContentViewer,
   CollectionCard,
   StatusBadge,
@@ -388,59 +380,62 @@ export function VersionsPage({
           options={versionOptions}
         />
       </SelectorGrid>
-      <TextField
-        id='version-search'
-        name='version_search'
-        label={t('admin.pagination.searchVersions')}
-        value={versionSearch}
-        onChange={setVersionSearch}
-      />
-      <QueryPagination
-        offset={versionOffset}
-        count={versionsQuery.data?.items.length ?? 0}
-        total={versionsQuery.data?.total}
-        hasMore={versionsQuery.data?.hasMore ?? false}
-        busy={versionsQuery.isFetching}
-        onPrevious={() => setVersionOffset(versionOffset - 50)}
-        onNext={() => setVersionOffset(versionOffset + 50)}
-      />
-      <LoadingErrorState state={versionsQuery} />
-      <VersionsTable
-        versions={versionsQuery.data?.items ?? []}
-        selected={versionId}
-        onSelect={handleVersionChange}
-      />
-      {!isMarkdownDocument && (
-        <section className='grid gap-4 sm:grid-cols-3'>
-          <StatCard
-            title={t('admin.developerPortal.endpointCount')}
-            value={String(
-              endpointsQuery.data?.total ?? visibleEndpoints.length
-            )}
-            description={t('admin.developerPortal.endpointCountDescription')}
-          />
-          <StatCard
-            title={t('admin.developerPortal.methodCount')}
-            value={String(methodCount)}
-            description={t('admin.developerPortal.methodCountDescription')}
-          />
-          <StatCard
-            title={t('admin.developerPortal.tagCount')}
-            value={String(tagCount)}
-            description={t('admin.developerPortal.tagCountDescription')}
-          />
-        </section>
-      )}
-      <SelectorGrid>
-        <NativeSelect
-          label={t('admin.fields.contentKind')}
-          value={activeVersionContentKind}
-          onChange={setContentKind}
-          placeholder={t('admin.types.raw')}
-          options={versionContentKindOptions}
+      <section className='grid min-w-0 gap-4'>
+        <TextField
+          id='version-search'
+          name='version_search'
+          label={t('admin.pagination.searchVersions')}
+          value={versionSearch}
+          onChange={setVersionSearch}
         />
-        {!isMarkdownDocument && (
-          <>
+        <LoadingErrorState state={versionsQuery} />
+        <VersionsTable
+          versions={versionsQuery.data?.items ?? []}
+          selected={versionId}
+          onSelect={handleVersionChange}
+        />
+        <QueryPagination
+          offset={versionOffset}
+          count={versionsQuery.data?.items.length ?? 0}
+          total={versionsQuery.data?.total}
+          hasMore={versionsQuery.data?.hasMore ?? false}
+          busy={versionsQuery.isFetching}
+          onPrevious={() => setVersionOffset(versionOffset - 50)}
+          onNext={() => setVersionOffset(versionOffset + 50)}
+        />
+      </section>
+      {!isMarkdownDocument && (
+        <dl className='grid min-w-0 grid-cols-3 gap-4 rounded-lg border bg-card p-5 text-sm'>
+          {[
+            [
+              t('admin.developerPortal.endpointCount'),
+              String(endpointsQuery.data?.total ?? visibleEndpoints.length),
+              t('admin.developerPortal.endpointCountDescription'),
+            ],
+            [
+              t('admin.developerPortal.methodCount'),
+              String(methodCount),
+              t('admin.developerPortal.methodCountDescription'),
+            ],
+            [
+              t('admin.developerPortal.tagCount'),
+              String(tagCount),
+              t('admin.developerPortal.tagCountDescription'),
+            ],
+          ].map(([label, value, description]) => (
+            <div key={label} className='min-w-0 space-y-2'>
+              <dt className='text-muted-foreground'>{label}</dt>
+              <dd className='font-semibold tabular-nums'>{value}</dd>
+              <dd className='text-xs leading-5 text-muted-foreground'>
+                {description}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {!isMarkdownDocument && (
+        <>
+          <SelectorGrid>
             <div className='grid gap-2'>
               <Label htmlFor='endpoint-search'>
                 {t('admin.developerPortal.searchLabel')}
@@ -473,49 +468,55 @@ export function VersionsPage({
                 },
               ]}
             />
-          </>
-        )}
-      </SelectorGrid>
-      <LoadingErrorState state={contentQuery} />
-      {!isMarkdownDocument && (
-        <LoadingErrorState
-          state={endpointsQuery.isError ? endpointsQuery : endpointQuery}
-        />
+          </SelectorGrid>
+          <LoadingErrorState
+            state={endpointsQuery.isError ? endpointsQuery : endpointQuery}
+          />
+          <EndpointsCard
+            endpoints={visibleEndpoints}
+            selected={endpointId}
+            onSelect={(value) => {
+              setEndpointId(value)
+              onSearchChange?.({ endpoint_id: value || undefined })
+            }}
+            detail={endpointQuery.data}
+            groupMode={endpointGroupMode}
+            untaggedLabel={untaggedLabel}
+          />
+          <QueryPagination
+            offset={endpointOffset}
+            count={visibleEndpoints.length}
+            total={endpointsQuery.data?.total}
+            hasMore={endpointsQuery.data?.hasMore ?? false}
+            busy={endpointsQuery.isFetching}
+            onPrevious={() => setEndpointOffset(endpointOffset - 50)}
+            onNext={() => setEndpointOffset(endpointOffset + 50)}
+          />
+        </>
       )}
-      <ContentViewer
-        title={t('admin.sections.contentViewer')}
-        content={selectedVersionContent}
-      />
-      {isMarkdownDocument ? (
+      <div className='grid min-w-0 gap-4'>
+        <div className='max-w-xs'>
+          <NativeSelect
+            label={t('admin.fields.contentKind')}
+            value={activeVersionContentKind}
+            onChange={setContentKind}
+            placeholder={t('admin.types.raw')}
+            options={versionContentKindOptions}
+          />
+        </div>
+        <LoadingErrorState state={contentQuery} />
+        <ContentViewer
+          title={t('admin.sections.contentViewer')}
+          content={selectedVersionContent}
+        />
+      </div>
+      {isMarkdownDocument && (
         <>
           {selectedVersionContent && (
             <MarkdownPreview content={selectedVersionContent} />
           )}
           <MarkdownFactsCard content={selectedVersionContent} />
         </>
-      ) : (
-        <EndpointsCard
-          endpoints={visibleEndpoints}
-          selected={endpointId}
-          onSelect={(value) => {
-            setEndpointId(value)
-            onSearchChange?.({ endpoint_id: value || undefined })
-          }}
-          detail={endpointQuery.data}
-          groupMode={endpointGroupMode}
-          untaggedLabel={untaggedLabel}
-        />
-      )}
-      {!isMarkdownDocument && (
-        <QueryPagination
-          offset={endpointOffset}
-          count={visibleEndpoints.length}
-          total={endpointsQuery.data?.total}
-          hasMore={endpointsQuery.data?.hasMore ?? false}
-          busy={endpointsQuery.isFetching}
-          onPrevious={() => setEndpointOffset(endpointOffset - 50)}
-          onNext={() => setEndpointOffset(endpointOffset + 50)}
-        />
       )}
       <AIContextPanel
         target={selectedVersionAITarget}
@@ -629,7 +630,7 @@ function EndpointsCard({
         groupedEndpoints.map(([group, groupEndpoints]) => (
           <section
             key={group}
-            className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'
+            className='grid min-w-0 gap-3 border-t pt-4 first:border-0 first:pt-0'
           >
             <div className='flex flex-wrap items-center justify-between gap-2'>
               <div>
@@ -650,7 +651,7 @@ function EndpointsCard({
                   key={`${group}-${endpoint.id}`}
                   type='button'
                   data-state={selected === endpoint.id ? 'selected' : undefined}
-                  className='grid gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 md:grid-cols-[7rem_1fr]'
+                  className='grid min-w-0 gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 md:grid-cols-[7rem_minmax(0,1fr)]'
                   onClick={() => onSelect(endpoint.id)}
                 >
                   <div className='flex items-start gap-2'>
@@ -660,7 +661,9 @@ function EndpointsCard({
                   </div>
                   <div className='grid gap-2'>
                     <div className='flex flex-wrap items-center gap-2'>
-                      <code className='font-mono text-xs'>{endpoint.path}</code>
+                      <code className='font-mono text-xs break-all'>
+                        {endpoint.path}
+                      </code>
                       {endpoint.deprecated && (
                         <Badge variant='secondary'>
                           {t('admin.developerPortal.deprecated')}
@@ -697,29 +700,29 @@ function EndpointDetailPanel({ endpoint }: { endpoint: EndpointDTO }) {
   const { t } = useLanguage()
   const untaggedLabel = t('admin.developerPortal.untagged')
   return (
-    <Card className='border-primary/20'>
-      <CardHeader>
-        <CardTitle className='flex flex-wrap items-center gap-2'>
+    <section className='grid min-w-0 gap-5 border-t pt-5'>
+      <div className='grid gap-2'>
+        <h3 className='flex min-w-0 flex-wrap items-center gap-2 font-semibold'>
           <Badge variant='outline'>{methodLabel(endpoint.method)}</Badge>
-          <code className='font-mono text-sm'>{endpoint.path}</code>
-        </CardTitle>
-        <CardDescription>
+          <code className='font-mono text-sm break-all'>{endpoint.path}</code>
+        </h3>
+        <p className='text-sm text-muted-foreground'>
           {endpoint.summary ??
             endpoint.operation_id ??
             t('admin.developerPortal.noEndpointSummary')}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='grid gap-4'>
-        <section className='grid gap-3 md:grid-cols-2'>
-          <div className='rounded-lg border p-3'>
+        </p>
+      </div>
+      <div className='grid min-w-0 gap-5'>
+        <section className='grid min-w-0 gap-4 sm:grid-cols-2'>
+          <div className='min-w-0'>
             <p className='text-xs font-medium text-muted-foreground'>
               {t('admin.developerPortal.operationId')}
             </p>
-            <p className='mt-1 font-mono text-sm'>
+            <p className='mt-1 font-mono text-sm break-all'>
               {endpoint.operation_id ?? t('admin.common.none')}
             </p>
           </div>
-          <div className='rounded-lg border p-3'>
+          <div className='min-w-0'>
             <p className='text-xs font-medium text-muted-foreground'>
               {t('admin.developerPortal.tags')}
             </p>
@@ -782,8 +785,8 @@ function EndpointDetailPanel({ endpoint }: { endpoint: EndpointDTO }) {
             ],
           ]}
         />
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -795,11 +798,11 @@ function EndpointJsonSection({
   rows: Array<[string, unknown, string?]>
 }) {
   return (
-    <section className='grid gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
+    <section className='grid min-w-0 gap-3 border-t pt-4'>
       <p className='font-medium'>{title}</p>
       <div className='grid gap-3'>
         {rows.map(([label, value, exactJSON]) => (
-          <div key={label} className='grid gap-2'>
+          <div key={label} className='grid min-w-0 gap-2'>
             <p className='text-xs font-medium text-muted-foreground'>{label}</p>
             <pre className='max-h-80 overflow-auto rounded-md border bg-background p-3 text-xs leading-relaxed'>
               {jsonPreview(value, exactJSON)}

@@ -64,6 +64,8 @@ const apiMocks = vi.hoisted(() => ({
   getMCPToken: vi.fn(),
   getProjectAIProvider: vi.fn(),
   getSystemAIProvider: vi.fn(),
+  getSystemVersion: vi.fn(),
+  checkSystemUpdates: vi.fn(),
   getVersion: vi.fn(),
   listAuditLogs: vi.fn(),
   getVersionContent: vi.fn(),
@@ -133,6 +135,8 @@ vi.mock('@/lib/vdoc-api', async (importOriginal) => {
     getMCPToken: apiMocks.getMCPToken,
     getProjectAIProvider: apiMocks.getProjectAIProvider,
     getSystemAIProvider: apiMocks.getSystemAIProvider,
+    getSystemVersion: apiMocks.getSystemVersion,
+    checkSystemUpdates: apiMocks.checkSystemUpdates,
     getVersion: apiMocks.getVersion,
     listAuditLogs: apiMocks.listAuditLogs,
     getVersionContent: apiMocks.getVersionContent,
@@ -2100,6 +2104,12 @@ describe('SettingsPage AI settings', () => {
     mockWorkspaceQueries()
     apiMocks.getIdentity.mockResolvedValue(identityFixture)
     apiMocks.getHealth.mockResolvedValue({ status: 'ok', ready: true })
+    apiMocks.getSystemVersion.mockResolvedValue({
+      version: 'v0.3.16',
+      channel: 'release',
+      git_commit: 'synthetic-settings-test',
+      build_time: '2026-10-23T00:00:00Z',
+    })
     apiMocks.getSystemAIProvider.mockResolvedValue(systemProviderFixture)
     apiMocks.getProjectAIProvider.mockResolvedValue(projectProviderFixture)
     apiMocks.updateSystemAIProvider.mockResolvedValue(systemProviderFixture)
@@ -2121,9 +2131,80 @@ describe('SettingsPage AI settings', () => {
     apiMocks.updateProjectAIPrompt.mockResolvedValue(promptOverrideFixture)
   })
 
+  it('opens account security first and only loads AI and service details when visited', async () => {
+    const user = userEvent.setup()
+    const screen = renderSettingsPage()
+
+    expect(screen.getByRole('tab', { name: 'Account' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    expect(screen.getByLabelText('Current password')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Change password' })
+    ).toBeVisible()
+    expect(apiMocks.getSystemAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.getProjectAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.listSystemAIPrompts).not.toHaveBeenCalled()
+    expect(apiMocks.listProjectAIPrompts).not.toHaveBeenCalled()
+    expect(apiMocks.getHealth).not.toHaveBeenCalled()
+    expect(apiMocks.getSystemVersion).not.toHaveBeenCalled()
+    expect(apiMocks.checkSystemUpdates).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('tab', { name: 'AI' }))
+    expect(
+      await screen.findByRole('button', { name: 'Save system provider' })
+    ).toBeVisible()
+    expect(apiMocks.getSystemAIProvider).toHaveBeenCalledTimes(1)
+    expect(apiMocks.getHealth).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Change password' })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Version' }))
+    expect(await screen.findByText('ok', { exact: true })).toBeVisible()
+    expect(apiMocks.getHealth).toHaveBeenCalledTimes(1)
+    expect(apiMocks.checkSystemUpdates).not.toHaveBeenCalled()
+  })
+
+  it('retains edited AI provider and prompt drafts across settings categories', async () => {
+    const user = userEvent.setup()
+    const screen = renderSettingsPage()
+    await user.click(screen.getByRole('tab', { name: 'AI' }))
+    const providerButton = await screen.findByRole('button', {
+      name: 'Save system provider',
+    })
+    const providerForm = providerButton.closest('form')
+    if (!providerForm) throw new Error('missing system provider form')
+    const model = within(providerForm).getByLabelText('Model')
+    await user.clear(model)
+    await user.type(model, 'unsaved-model-draft')
+    const promptButton = screen.getByRole('button', {
+      name: 'Save system prompt diff_change_summary',
+    })
+    const promptForm = promptButton.closest('form')
+    if (!promptForm) throw new Error('missing system prompt form')
+    const prompt = within(promptForm).getByLabelText('System prompt')
+    await user.clear(prompt)
+    await user.type(prompt, 'Unsaved prompt draft')
+
+    await user.click(screen.getByRole('tab', { name: 'Account' }))
+    expect(screen.getByLabelText('Current password')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Save system provider' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'AI' }))
+    expect(model).toBeVisible()
+    expect(model).toHaveValue('unsaved-model-draft')
+    expect(prompt).toHaveValue('Unsaved prompt draft')
+    expect(apiMocks.updateSystemAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.updateSystemAIPrompt).not.toHaveBeenCalled()
+  })
+
   it('renders redacted provider state and preserves keys on save', async () => {
     const user = userEvent.setup()
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
 
     expect(await screen.findByText('System AI provider')).toBeInTheDocument()
     await waitFor(() =>
@@ -2208,6 +2289,7 @@ describe('SettingsPage AI settings', () => {
       content: 'Provider reached.',
     })
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
 
     await screen.findByText('System AI provider')
     await waitFor(() =>
@@ -2227,6 +2309,7 @@ describe('SettingsPage AI settings', () => {
     apiMocks.testProjectAIProvider.mockRejectedValueOnce(
       new Error('Project provider rejected the test request.')
     )
+    await user.click(screen.getByRole('tab', { name: 'Project override' }))
     await user.click(
       screen.getByRole('button', { name: 'Test project provider' })
     )
@@ -2259,6 +2342,8 @@ describe('SettingsPage AI settings', () => {
     )
     apiMocks.testProjectAIProvider.mockReturnValueOnce(projectTest.promise)
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Project override' }))
 
     await waitFor(() =>
       expect(
@@ -2311,6 +2396,8 @@ describe('SettingsPage AI settings', () => {
       content: 'Project provider reached.',
     })
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Project override' }))
 
     await waitFor(() =>
       expect(
@@ -2352,6 +2439,8 @@ describe('SettingsPage AI settings', () => {
     const user = userEvent.setup()
     apiMocks.testProjectAIProvider.mockReturnValueOnce(projectTest.promise)
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Project override' }))
 
     await waitFor(() =>
       expect(
@@ -2399,6 +2488,7 @@ describe('SettingsPage AI settings', () => {
     })
 
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
 
     await waitFor(() =>
       expect(
@@ -2415,6 +2505,8 @@ describe('SettingsPage AI settings', () => {
 
   it('renders project provider tuning defaults when override fields are unset', async () => {
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Project override' }))
 
     const saveProjectProvider = await screen.findByRole('button', {
       name: 'Save project provider',
@@ -2438,6 +2530,7 @@ describe('SettingsPage AI settings', () => {
   it('updates system and project AI prompt helpers', async () => {
     const user = userEvent.setup()
     const screen = renderSettingsPage()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI' }))
 
     expect(
       (await screen.findAllByText('diff_change_summary')).length
@@ -2454,6 +2547,7 @@ describe('SettingsPage AI settings', () => {
       'false'
     )
     await user.click(systemPromptButton)
+    await user.click(screen.getByRole('tab', { name: 'Project override' }))
     await user.click(
       screen.getByRole('button', {
         name: 'Save project prompt diff_change_summary',
