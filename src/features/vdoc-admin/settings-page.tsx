@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AISettingsPanel } from './ai-settings'
 import { ChangePasswordPanel } from './change-password-panel'
 import { PageChrome, CollectionCard } from './page-shared'
+import { ReleaseStatusPanel } from './release-status-panel'
 
 export function SettingsPage() {
   const { t, language } = useLanguage()
@@ -57,6 +58,7 @@ export function SettingsPage() {
           ]}
         />
       </section>
+      {identity && <ReleaseStatusPanel />}
       {identity && <ChangePasswordPanel />}
       {identity && <AISettingsPanel user={identity} />}
       <Alert>

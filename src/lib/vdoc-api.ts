@@ -52,6 +52,24 @@ export type AuthConfigDTO = {
   registration_enabled: boolean
 }
 
+export type ReleaseChannel = 'beta' | 'release' | 'development'
+
+export type SystemVersionDTO = {
+  version: string
+  git_commit: string
+  build_time: string
+  channel: ReleaseChannel
+}
+
+export type SystemUpdatesDTO = {
+  current_version: string
+  channel: ReleaseChannel
+  latest_version: string | null
+  update_available: boolean
+  release_url: string | null
+  published_at: string | null
+}
+
 export type UserDTO = AuthUser
 
 export type TeamDTO = {
@@ -671,6 +689,18 @@ export function getAuthConfig(options?: RequestOptions) {
 export function getIdentity(options?: RequestOptions) {
   return unwrapEnvelope<AuthUser>(
     vdocApi.get('/api/v1/private/identity/me', { signal: options?.signal })
+  )
+}
+
+export function getSystemVersion(options?: RequestOptions) {
+  return unwrapEnvelope<SystemVersionDTO>(
+    vdocApi.get('/api/v1/private/system/version', { signal: options?.signal })
+  )
+}
+
+export function checkSystemUpdates(options?: RequestOptions) {
+  return unwrapEnvelope<SystemUpdatesDTO>(
+    vdocApi.get('/api/v1/private/system/updates', { signal: options?.signal })
   )
 }
 

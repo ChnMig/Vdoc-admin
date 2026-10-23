@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { ChevronsUpDown, Plus } from 'lucide-react'
+import { getAdminBranding } from '@/lib/branding'
 import { useLanguage } from '@/context/language-provider'
 import {
   DropdownMenu,
@@ -46,7 +47,14 @@ export function TeamSwitcher({ teams }: TeamSwitcherProps) {
                 <activeTeam.logo className='size-7' />
               </div>
               <div className='grid flex-1 text-start text-sm leading-tight'>
-                <span className='truncate font-semibold'>{activeTeamName}</span>
+                <span className='flex items-center gap-2 font-semibold'>
+                  <span className='truncate'>{activeTeamName}</span>
+                  {getAdminBranding().beta && (
+                    <span className='shrink-0 rounded border border-orange-500/40 px-1 text-[10px] leading-4 text-orange-700 dark:text-orange-300'>
+                      Beta
+                    </span>
+                  )}
+                </span>
                 <span className='truncate text-xs text-sidebar-foreground/66'>
                   {activeTeamPlan}
                 </span>

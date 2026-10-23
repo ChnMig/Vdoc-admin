@@ -1215,10 +1215,9 @@ describe('MCPTokensPage secret lifecycle', () => {
     expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
 
     await user.click(apiRead)
-    await user.type(
-      within(card).getByLabelText('Expires at'),
-      '2020-01-01T00:00:00Z'
-    )
+    fireEvent.change(within(card).getByLabelText('Expires at'), {
+      target: { value: '2020-01-01T00:00' },
+    })
     await user.click(within(card).getByRole('button', { name: 'Create' }))
 
     expect(
@@ -1227,6 +1226,32 @@ describe('MCPTokensPage secret lifecycle', () => {
       )
     ).toBeInTheDocument()
     expect(apiMocks.createMCPToken).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a local expiration', '2099-01-15T18:30'],
+    ['no expiration', ''],
+  ])('creates a token with %s', async (_label, expiry) => {
+    const user = userEvent.setup()
+    const screen = renderMCPTokensPage()
+    await user.click(screen.getByRole('button', { name: 'Create MCP token' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create MCP token' })
+    await user.type(within(dialog).getByLabelText('Name'), 'Scoped token')
+    const expiryInput = within(dialog).getByLabelText('Expires at')
+    expect(expiryInput).toHaveAttribute('type', 'datetime-local')
+    expect(expiryInput).toHaveAccessibleDescription(
+      'Use your local date and time. Leave blank for no expiration.'
+    )
+    fireEvent.change(expiryInput, { target: { value: expiry } })
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(apiMocks.createMCPToken).toHaveBeenCalledWith({
+        name: 'Scoped token',
+        scopes: [1],
+        expires_at: expiry ? new Date(2099, 0, 15, 18, 30).toISOString() : null,
+      })
+    )
   })
 
   it('clears a revealed plaintext token as soon as that token is revoked', async () => {

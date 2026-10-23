@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { isUnauthenticatedError } from '@/lib/auth-errors'
 import { bindQueryCacheToAuth } from '@/lib/auth-query-cache'
+import { applyAdminBranding } from '@/lib/branding'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getStoredLanguage, translate } from '@/lib/i18n'
 import { shouldRetryQuery } from '@/lib/query-retry'
@@ -22,6 +23,8 @@ import { ThemeProvider } from './context/theme-provider'
 import { routeTree } from './routeTree.gen'
 // Styles
 import './styles/index.css'
+
+applyAdminBranding()
 
 const toastMessage = (key: Parameters<typeof translate>[1]) =>
   translate(getStoredLanguage(), key)

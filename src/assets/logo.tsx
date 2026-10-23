@@ -1,10 +1,11 @@
 import { type ComponentProps } from 'react'
+import { getAdminBranding } from '@/lib/branding'
 import { cn } from '@/lib/utils'
 
 export function Logo({ className, alt = '', ...props }: ComponentProps<'img'>) {
   return (
     <img
-      src='/images/vdoc-logo.png'
+      src={getAdminBranding().logo}
       alt={alt}
       height='24'
       width='24'

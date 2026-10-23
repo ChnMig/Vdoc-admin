@@ -9,9 +9,11 @@ import { useAuthStore } from '@/stores/auth-store'
 import {
   approveDraft,
   changePassword,
+  checkSystemUpdates,
   createAIChatSession,
   createTeam,
   getIdentity,
+  getSystemVersion,
   login,
   register,
   getSystemAIProvider,
@@ -130,6 +132,75 @@ describe('vdoc-api', () => {
     await expect(getIdentity()).resolves.toEqual(sampleUser)
 
     expect(headerValue(requests[0]?.headers, 'Authorization')).toBeUndefined()
+  })
+
+  it.each([
+    {
+      request: getSystemVersion,
+      path: '/api/v1/private/system/version',
+      detail: {
+        version: 'v0.3.17-beta.4',
+        channel: 'beta',
+        git_commit: 'abc123',
+        build_time: '2026-10-23T00:00:00Z',
+      },
+    },
+    {
+      request: checkSystemUpdates,
+      path: '/api/v1/private/system/updates',
+      detail: {
+        current_version: 'v0.3.17-beta.4',
+        channel: 'beta',
+        latest_version: null,
+        update_available: false,
+        release_url: null,
+        published_at: null,
+      },
+    },
+  ])(
+    'reads $path with session credentials and cancellation',
+    async ({ request, path, detail }) => {
+      const requests: InternalAxiosRequestConfig[] = []
+      vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+        code: 200,
+        status: 'OK',
+        timestamp: 1,
+        detail,
+      })
+      useAuthStore.getState().auth.setAccessToken('original.jwt')
+      const controller = new AbortController()
+      const pending = request({ signal: controller.signal })
+      useAuthStore.getState().auth.setAccessToken('new-session.jwt')
+
+      await expect(pending).resolves.toEqual(detail)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.method).toBe('get')
+      expect(requests[0]?.url).toBe(path)
+      expect(requests[0]?.signal).toBe(controller.signal)
+      expect(headerValue(requests[0]?.headers, 'Authorization')).toBe(
+        'original.jwt'
+      )
+
+      controller.abort()
+      await expect(
+        request({ signal: controller.signal })
+      ).rejects.toMatchObject({ code: 'ERR_CANCELED' })
+      expect(requests).toHaveLength(1)
+    }
+  )
+
+  it('surfaces a rejected update check without changing the session', async () => {
+    vdocApi.defaults.adapter = jsonEnvelopeAdapter([], {
+      code: 412,
+      status: 'FAILED_PRECONDITION',
+      timestamp: 1,
+    })
+    useAuthStore.getState().auth.setAccessToken('existing.jwt')
+
+    await expect(checkSystemUpdates()).rejects.toMatchObject({
+      status: 'FAILED_PRECONDITION',
+    })
+    expect(useAuthStore.getState().auth.accessToken).toBe('existing.jwt')
   })
 
   it('posts a password change for the current session and forwards cancellation', async () => {

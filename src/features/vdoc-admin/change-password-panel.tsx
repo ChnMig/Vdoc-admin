@@ -166,7 +166,7 @@ function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
   }
 
   return (
-    <Card>
+    <Card className='w-full max-w-md min-w-0'>
       <CardHeader>
         <CardTitle>{t('auth.changePassword.title')}</CardTitle>
         <CardDescription>
@@ -178,7 +178,7 @@ function ChangePasswordForm({ sessionVersion }: { sessionVersion: number }) {
           <form
             aria-label={t('auth.changePassword.title')}
             aria-busy={pending}
-            className='grid max-w-xl gap-4'
+            className='grid gap-4'
             noValidate
             onSubmit={(event) => {
               void form.handleSubmit(onSubmit)(event)

@@ -688,6 +688,34 @@ const en = {
       keyUnset: 'Key set: no',
       keyStatus: 'Key set: {yes} · last4: {last4}',
     },
+    release: {
+      title: 'Version and updates',
+      description: 'View this deployment and check its release channel.',
+      frontend: 'Frontend version',
+      backend: 'Backend version',
+      channel: 'Update channel',
+      beta: 'Beta',
+      stable: 'Stable',
+      development: 'Development',
+      loading: 'Loading backend version…',
+      versionFailed: 'The backend version could not be loaded.',
+      retryVersion: 'Retry loading version',
+      mismatch:
+        'The frontend and backend versions or channels differ. Deploy matching versions for consistent behavior.',
+      manual:
+        'Checking only reads release information. Deploy updates manually with Docker Compose.',
+      check: 'Check for updates',
+      checking: 'Checking for updates…',
+      checkFailed: 'Updates could not be checked. Please try again.',
+      unsupported: 'Development builds cannot check for published updates.',
+      deploymentChanged:
+        'The deployment version or channel changed. Refresh this page before checking again.',
+      available: 'A new {channel} version is available: {version}',
+      upToDate: 'The backend is up to date on the {channel} channel.',
+      noRelease: 'No published version was found on the {channel} channel.',
+      latest: 'Latest version: {version}',
+      releaseNotes: 'View release notes',
+    },
     markdownFacts: {
       title: 'Markdown facts',
       description:
@@ -710,6 +738,8 @@ const en = {
     token: {
       scopesTitle: 'Token scopes',
       scopeRequired: 'Select at least one token scope.',
+      expiryHint:
+        'Use your local date and time. Leave blank for no expiration.',
       futureExpiryRequired:
         'Expiry must be a valid date and time in the future.',
       apiRead: 'api:read — query OpenAPI contracts and diffs',
@@ -1930,6 +1960,31 @@ const zhCN = {
       keyUnset: '密钥状态：未设置',
       keyStatus: '密钥状态：已设置 · 尾号：{last4}',
     },
+    release: {
+      title: '版本与更新',
+      description: '查看当前部署版本，检查对应渠道的新版本。',
+      frontend: '前端版本',
+      backend: '后端版本',
+      channel: '更新渠道',
+      beta: 'Beta 测试版',
+      stable: '稳定版',
+      development: '开发版',
+      loading: '正在读取后端版本…',
+      versionFailed: '无法读取后端版本。',
+      retryVersion: '重新读取版本',
+      mismatch: '前后端版本号或渠道不一致，建议部署相同版本以确保正常使用。',
+      manual: '检查更新仅获取发布信息，升级仍需手动通过 Docker Compose 部署。',
+      check: '检查更新',
+      checking: '正在检查更新…',
+      checkFailed: '检查更新失败，请重试。',
+      unsupported: '开发构建无法检查已发布的更新。',
+      deploymentChanged: '部署版本或渠道已变更，请刷新页面后重新检查。',
+      available: '发现新的{channel}：{version}',
+      upToDate: '后端已是{channel}渠道的最新版本。',
+      noRelease: '{channel}渠道暂无已发布版本。',
+      latest: '最新版本：{version}',
+      releaseNotes: '查看发布说明',
+    },
     markdownFacts: {
       title: 'Markdown 事实',
       description: '从所选原始或稳定 Markdown 内容中提取结构化事实。',
@@ -1951,6 +2006,7 @@ const zhCN = {
     token: {
       scopesTitle: '令牌权限范围',
       scopeRequired: '请至少选择一个令牌权限范围。',
+      expiryHint: '按本地时间选择日期和时间；留空则永不过期。',
       futureExpiryRequired: '过期时间必须是有效的未来日期和时间。',
       apiRead: 'api:read — 查询 OpenAPI 契约和差异',
       apiDraft: 'api:draft — 创建和更新 OpenAPI 草稿',

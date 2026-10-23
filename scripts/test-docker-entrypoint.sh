@@ -25,7 +25,9 @@ run_valid() {
     VDOC_ENTRYPOINT_CAPTURE="$capture" \
     sh "$root_dir/docker-entrypoint.sh"
   grep -Fq "apiBaseUrl: \"$expected\"" "$runtime_config" || fail "runtime config did not contain normalized origin $expected"
-  grep -Fq 'releaseChannel: "release"' "$runtime_config" || fail 'unset channel did not default to release'
+  if grep -Fq 'releaseChannel:' "$runtime_config"; then
+    fail 'unset channel must preserve the channel embedded in the build'
+  fi
   [ "$(sed -n '1p' "$capture")" = "$expected" ] || fail "CSP connect-src capture did not equal $expected"
 }
 
@@ -61,6 +63,14 @@ PATH="$tmp_dir:$PATH" \
   sh "$root_dir/docker-entrypoint.sh"
 grep -Fq 'releaseChannel: "beta"' "$tmp_dir/beta-runtime-config.js" || fail 'beta channel was not written to runtime config'
 grep -Fq 'apiBaseUrl: window.location.origin' "$tmp_dir/beta-runtime-config.js" || fail 'beta same-origin must follow the browser origin'
+
+PATH="$tmp_dir:$PATH" \
+  VDOC_ADMIN_RUNTIME_CONFIG_PATH="$tmp_dir/release-runtime-config.js" \
+  VDOC_ADMIN_API_BASE_URL=same-origin \
+  VDOC_ADMIN_RELEASE_CHANNEL=release \
+  VDOC_ENTRYPOINT_CAPTURE="$tmp_dir/release-connect-src.txt" \
+  sh "$root_dir/docker-entrypoint.sh"
+grep -Fq 'releaseChannel: "release"' "$tmp_dir/release-runtime-config.js" || fail 'explicit release channel was not written'
 
 for channel in '' Beta stable canary 'beta release' 'beta"; injected'; do
   rm -f "$tmp_dir/invalid-channel-config.js" "$tmp_dir/invalid-channel-caddy.txt"

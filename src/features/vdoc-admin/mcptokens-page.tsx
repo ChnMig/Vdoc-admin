@@ -452,7 +452,7 @@ export function MCPTokensPage({
                 payload: {
                   name: fieldValue(formData, 'name'),
                   scopes,
-                  expires_at: expiry ?? null,
+                  expires_at: expiry ? new Date(expiry).toISOString() : null,
                 },
               })
             }}
@@ -462,7 +462,8 @@ export function MCPTokensPage({
               <TextField
                 label={t('admin.fields.expiresAt')}
                 name='expires_at'
-                placeholder={t('admin.placeholders.optionalIsoDate')}
+                type='datetime-local'
+                description={t('admin.token.expiryHint')}
               />
             </div>
             <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>

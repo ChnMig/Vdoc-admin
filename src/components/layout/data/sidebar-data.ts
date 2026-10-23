@@ -13,13 +13,14 @@ import {
   Users,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
+import { getAdminBranding } from '@/lib/branding'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
   user: {
     name: 'Vdoc',
     email: '',
-    avatar: '/images/vdoc-logo.png',
+    avatar: getAdminBranding().logo,
   },
   teams: [
     {

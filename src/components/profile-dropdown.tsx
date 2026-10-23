@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
+import { getAdminBranding } from '@/lib/branding'
 import { useLanguage } from '@/context/language-provider'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -34,7 +35,7 @@ export function ProfileDropdown() {
           <Button variant='ghost' className='relative h-8 w-8 rounded-full'>
             <Avatar className='h-8 w-8'>
               <AvatarImage
-                src='/images/vdoc-logo.png'
+                src={getAdminBranding().logo}
                 alt={name}
                 className='object-contain p-1'
               />

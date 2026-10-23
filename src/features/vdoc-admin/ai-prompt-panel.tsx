@@ -23,7 +23,7 @@ export function AIPromptPanel({
   const disabled =
     readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   return (
-    <section className='grid content-start gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
+    <section className='@container/prompt-panel grid min-w-0 content-start gap-4 rounded-md border bg-[var(--surface-control)] p-4'>
       <div className='grid gap-1'>
         <h3 className='font-medium'>
           {scope === 'system'
@@ -50,15 +50,17 @@ export function AIPromptPanel({
           </AlertDescription>
         </Alert>
       ) : prompts.length ? (
-        prompts.map((prompt) => (
-          <PromptForm
-            key={`${scope}-${prompt.prompt_key}`}
-            scope={scope}
-            prompt={prompt}
-            pending={pending || disabled}
-            onSave={onSave}
-          />
-        ))
+        <div className='grid items-start gap-4 @3xl/prompt-panel:grid-cols-2'>
+          {prompts.map((prompt) => (
+            <PromptForm
+              key={`${scope}-${prompt.prompt_key}`}
+              scope={scope}
+              prompt={prompt}
+              pending={pending || disabled}
+              onSave={onSave}
+            />
+          ))}
+        </div>
       ) : (
         <p className='rounded-md border bg-background p-4 text-sm text-muted-foreground'>
           {t('admin.ai.noPrompts')}
@@ -87,7 +89,7 @@ function PromptForm({
   return (
     <form
       key={`${prompt.prompt_key}-${prompt.system_prompt}-${prompt.user_prompt_template}`}
-      className='grid gap-3 rounded-md border bg-background p-4'
+      className='grid min-w-0 content-start gap-3 rounded-md border bg-background p-4 only:col-span-full'
       onSubmit={(event) => {
         event.preventDefault()
         if (saveLockedRef.current) return

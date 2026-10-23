@@ -4,9 +4,18 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
+import { version } from './package.json'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  define: {
+    __VDOC_ADMIN_BUILD_INFO__: JSON.stringify({
+      version:
+        command === 'build' ? process.env.VERSION || `v${version}` : 'dev',
+      gitCommit: process.env.GIT_COMMIT || 'unknown',
+      buildTime: process.env.BUILD_TIME || 'unknown',
+    }),
+  },
   build: { manifest: true },
   plugins: [
     tanstackRouter({
@@ -43,4 +52,4 @@ export default defineConfig({
       ],
     },
   },
-})
+}))

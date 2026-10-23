@@ -25,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
@@ -38,7 +38,14 @@ jobs:
         run: pnpm format:check
 
       - name: Build
-        run: pnpm build
+        env:
+          BUILD_REF_TYPE: ${{ github.ref_type }}
+          BUILD_REF_NAME: ${{ github.ref_name }}
+        run: |
+          export GIT_COMMIT="$(git rev-parse HEAD)"
+          export BUILD_TIME="$(git show -s --format=%cI HEAD)"
+          if [ "$BUILD_REF_TYPE" = tag ]; then export VERSION="$BUILD_REF_NAME"; fi
+          pnpm build
 
       - name: Check build budget
         run: pnpm check:build-budget
