@@ -3,8 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { AuthenticatedLayout } from './authenticated-layout'
 
+const routeState = vi.hoisted(() => ({ pathname: '/' }))
+
 vi.mock('@tanstack/react-router', () => ({
   Outlet: () => <div>Outlet</div>,
+  useLocation: ({
+    select,
+  }: {
+    select: (location: { pathname: string }) => unknown
+  }) => select({ pathname: routeState.pathname }),
 }))
 
 vi.mock('@/context/layout-provider', () => ({
@@ -26,15 +33,35 @@ vi.mock('@/context/search-provider', () => ({
 }))
 
 vi.mock('@/components/ui/sidebar', () => ({
-  SidebarProvider: ({ children }: { children: React.ReactNode }) => children,
+  SidebarProvider: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode
+    open: boolean
+  }) => (
+    <div data-testid='sidebar-provider' data-open={open}>
+      {children}
+    </div>
+  ),
   SidebarInset: ({ children }: { children: React.ReactNode }) => (
     <main>{children}</main>
   ),
 }))
 
 vi.mock('@/components/layout/app-sidebar', () => ({
-  AppSidebar: ({ hasAuditAccess }: { hasAuditAccess: boolean }) => (
-    <div data-testid='app-sidebar' data-audit-access={hasAuditAccess} />
+  AppSidebar: ({
+    hasAuditAccess,
+    workspace,
+  }: {
+    hasAuditAccess: boolean
+    workspace: boolean
+  }) => (
+    <div
+      data-testid='app-sidebar'
+      data-audit-access={hasAuditAccess}
+      data-workspace={workspace}
+    />
   ),
 }))
 
@@ -45,6 +72,45 @@ vi.mock('@/components/skip-to-main', () => ({
 describe('AuthenticatedLayout audit capability', () => {
   beforeEach(() => {
     useAuthStore.getState().auth.reset()
+    routeState.pathname = '/'
+    document.cookie = 'sidebar_state=true; path=/'
+  })
+
+  it.each(['/', '/documents', '/drafts', '/versions', '/diffs'])(
+    'starts %s with a compact management rail',
+    (pathname) => {
+      routeState.pathname = pathname
+      const screen = render(
+        <AuthenticatedLayout>
+          <div>Content</div>
+        </AuthenticatedLayout>
+      )
+      expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+        'data-open',
+        'false'
+      )
+      expect(screen.getByTestId('app-sidebar')).toHaveAttribute(
+        'data-workspace',
+        'true'
+      )
+    }
+  )
+
+  it('keeps the saved sidebar preference for management pages', () => {
+    routeState.pathname = '/projects'
+    const screen = render(
+      <AuthenticatedLayout>
+        <div>Content</div>
+      </AuthenticatedLayout>
+    )
+    expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+      'data-open',
+      'true'
+    )
+    expect(screen.getByTestId('app-sidebar')).toHaveAttribute(
+      'data-workspace',
+      'false'
+    )
   })
 
   it.each([

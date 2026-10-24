@@ -33,6 +33,7 @@ describe('public share API', () => {
     ['api.yaml', 'application/yaml; charset=utf-8'],
     ['api.json', 'application/json; charset=utf-8'],
     ['guide.md', 'text/markdown; charset=utf-8'],
+    ['notes.txt', 'text/plain; charset=utf-8'],
   ])(
     'preserves the actual backend filename %s through download',
     async (filename, mimeType) => {
@@ -91,6 +92,35 @@ describe('public share API', () => {
       `https://api.example.test/api/v1/open/document-shares/${shareId}`,
       expect.any(Object)
     )
+  })
+
+  it('accepts plain text document metadata without widening unknown document types', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          detail: {
+            document_name: 'Release notes',
+            document_type: 3,
+            version_scope: 1,
+            current_version: {
+              id: versionId,
+              version_name: 'v1',
+              published_at: '2026-07-20T00:00:00Z',
+            },
+          },
+        })
+      )
+    )
+
+    await expect(
+      getPublicShareMetadata({
+        baseUrl,
+        shareId,
+        secret,
+        signal: new AbortController().signal,
+      })
+    ).resolves.toMatchObject({ document_type: 3 })
   })
 
   it('gets metadata with one native request and capability-only credentials', async () => {

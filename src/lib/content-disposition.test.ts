@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { filenameFromContentDisposition } from './content-disposition'
 
 describe('Content-Disposition filenames', () => {
-  it.each(['api.yaml', 'api.json', 'guide.md'])(
+  it.each(['api.yaml', 'api.json', 'guide.md', 'notes.txt'])(
     'preserves the backend token filename %s',
     (filename) => {
       expect(
@@ -50,6 +50,7 @@ describe('Content-Disposition filenames', () => {
     ['attachment', 'APPLICATION/JSON; charset=UTF-8', 'document.json'],
     [null, 'application/yaml; charset=utf-8', 'document.yaml'],
     ['attachment', 'text/markdown', 'document.md'],
+    [null, 'text/plain; charset=utf-8', 'document.txt'],
     [
       'attachment; filename=invalid name.json',
       'application/json',

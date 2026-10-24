@@ -25,6 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  DocumentFormFields,
+  documentPayloadFromFormData,
+} from './document-form-fields'
 import { DocumentSharePanel } from './document-share-panel'
 import {
   PageChrome,
@@ -43,6 +47,8 @@ import {
   ACTIVE_STATUS,
   ARCHIVED_OR_DISABLED_STATUS,
   DOCUMENT_TYPE_MARKDOWN,
+  DOCUMENT_TYPE_TEXT,
+  isTextDocumentType,
   useInvalidateResources,
   useProjectsAndSelection,
   useDocumentsAndSelection,
@@ -50,7 +56,6 @@ import {
   ROLE_ADMIN,
   DOCUMENT_TYPE_OPENAPI,
   fieldValue,
-  numberValue,
 } from './page-utils'
 
 function resourceStatusLabel(
@@ -68,13 +73,15 @@ function documentTypeLabel(
   t: ReturnType<typeof useLanguage>['t']
 ) {
   if (type === DOCUMENT_TYPE_MARKDOWN) return t('admin.types.markdown')
+  if (type === DOCUMENT_TYPE_TEXT) return t('admin.types.text')
   return t('admin.types.openapi')
 }
 
 export function DocumentsPage({
   search,
   onSearchChange,
-}: VdocPageDeepLinkProps = {}) {
+  workspaceSettings = false,
+}: VdocPageDeepLinkProps & { workspaceSettings?: boolean } = {}) {
   const { t } = useLanguage()
   const invalidate = useInvalidateResources()
   const authUser = useAuthStore((state) => state.auth.user)
@@ -156,10 +163,10 @@ export function DocumentsPage({
   })
   const latestDocumentVersion = overviewQuery.data?.latest_version
   const createDocumentMutation = useMutation({
-    mutationFn: (request: {
-      projectId: string
-      payload: Parameters<typeof createDocument>[1]
-    }) => createDocument(request.projectId, request.payload),
+    mutationFn: (request: { projectId: string; formData: FormData }) =>
+      documentPayloadFromFormData(request.formData, t).then((payload) =>
+        createDocument(request.projectId, payload)
+      ),
     onSuccess: (result, request) =>
       invalidate({
         kind: 'document',
@@ -249,39 +256,42 @@ export function DocumentsPage({
             : []),
         ]}
       />
-      <SelectorGrid>
-        <NativeSelect
-          label={t('admin.fields.project')}
-          value={projectId}
-          onChange={setProjectId}
-          placeholder={t('admin.placeholders.selectProject')}
-          options={projectOptions}
-        />
-        <NativeSelect
-          label={t('admin.fields.document')}
-          value={documentId}
-          onChange={setDocumentId}
-          placeholder={t('admin.placeholders.selectDocument')}
-          options={documentOptions}
-        />
-        <NativeSelect
-          label={t('admin.fields.type')}
-          value={String(documentTypeFilter)}
-          onChange={(value) => {
-            setDocumentTypeFilter(Number(value))
-            setDocumentId('')
-          }}
-          placeholder={t('admin.common.all')}
-          options={[
-            { value: '0', label: t('admin.common.all') },
-            ...documentTypeOptions(t),
-          ]}
-        />
-      </SelectorGrid>
+      {!workspaceSettings && (
+        <SelectorGrid>
+          <NativeSelect
+            label={t('admin.fields.project')}
+            value={projectId}
+            onChange={setProjectId}
+            placeholder={t('admin.placeholders.selectProject')}
+            options={projectOptions}
+          />
+          <NativeSelect
+            label={t('admin.fields.document')}
+            value={documentId}
+            onChange={setDocumentId}
+            placeholder={t('admin.placeholders.selectDocument')}
+            options={documentOptions}
+          />
+          <NativeSelect
+            label={t('admin.fields.type')}
+            value={String(documentTypeFilter)}
+            onChange={(value) => {
+              setDocumentTypeFilter(Number(value))
+              setDocumentId('')
+            }}
+            placeholder={t('admin.common.all')}
+            options={[
+              { value: '0', label: t('admin.common.all') },
+              ...documentTypeOptions(t),
+            ]}
+          />
+        </SelectorGrid>
+      )}
       <DocumentsTable
         key={`${authSessionVersion}:${projectId}`}
         actions={
-          canMutateProject && (
+          canMutateProject &&
+          !workspaceSettings && (
             <FormDialog
               title={t('admin.sections.createDocument')}
               submitLabel={t('admin.common.create')}
@@ -294,45 +304,21 @@ export function DocumentsPage({
               onSubmit={(formData) =>
                 createDocumentMutation.mutateAsync({
                   projectId,
-                  payload: {
-                    name: fieldValue(formData, 'name'),
-                    description: fieldValue(formData, 'description'),
-                    relative_path: fieldValue(formData, 'relative_path'),
-                    document_type: numberValue(
-                      formData,
-                      'document_type',
-                      DOCUMENT_TYPE_OPENAPI
-                    ),
-                  },
+                  formData,
                 })
               }
             >
-              <div className='grid gap-4'>
-                <TextField
-                  label={t('admin.fields.name')}
-                  name='name'
-                  required
-                />
-                <TextField
-                  label={t('admin.fields.relativePath')}
-                  name='relative_path'
-                  required
-                />
-                <NativeSelect
-                  name='document_type'
-                  label={t('admin.fields.type')}
-                  placeholder={t('admin.types.openapi')}
-                  options={documentTypeOptions(t)}
-                />
-                <TextField
-                  label={t('admin.fields.description')}
-                  name='description'
-                />
-              </div>
+              <DocumentFormFields projectId={projectId} />
             </FormDialog>
           )
         }
-        documents={documentsQuery.data?.items ?? []}
+        documents={
+          workspaceSettings
+            ? selectedDocument
+              ? [selectedDocument]
+              : []
+            : (documentsQuery.data?.items ?? [])
+        }
         pending={
           updateDocumentMutation.isPending || archiveDocumentMutation.isPending
         }
@@ -342,7 +328,11 @@ export function DocumentsPage({
             payload: {
               name: document.name,
               description: document.description ?? '',
-              relative_path: document.relative_path ?? '',
+              file_name:
+                document.file_name ??
+                document.relative_path?.split('/').pop() ??
+                '',
+              folder_id: document.folder_id ?? null,
             },
           })
         }
@@ -350,7 +340,7 @@ export function DocumentsPage({
         readOnly={!canMutateProject}
       />
       {documentId && <LoadingErrorState state={overviewQuery} />}
-      {documentId && (
+      {documentId && !workspaceSettings && (
         <dl className='grid min-w-0 grid-cols-2 gap-5 rounded-lg border bg-card p-5 text-sm lg:grid-cols-4'>
           {[
             [
@@ -364,12 +354,12 @@ export function DocumentsPage({
               latestDocumentVersion?.version_name ?? '—',
             ],
             [
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+              isTextDocumentType(selectedDocument?.document_type)
                 ? t('admin.markdownFacts.lineCount', {
                     count: String(overviewQuery.data?.raw_line_count ?? '—'),
                   })
                 : t('admin.sections.endpoints'),
-              selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+              isTextDocumentType(selectedDocument?.document_type)
                 ? overviewQuery.data
                   ? `${overviewQuery.data.raw_size_bytes} B`
                   : '—'
@@ -444,16 +434,18 @@ export function DocumentsPage({
         onArchive={(id) => archiveBranchMutation.mutateAsync(id)}
         readOnly={!canMutateDocument}
       />
-      <DocumentSharePanel
-        key={`${projectId}:${documentId}`}
-        projectId={projectId}
-        documentId={documentId}
-        documentName={selectedDocument?.name ?? ''}
-        branches={branchesQuery.data?.items ?? []}
-        publishedBranchIds={overviewQuery.data?.published_branch_ids ?? []}
-        canManage={canManageShares}
-        interactive={canMutateDocument}
-      />
+      {!workspaceSettings && (
+        <DocumentSharePanel
+          key={`${projectId}:${documentId}`}
+          projectId={projectId}
+          documentId={documentId}
+          documentName={selectedDocument?.name ?? ''}
+          branches={branchesQuery.data?.items ?? []}
+          publishedBranchIds={overviewQuery.data?.published_branch_ids ?? []}
+          canManage={canManageShares}
+          interactive={canMutateDocument}
+        />
+      )}
     </PageChrome>
   )
 }
@@ -462,6 +454,7 @@ function documentTypeOptions(t: ReturnType<typeof useLanguage>['t']) {
   return [
     { value: String(DOCUMENT_TYPE_OPENAPI), label: t('admin.types.openapi') },
     { value: String(DOCUMENT_TYPE_MARKDOWN), label: t('admin.types.markdown') },
+    { value: String(DOCUMENT_TYPE_TEXT), label: t('admin.types.text') },
   ]
 }
 
@@ -526,7 +519,7 @@ function DocumentsTable({
                 {!readOnly && (
                   <TableCell>
                     {document.status === ACTIVE_STATUS && (
-                      <div className='flex items-center gap-2'>
+                      <div className='flex items-center justify-center gap-2'>
                         <DocumentEditForm
                           document={document}
                           pending={pending}
@@ -578,32 +571,18 @@ function DocumentEditForm({
       submitLabel={t('admin.common.save')}
       pending={pending}
       submissionScope={document.id}
-      onSubmit={(formData) =>
-        onUpdate({
+      onSubmit={async (formData) => {
+        const values = await documentPayloadFromFormData(formData, t)
+        return onUpdate({
           ...document,
-          name: fieldValue(formData, 'name'),
-          description: fieldValue(formData, 'description'),
-          relative_path: fieldValue(formData, 'relative_path'),
+          name: values.name,
+          description: values.description,
+          file_name: values.file_name,
+          folder_id: values.folder_id,
         })
-      }
+      }}
     >
-      <TextField
-        label={t('admin.fields.name')}
-        name='name'
-        defaultValue={document.name}
-        required
-      />
-      <TextField
-        label={t('admin.fields.relativePath')}
-        name='relative_path'
-        defaultValue={document.relative_path ?? ''}
-        required
-      />
-      <TextField
-        label={t('admin.fields.description')}
-        name='description'
-        defaultValue={document.description ?? ''}
-      />
+      <DocumentFormFields projectId={document.project_id} document={document} />
     </FormDialog>
   )
 }
@@ -650,7 +629,7 @@ function BranchesTable({
                     <span className='text-sm break-words text-muted-foreground'>
                       {branch.description || t('admin.common.none')}
                     </span>
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='flex flex-wrap justify-center gap-2'>
                       {branch.is_default && (
                         <StatusBadge>
                           {t('admin.fields.defaultBranch')}
@@ -672,7 +651,7 @@ function BranchesTable({
                 {!readOnly && (
                   <TableCell>
                     {branch.status === ACTIVE_STATUS && (
-                      <div className='flex items-center gap-2'>
+                      <div className='flex items-center justify-center gap-2'>
                         <BranchEditForm
                           branch={branch}
                           pending={pending}

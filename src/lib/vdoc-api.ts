@@ -84,6 +84,7 @@ export type TeamDTO = {
 export type ProjectDTO = {
   id: string
   team_id: string
+  team_name?: string
   name: string
   description?: string
   status: number
@@ -111,8 +112,27 @@ export type DocumentDTO = {
   name: string
   document_type: number
   relative_path?: string
+  file_name?: string
+  folder_id?: string | null
+  initial_draft_id?: string
+  initial_branch_id?: string
+  workflow_state?: 'published' | 'draft' | 'empty'
+  has_draft?: boolean
+  latest_version_id?: string | null
+  latest_draft_id?: string | null
   description?: string
   status: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type DocumentFolderDTO = {
+  id: string
+  project_id: string
+  parent_id: string | null
+  name: string
+  path: string
   created_by: string
   created_at: string
   updated_at: string
@@ -399,14 +419,25 @@ type PatchProjectMemberRolePayload = {
   role: number
 }
 
-type CreateDocumentPayload = NameDescriptionPayload & {
-  document_type: number
-  relative_path: string
-}
+type DocumentLocationPayload =
+  | { relative_path: string; file_name?: never; folder_id?: never }
+  | { relative_path?: never; file_name: string; folder_id?: string | null }
 
-type PatchDocumentPayload = Partial<NameDescriptionPayload> & {
-  relative_path?: string
-}
+export type CreateDocumentPayload = NameDescriptionPayload &
+  DocumentLocationPayload & {
+    document_type: number
+    initial_content?: {
+      content: string
+      version_name?: string
+      changelog?: string
+    }
+  }
+
+type PatchDocumentPayload = Partial<NameDescriptionPayload> &
+  (
+    | DocumentLocationPayload
+    | { relative_path?: never; file_name?: never; folder_id?: never }
+  )
 
 type PatchBranchPayload = Partial<NameDescriptionPayload> & {
   is_default?: boolean
@@ -864,6 +895,26 @@ export function listDocuments(
       signal: options?.signal,
       params: documentType ? { document_type: documentType } : undefined,
     })
+  )
+}
+
+export function listDocumentFolders(
+  projectId: string,
+  options?: RequestOptions
+) {
+  return unwrapListEnvelope<DocumentFolderDTO>(
+    vdocApi.get(`/api/v1/private/projects/${projectId}/folders`, {
+      signal: options?.signal,
+    })
+  )
+}
+
+export function createDocumentFolder(
+  projectId: string,
+  payload: { name: string; parent_id?: string | null }
+) {
+  return unwrapEnvelope<DocumentFolderDTO>(
+    vdocApi.post(`/api/v1/private/projects/${projectId}/folders`, payload)
   )
 }
 

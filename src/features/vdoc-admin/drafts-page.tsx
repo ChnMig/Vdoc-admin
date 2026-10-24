@@ -49,6 +49,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { PlainTextDocumentViewer } from '@/features/public-share/plain-text-document-viewer'
 import { AIContextPanel } from './ai-panels'
 import { useDraftEditorState } from './draft-editor-state'
 import { DraftFileField } from './draft-file-field'
@@ -56,7 +57,7 @@ import { MarkdownPreview } from './markdown-preview'
 import {
   PageChrome,
   DeepLinkAlert,
-  SelectorGrid,
+  ContextSelectorGrid,
   NativeSelect,
   FormCard,
   TextField,
@@ -80,6 +81,8 @@ import {
   ACTIVE_STATUS,
   contentKindOptions,
   DOCUMENT_TYPE_MARKDOWN,
+  DOCUMENT_TYPE_TEXT,
+  isTextDocumentType,
   activeContentKind,
   entityOptionLabel,
   fieldValue,
@@ -299,7 +302,7 @@ export function DraftsPage({
   const [promoteTargetBranchId, setPromoteTargetBranchId] = useState('')
   const draftContentKindOptions = contentKindOptions(
     t,
-    selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+    selectedDocument?.document_type
   )
   const activeDraftContentKind = activeContentKind(
     contentKind,
@@ -580,7 +583,7 @@ export function DraftsPage({
             : []),
         ]}
       />
-      <SelectorGrid>
+      <ContextSelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
@@ -629,7 +632,7 @@ export function DraftsPage({
             })) ?? []
           }
         />
-      </SelectorGrid>
+      </ContextSelectorGrid>
       {actionMutation.isError &&
         actionMutation.variables?.action === 'submit' && (
           <Alert variant='destructive' aria-live='polite'>
@@ -725,17 +728,15 @@ export function DraftsPage({
                   >
                     <DiffSummaryCards
                       summary={selectedSnapshot.diff_preview.summary}
-                      isMarkdown={
-                        selectedDocument?.document_type ===
-                        DOCUMENT_TYPE_MARKDOWN
-                      }
+                      isTextDiff={isTextDocumentType(
+                        selectedDocument?.document_type
+                      )}
                     />
                     <DiffReviewList
                       items={selectedSnapshot.diff_preview.items}
-                      isMarkdown={
-                        selectedDocument?.document_type ===
-                        DOCUMENT_TYPE_MARKDOWN
-                      }
+                      isTextDiff={isTextDocumentType(
+                        selectedDocument?.document_type
+                      )}
                     />
                   </CollectionCard>
                 )}
@@ -773,7 +774,14 @@ export function DraftsPage({
                       </div>
                     </div>
                     <TabsContent value='source' className='min-w-0'>
-                      {selectedDraftContent ? (
+                      {selectedDraftContent &&
+                      selectedDocument?.document_type === DOCUMENT_TYPE_TEXT ? (
+                        <div className='max-h-[32rem] min-w-0 overflow-auto'>
+                          <PlainTextDocumentViewer
+                            content={selectedDraftContent}
+                          />
+                        </div>
+                      ) : selectedDraftContent ? (
                         <pre className='max-h-[32rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
                           {selectedDraftContent}
                         </pre>
@@ -1192,10 +1200,9 @@ function DraftEditorCard({
         }
         try {
           const file = editor.values.file
-          const uploadedContent =
-            file instanceof File && file.size > 0 ? await file.text() : ''
+          const content =
+            file instanceof File ? await file.text() : editor.values.content
           if (!ownsSubmission()) return
-          const content = uploadedContent || editor.values.content
           const payload = {
             version_name: editor.values.version_name,
             changelog: editor.values.changelog,
@@ -1266,15 +1273,21 @@ function DraftEditorCard({
         </p>
       )}
       {editor.conflict && (
-        <Alert aria-live='polite'>
+        <Alert
+          aria-live='polite'
+          className='min-w-0 has-[>svg]:grid-cols-[1rem_minmax(0,1fr)]'
+        >
           <AlertCircle />
-          <AlertTitle>{t('admin.draftEditor.conflictTitle')}</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className='line-clamp-none min-w-0'>
+            {t('admin.draftEditor.conflictTitle')}
+          </AlertTitle>
+          <AlertDescription className='min-w-0'>
             <p>{t('admin.draftEditor.conflictDescription')}</p>
-            <div className='flex flex-wrap gap-2 pt-2'>
+            <div className='flex w-full min-w-0 flex-wrap gap-2 pt-2'>
               <Button
                 type='button'
                 variant='outline'
+                className='h-auto min-h-9 max-w-full text-start whitespace-normal'
                 disabled={busy}
                 onClick={editor.keepEdits}
               >
@@ -1283,6 +1296,7 @@ function DraftEditorCard({
               <Button
                 type='button'
                 variant='outline'
+                className='h-auto min-h-9 max-w-full text-start whitespace-normal'
                 disabled={busy}
                 onClick={editor.reload}
               >
@@ -1553,7 +1567,7 @@ function DraftsTable({
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='flex flex-wrap justify-center gap-2'>
                       <Button
                         variant='outline'
                         size='sm'

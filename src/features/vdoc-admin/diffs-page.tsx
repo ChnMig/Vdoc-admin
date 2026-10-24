@@ -35,6 +35,7 @@ import {
   PageChrome,
   DeepLinkAlert,
   SelectorGrid,
+  ContextSelectorGrid,
   NativeSelect,
   LoadingErrorState,
   CollectionCard,
@@ -50,12 +51,11 @@ import {
   activeProjectRole,
   ROLE_ADMIN,
   formatDate,
-  DOCUMENT_TYPE_MARKDOWN,
+  isTextDocumentType,
+  isTextDocumentFormat,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
 import { useVersionChoices } from './use-version-choices'
-
-const DOCUMENT_FORMAT_MARKDOWN = 3
 
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 
@@ -428,7 +428,7 @@ export function DiffsPage({
             : []),
         ]}
       />
-      <SelectorGrid>
+      <ContextSelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
@@ -481,7 +481,7 @@ export function DiffsPage({
           placeholder={t('admin.placeholders.selectVersion')}
           options={versionOptions}
         />
-      </SelectorGrid>
+      </ContextSelectorGrid>
       <Collapsible className='grid min-w-0 gap-3'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <Button
@@ -582,9 +582,9 @@ export function DiffsPage({
             {summary && (
               <DiffSummaryCards
                 summary={summary}
-                isMarkdown={
-                  summary.document_format === DOCUMENT_FORMAT_MARKDOWN ||
-                  selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+                isTextDiff={
+                  isTextDocumentFormat(summary.document_format) ||
+                  isTextDocumentType(selectedDocument?.document_type)
                 }
               />
             )}
@@ -625,9 +625,9 @@ export function DiffsPage({
             {visibleItems.length ? (
               <DiffReviewList
                 items={visibleItems}
-                isMarkdown={
-                  summary?.document_format === DOCUMENT_FORMAT_MARKDOWN ||
-                  selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
+                isTextDiff={
+                  isTextDocumentFormat(summary?.document_format) ||
+                  isTextDocumentType(selectedDocument?.document_type)
                 }
               />
             ) : (

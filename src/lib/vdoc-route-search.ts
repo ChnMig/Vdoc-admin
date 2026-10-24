@@ -9,7 +9,9 @@ const optionalEntityId = z.preprocess((value) => {
 }, z.string().optional())
 
 export const vdocRouteSearchSchema = z.object({
+  team_id: optionalEntityId,
   project_id: optionalEntityId,
+  folder_id: optionalEntityId,
   document_id: optionalEntityId,
   branch_id: optionalEntityId,
   draft_id: optionalEntityId,
@@ -19,11 +21,18 @@ export const vdocRouteSearchSchema = z.object({
   to_version_id: optionalEntityId,
   diff_id: optionalEntityId,
   token_id: optionalEntityId,
+  workspace_view: z
+    .enum(['content', 'drafts', 'versions', 'diffs', 'share', 'manage'])
+    .optional()
+    .catch(undefined),
 })
 
 export type VdocRouteSearch = z.infer<typeof vdocRouteSearchSchema>
 
 export type VdocPageDeepLinkProps = {
   search?: VdocRouteSearch
-  onSearchChange?: (patch: Partial<VdocRouteSearch>) => void
+  onSearchChange?: (
+    patch: Partial<VdocRouteSearch>,
+    options?: { replace?: boolean }
+  ) => void
 }

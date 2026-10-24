@@ -19,9 +19,9 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#8037d90b2e3a33dd7be9652e9114e9ee1495b0a4'
+  'github:ChnMig/Vdoc-mcp#cc304364bce07c605029ca76144446307af761f7'
 
-export const vdocMcpReleaseVersion = '0.3.17-beta.6'
+export const vdocMcpReleaseVersion = '0.3.17-beta.7'
 
 export const ACTIVE_STATUS = 1
 
@@ -30,6 +30,26 @@ export const ARCHIVED_OR_DISABLED_STATUS = 2
 export const DOCUMENT_TYPE_OPENAPI = 1
 
 export const DOCUMENT_TYPE_MARKDOWN = 2
+
+export const DOCUMENT_TYPE_TEXT = 3
+
+export const DOCUMENT_FORMAT_MARKDOWN = 3
+
+export const DOCUMENT_FORMAT_TEXT = 4
+
+export function isTextDocumentType(documentType?: number) {
+  return (
+    documentType === DOCUMENT_TYPE_MARKDOWN ||
+    documentType === DOCUMENT_TYPE_TEXT
+  )
+}
+
+export function isTextDocumentFormat(documentFormat?: number) {
+  return (
+    documentFormat === DOCUMENT_FORMAT_MARKDOWN ||
+    documentFormat === DOCUMENT_FORMAT_TEXT
+  )
+}
 
 export const ROLE_READER = 1
 
@@ -317,6 +337,9 @@ export function diffMessageLabel(
     'Markdown line added': 'admin.diff.messages.markdownLineAdded',
     'Markdown line removed': 'admin.diff.messages.markdownLineRemoved',
     'Markdown line changed': 'admin.diff.messages.markdownLineChanged',
+    'Text line added': 'admin.diff.messages.textLineAdded',
+    'Text line removed': 'admin.diff.messages.textLineRemoved',
+    'Text line changed': 'admin.diff.messages.textLineChanged',
   } as const
   const key = keys[message as keyof typeof keys]
   return key ? t(key) : message
@@ -578,9 +601,9 @@ export function useVersionsAndSelection(
 
 export function contentKindOptions(
   t: ReturnType<typeof useLanguage>['t'],
-  isMarkdownDocument: boolean
+  documentType?: number
 ) {
-  if (isMarkdownDocument) {
+  if (isTextDocumentType(documentType)) {
     return [
       { value: 'raw', label: t('admin.types.raw') },
       { value: 'stable', label: t('admin.types.stable') },

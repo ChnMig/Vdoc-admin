@@ -68,7 +68,10 @@ describe('SearchProvider and CommandMenu', () => {
     expect(getByText('Light')).toBeInTheDocument()
     expect(getByText('Dark')).toBeInTheDocument()
     expect(getByText('System')).toBeInTheDocument()
-    expect(getByText('Dashboard')).toBeInTheDocument()
+    expect(getByText('Documents')).toBeInTheDocument()
+    expect(screen.queryByText('Drafts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Versions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Diffs')).not.toBeInTheDocument()
   })
 
   it('does not show the dialog content when search is closed', async () => {

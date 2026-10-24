@@ -17,6 +17,7 @@ const projectId = 'list-project'
 const documentId = 'list-document'
 const documentPath = `${rootPath}/projects/${projectId}/documents`
 const branchPath = `${documentPath}/${documentId}/branches`
+const documentManagementRoute = `/documents?team_id=list-team&project_id=${projectId}&document_id=${documentId}&workspace_view=manage`
 const syntheticSecret = 'synthetic-entity-list-token-capability'
 
 type Resource = Record<string, unknown> & { id: string; name: string }
@@ -87,6 +88,7 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
         id: projectId,
         name: 'Documentation workspace',
         team_id: 'list-team',
+        team_name: 'Documentation team',
         description: 'A list-first project workspace',
         status: 1,
       },
@@ -109,9 +111,21 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
         project_id: projectId,
         name: 'Published handbook',
         document_type: 2,
+        file_name: 'handbook.md',
+        folder_id: 'list-guides',
         relative_path: 'guides/handbook.md',
         description: 'Document description',
         status: 1,
+      },
+    ],
+    [`${rootPath}/projects/${projectId}/folders`]: [
+      {
+        ...base,
+        id: 'list-guides',
+        project_id: projectId,
+        parent_id: null,
+        name: 'guides',
+        path: 'guides',
       },
     ],
     [branchPath]: [
@@ -204,6 +218,19 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
         user_id: admin.id,
         scopes: body.scopes ?? [1],
       }
+      if (path === documentPath) {
+        const folders = lists[`${rootPath}/projects/${projectId}/folders`]
+        const parent = folders.find((folder) => folder.id === body.folder_id)
+        next.relative_path = [parent?.path, body.file_name]
+          .filter(Boolean)
+          .join('/')
+      }
+      if (path === `${rootPath}/projects/${projectId}/folders`) {
+        const parent = lists[path].find(
+          (folder) => folder.id === body.parent_id
+        )
+        next.path = [parent?.path, body.name].filter(Boolean).join('/')
+      }
       lists[path].push(next)
       return envelope(
         route,
@@ -261,8 +288,8 @@ const cases = [
   },
   { route: '/users', trigger: 'Create user', label: 'admin@example.test' },
   {
-    route: '/documents',
-    trigger: 'Create document',
+    route: documentManagementRoute,
+    trigger: 'New document',
     label: 'Published handbook',
     edit: 'Edit document',
   },
@@ -315,7 +342,7 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
     }
     await noPageOverflow(page)
   }
-  await page.goto('/documents')
+  await page.goto(documentManagementRoute)
   await page.getByRole('button', { name: 'Create branch', exact: true }).click()
   await expect(
     page
@@ -483,6 +510,75 @@ for (const width of [1280, 768, 640, 390]) {
   })
 }
 
+test('document creation can upload its first TXT draft inside a newly created nested folder', async ({
+  page,
+}) => {
+  const state = await fixture(page)
+  await page.goto('/documents')
+  await page.getByRole('button', { name: 'New document', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'New document' })
+  await dialog.getByLabel('Name', { exact: true }).fill('Display title')
+  await dialog
+    .getByRole('button', { name: 'New subfolder', exact: true })
+    .click()
+  await dialog.getByLabel('Folder name', { exact: true }).fill('Empty parent')
+  await dialog
+    .getByRole('button', { name: 'Create folder', exact: true })
+    .click()
+  await expect(
+    dialog.getByRole('button', { name: 'Empty parent', exact: true })
+  ).toHaveAttribute('aria-pressed', 'true')
+  await dialog
+    .getByRole('button', { name: 'New subfolder', exact: true })
+    .click()
+  await dialog.getByLabel('Folder name', { exact: true }).fill('Child folder')
+  await dialog
+    .getByRole('button', { name: 'Create folder', exact: true })
+    .click()
+  await expect(
+    dialog.getByRole('button', { name: 'Child folder', exact: true })
+  ).toHaveAttribute('aria-pressed', 'true')
+  const content = '# Literal heading\r\n<script>literal</script>\r\n中文\n'
+  await dialog.getByLabel('Initial document file (optional)').setInputFiles({
+    name: 'original-notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(content, 'utf8'),
+  })
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(
+    'Display title'
+  )
+  await expect(dialog.getByLabel('Filename', { exact: true })).toHaveValue(
+    'original-notes.txt'
+  )
+  await dialog.getByLabel('Filename', { exact: true }).fill('independent.txt')
+  await saveScreenshot(page, 'document-upload-folder-dialog.png')
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  const folders = state.lists[`${rootPath}/projects/${projectId}/folders`]
+  const parent = folders.find((folder) => folder.name === 'Empty parent')!
+  const child = folders.find((folder) => folder.name === 'Child folder')!
+  expect(child.parent_id).toBe(parent.id)
+  expect(child.path).toBe('Empty parent/Child folder')
+  expect(
+    state.writes.find((request) => request.path === documentPath)?.body
+  ).toEqual({
+    name: 'Display title',
+    description: '',
+    document_type: 3,
+    file_name: 'independent.txt',
+    folder_id: child.id,
+    initial_content: { content, version_name: '0.1.0' },
+  })
+  await expect(
+    page.getByRole('heading', { name: 'Display title', exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('navigation', { name: 'Files' }).getByRole('button', {
+      name: /independent\.txt.*Display title/,
+    })
+  ).toHaveAttribute('aria-current', 'page')
+})
+
 test('document/branch/user/token creation returns to updated lists', async ({
   page,
 }) => {
@@ -516,17 +612,17 @@ test('document/branch/user/token creation returns to updated lists', async ({
     },
     {
       route: '/documents',
-      title: 'Create document',
+      title: 'New document',
       name: 'Created handbook',
       fill: async () => {
         await page
           .getByRole('dialog')
-          .getByLabel('Relative path', { exact: true })
-          .fill('created.md')
+          .getByLabel('Filename', { exact: true })
+          .fill('created.yaml')
       },
     },
     {
-      route: '/documents',
+      route: documentManagementRoute,
       title: 'Create branch',
       name: 'preview',
       fill: async () => {},
@@ -546,9 +642,14 @@ test('document/branch/user/token creation returns to updated lists', async ({
     await flow.fill()
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(dialog).toHaveCount(0)
-    await expect(
-      page.getByRole('row').filter({ hasText: flow.name }).first()
-    ).toBeVisible()
+    if (flow.title === 'New document')
+      await expect(
+        page.getByRole('heading', { name: flow.name, exact: true })
+      ).toBeVisible()
+    else
+      await expect(
+        page.getByRole('row').filter({ hasText: flow.name }).first()
+      ).toBeVisible()
   }
   expect(
     await page
@@ -566,9 +667,15 @@ test('readers see project and document lists without create/edit actions', async
   await fixture(page, { regular: true })
   for (const route of ['/projects', '/documents']) {
     await page.goto(route)
-    await expect(page.getByRole('table').first()).toBeVisible()
+    if (route === '/documents') {
+      await expect(
+        page.getByRole('navigation', { name: 'Files' })
+      ).toBeVisible()
+    } else await expect(page.getByRole('table').first()).toBeVisible()
     await expect(
-      page.getByRole('button', { name: /^Create (project|document|branch)$/ })
+      page.getByRole('button', {
+        name: /^(?:Create (?:project|document|branch)|New (?:document|folder))$/,
+      })
     ).toHaveCount(0)
     await expect(
       page.getByRole('button', { name: 'Edit', exact: true })

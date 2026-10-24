@@ -411,7 +411,7 @@ function MemberRoleControl({
   const changed = nextRole !== role
 
   return (
-    <div className='flex min-w-56 flex-wrap items-center gap-2'>
+    <div className='flex min-w-56 flex-wrap items-center justify-center gap-2'>
       <OptionsSelect
         className='w-32'
         value={String(nextRole)}
@@ -495,7 +495,7 @@ function MembersTable({
               </TableCell>
               <TableCell>
                 {memberReadOnly || protectsLastAdmin ? (
-                  <div className='grid gap-1'>
+                  <div className='grid justify-items-center gap-1'>
                     <span>
                       {
                         roleOptions(t).find(

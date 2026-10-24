@@ -14,6 +14,7 @@ import { DraftsPage } from './drafts-page'
 const api = vi.hoisted(() => ({
   listProjects: vi.fn(),
   listDocuments: vi.fn(),
+  listDocumentFolders: vi.fn(),
   listBranches: vi.fn(),
   listDrafts: vi.fn(),
   getDraftContent: vi.fn(),
@@ -110,6 +111,7 @@ beforeEach(() => {
   useAuthStore.getState().auth.setSession(userA, 'account-a-token')
   api.listProjects.mockResolvedValue({ items: [project], total: 1 })
   api.listDocuments.mockResolvedValue({ items: [documentA], total: 1 })
+  api.listDocumentFolders.mockResolvedValue({ items: [], total: 0 })
   api.listBranches.mockResolvedValue({ items: [branch], total: 1 })
   api.listDrafts.mockResolvedValue({ items: [draft], total: 1 })
   api.getDraftContent.mockResolvedValue({
@@ -140,9 +142,10 @@ describe('document create completion', () => {
       )
       const dialog = view.getByRole('dialog', { name: 'Create document' })
       const name = within(dialog).getByLabelText('Name')
-      const path = within(dialog).getByLabelText('Relative path')
+      const path = within(dialog).getByLabelText('Filename')
       await user.type(name, 'Document A')
-      await user.type(path, 'a.md')
+      await user.clear(path)
+      await user.type(path, 'a.yaml')
       await user.click(within(dialog).getByRole('button', { name: 'Create' }))
       await waitFor(() => expect(api.createDocument).toHaveBeenCalledOnce())
       if (scenario === 'new-project') {
@@ -160,7 +163,7 @@ describe('document create completion', () => {
         await user.clear(name)
         await user.type(name, 'Unsaved document B')
         await user.clear(path)
-        await user.type(path, 'b.md')
+        await user.type(path, 'b.yaml')
       }
       await act(async () => request.resolve({ id: 'created-a' }))
       await waitFor(() => expect(view.client.isMutating()).toBe(0))
@@ -168,7 +171,7 @@ describe('document create completion', () => {
       if (scenario === 'new-input') {
         expect(view.getByRole('dialog')).toBe(dialog)
         expect(name).toHaveValue('Unsaved document B')
-        expect(path).toHaveValue('b.md')
+        expect(path).toHaveValue('b.yaml')
       } else {
         expect(view.queryByRole('dialog')).not.toBeInTheDocument()
         await user.click(view.getByRole('button', { name: 'Create document' }))
@@ -176,9 +179,7 @@ describe('document create completion', () => {
           name: 'Create document',
         })
         expect(within(freshDialog).getByLabelText('Name')).toHaveValue('')
-        expect(within(freshDialog).getByLabelText('Relative path')).toHaveValue(
-          ''
-        )
+        expect(within(freshDialog).getByLabelText('Filename')).toHaveValue('')
       }
       view.unmount()
       view.client.clear()
@@ -396,10 +397,7 @@ describe('delayed draft file uploads', () => {
             )
             await user.type(view.getByLabelText('Version name'), 'New draft')
           }
-          await user.upload(
-            view.getByLabelText('Schema or Markdown file'),
-            file
-          )
+          await user.upload(view.getByLabelText('Document file'), file)
           await user.click(
             view.getByRole('button', {
               name: operation === 'create' ? 'Create' : 'Update',

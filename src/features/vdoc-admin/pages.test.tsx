@@ -1871,6 +1871,76 @@ describe('VersionsPage', () => {
     mockAIQueries('version', 'version-1')
   })
 
+  it('renders TXT literally with stable content and never requests API endpoints', async () => {
+    const content =
+      '# Literal title\n[raw link](https://example.test)\n<script>alert(1)</script>\n  indented\ttext\n'
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [
+        { ...markdownDocumentFixture, document_type: 3, name: 'TXT notes' },
+      ],
+      total: 1,
+    })
+    apiMocks.listVersions.mockResolvedValue({
+      items: [{ ...markdownVersionFixture, document_format: 4 }],
+      total: 1,
+    })
+    apiMocks.getVersionContent.mockResolvedValue({
+      owner_type: 'version',
+      owner_id: 'version-1',
+      kind: 'raw',
+      content_kind: 'text',
+      content,
+      hash: 'txt-content-hash',
+    })
+    const screen = renderPage(
+      <VersionsPage
+        search={{
+          project_id: 'project-1',
+          document_id: 'document-1',
+          version_id: 'version-1',
+          endpoint_id: 'not-an-api-endpoint',
+        }}
+      />
+    )
+    const literal = await screen.findByText(content, {
+      exact: true,
+      normalizer: (text) => text,
+    })
+    expect(literal.tagName).toBe('PRE')
+    expect(literal.textContent).toBe(content)
+    expect(
+      screen.queryByRole('tab', { name: 'OpenAPI endpoints' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Markdown facts' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Literal title' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'raw link' })
+    ).not.toBeInTheDocument()
+    expect(screen.container.querySelector('script')).toBeNull()
+    expect(apiMocks.listEndpoints).not.toHaveBeenCalled()
+    expect(apiMocks.getEndpoint).not.toHaveBeenCalled()
+    const user = userEvent.setup()
+    await user.click(screen.getByLabelText('Content kind'))
+    expect(screen.getByRole('option', { name: 'Stable' })).toBeVisible()
+    expect(
+      screen.queryByRole('option', { name: 'Normalized' })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Stable' }))
+    await waitFor(() =>
+      expect(apiMocks.getVersionContent).toHaveBeenLastCalledWith(
+        'project-1',
+        'document-1',
+        'version-1',
+        'stable',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+  })
+
   it('paginates versions on the server and keeps an older deep link selected', async () => {
     const user = userEvent.setup()
     const first = {
@@ -2700,6 +2770,58 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     apiMocks.getDiffSummary.mockResolvedValue(diffFixture.summary)
   })
 
+  it('uses line comparison summaries and literal unified diffs for TXT', async () => {
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [{ ...markdownDocumentFixture, document_type: 3 }],
+      total: 1,
+    })
+    const textDiff = {
+      ...diffFixture,
+      summary: {
+        ...diffFixture.summary,
+        document_format: 4,
+        added_lines: 1,
+        removed_lines: 1,
+        modified_lines: 1,
+        modified_blocks: 1,
+      },
+      items: [
+        {
+          id: 'txt-change',
+          change_type: 3,
+          severity: 1,
+          message: 'Text line changed',
+          frontend_impact: '-before\n+<script>alert(1)</script>',
+          is_breaking: false,
+          must_handle: false,
+          sort_order: 0,
+        },
+      ],
+    }
+    apiMocks.listDiffs.mockResolvedValue({ items: [textDiff], total: 1 })
+    apiMocks.getDiff.mockResolvedValue(textDiff)
+    apiMocks.getDiffSummary.mockResolvedValue(textDiff.summary)
+    apiMocks.getVersion.mockImplementation(async (_project, _document, id) =>
+      id === fromVersionFixture.id ? fromVersionFixture : markdownVersionFixture
+    )
+    const screen = renderPage(
+      <DiffsPage
+        search={{
+          project_id: 'project-1',
+          document_id: 'document-1',
+          diff_id: 'diff-1',
+          from_version_id: 'version-0',
+          to_version_id: 'version-1',
+        }}
+      />
+    )
+    expect(await screen.findByText('Unified line diff')).toBeInTheDocument()
+    expect(screen.getByText('Added lines')).toBeInTheDocument()
+    expect(screen.queryByText('Added endpoints')).not.toBeInTheDocument()
+    expect(screen.getByText('+<script>alert(1)</script>')).toBeInTheDocument()
+    expect(screen.container.querySelector('script')).toBeNull()
+  })
+
   it('opens an exact branch and draft deep link', async () => {
     mockAIQueries('draft', draftFixture.id)
     const screen = renderPage(
@@ -3257,6 +3379,98 @@ describe('DraftsPage lifecycle boundaries', () => {
     apiMocks.updateDraft.mockResolvedValue({ ...draftFixture, status: 1 })
   })
 
+  it.each([
+    [
+      'literal TXT content',
+      '# Not Markdown\r\n<em>literal</em>\n  indented\ttext\n',
+    ],
+    ['an empty TXT file', ''],
+  ])(
+    'uploads %s without changing its bytes or using editor fallback',
+    async (_label, content) => {
+      apiMocks.listDocuments.mockResolvedValue({
+        items: [{ ...markdownDocumentFixture, document_type: 3 }],
+        total: 1,
+      })
+      apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+      apiMocks.createDraft.mockResolvedValue({
+        ...draftFixture,
+        document_format: 4,
+        status: 1,
+      })
+      const file = new File([content], 'notes.txt', { type: 'text/plain' })
+      file.text = vi.fn().mockResolvedValue(content)
+      const screen = renderDraftsPage()
+      const user = userEvent.setup()
+      await waitFor(() =>
+        expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+      )
+      await selectOption(
+        screen.getAllByLabelText('Branch', { exact: true })[1],
+        'branch-1',
+        user
+      )
+      await user.type(screen.getByLabelText('Version name'), 'txt-v1')
+      await user.type(screen.getByLabelText('Content'), 'Old editor value')
+      await user.upload(screen.getByLabelText('Document file'), file)
+      expect(screen.getByText('notes.txt')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Create' }))
+      await waitFor(() =>
+        expect(apiMocks.createDraft).toHaveBeenCalledWith(
+          'project-1',
+          'document-1',
+          expect.objectContaining({
+            branch_id: 'branch-1',
+            version_name: 'txt-v1',
+            content,
+            schema_content: content,
+          })
+        )
+      )
+    }
+  )
+
+  it('renders saved TXT drafts literally without a Markdown preview tab', async () => {
+    const content =
+      '# Literal draft\n[not a link](https://example.test)\n<script>alert(1)</script>\n'
+    apiMocks.listDocuments.mockResolvedValue({
+      items: [{ ...markdownDocumentFixture, document_type: 3 }],
+      total: 1,
+    })
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, document_format: 4 }],
+      total: 1,
+    })
+    apiMocks.getDraftContent.mockResolvedValue({
+      draft: { ...draftFixture, document_format: 4 },
+      owner_type: 'draft',
+      owner_id: 'draft-1',
+      kind: 'raw',
+      content_kind: 'text',
+      content,
+      hash: 'txt-draft-hash',
+    })
+    const screen = renderDraftsPage()
+    await selectOption(
+      screen.getByLabelText('Draft'),
+      'draft-1',
+      userEvent.setup()
+    )
+    const literal = await screen.findByText(content, {
+      exact: true,
+      normalizer: (text) => text,
+    })
+    expect(literal.tagName).toBe('PRE')
+    expect(literal.textContent).toBe(content)
+    expect(
+      screen.queryByRole('tab', { name: 'Preview' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'not a link' })
+    ).not.toBeInTheDocument()
+    expect(screen.container.querySelector('script')).toBeNull()
+  })
+
   it('keeps unsaved editor text when the server draft refreshes', async () => {
     apiMocks.listDrafts.mockResolvedValue({
       items: [{ ...draftFixture, status: 1 }],
@@ -3378,7 +3592,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     const content = screen.getByLabelText('Content')
     await user.type(content, '# Unsaved workspace content')
     await user.upload(
-      screen.getByLabelText('Schema or Markdown file'),
+      screen.getByLabelText('Document file'),
       new File(['# Uploaded content'], 'local-draft.md', {
         type: 'text/markdown',
       })
@@ -3550,7 +3764,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       user
     )
     await user.upload(
-      screen.getByLabelText('Schema or Markdown file'),
+      screen.getByLabelText('Document file'),
       new File(['# File one'], 'one.md', { type: 'text/markdown' })
     )
     await selectOption(screen.getByLabelText('Document'), 'document-2', user)
@@ -3612,7 +3826,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       user
     )
     await user.type(screen.getByLabelText('Version name'), 'v-file')
-    await user.upload(screen.getByLabelText('Schema or Markdown file'), file)
+    await user.upload(screen.getByLabelText('Document file'), file)
     await user.click(screen.getByRole('button', { name: 'Create' }))
     expect(screen.getByLabelText('Content')).toBeDisabled()
     expect(apiMocks.createDraft).not.toHaveBeenCalled()
@@ -3705,7 +3919,7 @@ describe('DraftsPage lifecycle boundaries', () => {
         )
       }
       await user.type(screen.getByLabelText('Version name'), 'v-file')
-      await user.upload(screen.getByLabelText('Schema or Markdown file'), file)
+      await user.upload(screen.getByLabelText('Document file'), file)
       await user.click(
         screen.getByRole('button', {
           name: operation === 'create' ? 'Create' : 'Update',

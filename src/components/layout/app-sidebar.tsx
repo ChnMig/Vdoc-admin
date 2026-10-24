@@ -16,8 +16,10 @@ import { TeamSwitcher } from './team-switcher'
 
 export function AppSidebar({
   hasAuditAccess = false,
+  workspace = false,
 }: {
   hasAuditAccess?: boolean
+  workspace?: boolean
 }) {
   const { collapsible, variant } = useLayout()
   const isSuperAdmin = Boolean(
@@ -26,7 +28,7 @@ export function AppSidebar({
   const navGroups = visibleNavGroups(isSuperAdmin, hasAuditAccess)
   return (
     <Sidebar
-      collapsible={collapsible}
+      collapsible={workspace ? 'icon' : collapsible}
       variant={variant}
       className='border-sidebar-border/90'
     >

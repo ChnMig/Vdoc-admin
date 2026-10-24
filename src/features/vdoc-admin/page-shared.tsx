@@ -80,6 +80,7 @@ import {
   tokenStatusLabel,
   formatDate,
 } from './page-utils'
+import { useWorkspaceEmbedding } from './workspace-embedding'
 
 export function PageChrome({
   page,
@@ -95,6 +96,7 @@ export function PageChrome({
   const [guideOpen, setGuideOpen] = useState(false)
   const projectId = useVdocContextStore((state) => state.projectId)
   const documentId = useVdocContextStore((state) => state.documentId)
+  const embedded = useWorkspaceEmbedding()
   const resolvedGuidance =
     guidance ??
     ({
@@ -105,6 +107,7 @@ export function PageChrome({
         label: t('admin.common.openNextAction'),
       },
     } satisfies PageGuidance)
+  if (embedded) return <div className='grid min-w-0 gap-5'>{children}</div>
   return (
     <>
       <Header>
@@ -358,6 +361,20 @@ export function SelectorGrid({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </section>
+  )
+}
+
+export function ContextSelectorGrid({
+  children,
+  scopeFields = 2,
+}: {
+  children: React.ReactNode
+  scopeFields?: number
+}) {
+  const embedded = useWorkspaceEmbedding()
+  const fields = Children.toArray(children)
+  return (
+    <SelectorGrid>{embedded ? fields.slice(scopeFields) : fields}</SelectorGrid>
   )
 }
 
@@ -901,7 +918,7 @@ export function NameDescriptionTable({
                   <TableCell>
                     {(!('status' in item) || item.status === ACTIVE_STATUS) &&
                       (!canEdit || canEdit(item.id)) && (
-                        <div className='flex items-center gap-2'>
+                        <div className='flex items-center justify-center gap-2'>
                           <FormDialog
                             title={t(
                               emptyPreset === 'teams'
@@ -968,13 +985,13 @@ export function NameDescriptionTable({
 
 export function DiffSummaryCards({
   summary,
-  isMarkdown,
+  isTextDiff,
 }: {
   summary: DiffSummaryDTO
-  isMarkdown: boolean
+  isTextDiff: boolean
 }) {
   const { t } = useLanguage()
-  const cards = isMarkdown
+  const cards = isTextDiff
     ? [
         [
           t('admin.diff.addedLines'),
@@ -1036,10 +1053,10 @@ export function DiffSummaryCards({
 
 export function DiffReviewList({
   items,
-  isMarkdown = false,
+  isTextDiff = false,
 }: {
   items: DiffItemDTO[]
-  isMarkdown?: boolean
+  isTextDiff?: boolean
 }) {
   const { t } = useLanguage()
   const groups = useMemo(() => {
@@ -1053,7 +1070,7 @@ export function DiffReviewList({
     return Array.from(bySeverity.entries())
   }, [items, t])
 
-  if (isMarkdown) {
+  if (isTextDiff) {
     return (
       <section className='grid min-w-0 gap-3'>
         <div>
@@ -1273,7 +1290,7 @@ export function TokenTable({
                 <TableCell>{formatDate(token.expires_at)}</TableCell>
                 <TableCell>{formatDate(token.last_used_at)}</TableCell>
                 <TableCell>
-                  <div className='flex gap-2'>
+                  <div className='flex justify-center gap-2'>
                     {onView && (
                       <Button
                         variant='outline'

@@ -29,6 +29,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PlainTextDocumentViewer } from '@/features/public-share/plain-text-document-viewer'
 import { AIContextPanel } from './ai-panels'
 import { MarkdownFactsCard } from './markdown-facts-card'
 import { MarkdownPreview } from './markdown-preview'
@@ -37,7 +38,7 @@ import {
   LoadingErrorState,
   PageChrome,
   DeepLinkAlert,
-  SelectorGrid,
+  ContextSelectorGrid,
   NativeSelect,
   CollectionCard,
   StatusBadge,
@@ -50,6 +51,8 @@ import {
   useRouteControlledString,
   useVersionsAndSelection,
   DOCUMENT_TYPE_MARKDOWN,
+  DOCUMENT_TYPE_OPENAPI,
+  DOCUMENT_TYPE_TEXT,
   contentKindOptions,
   activeContentKind,
   activeProjectRole,
@@ -172,7 +175,14 @@ export function VersionsPage({
   const [contentKind, setContentKind] = useState('raw')
   const isMarkdownDocument =
     selectedDocument?.document_type === DOCUMENT_TYPE_MARKDOWN
-  const versionContentKindOptions = contentKindOptions(t, isMarkdownDocument)
+  const isOpenApiDocument =
+    selectedDocument?.document_type === DOCUMENT_TYPE_OPENAPI
+  const isPlainTextDocument =
+    selectedDocument?.document_type === DOCUMENT_TYPE_TEXT
+  const versionContentKindOptions = contentKindOptions(
+    t,
+    selectedDocument?.document_type
+  )
   const activeVersionContentKind = activeContentKind(
     contentKind,
     versionContentKindOptions
@@ -198,7 +208,7 @@ export function VersionsPage({
   const activeWorkspaceTab =
     workspaceTab.context === workspaceContext
       ? workspaceTab.value
-      : endpointId && !isMarkdownDocument
+      : endpointId && isOpenApiDocument
         ? 'endpoints'
         : 'content'
   const contentQuery = useQuery({
@@ -242,7 +252,7 @@ export function VersionsPage({
       projectId.length > 0 &&
       documentId.length > 0 &&
       versionId.length > 0 &&
-      !isMarkdownDocument,
+      isOpenApiDocument,
   })
   const untaggedLabel = t('admin.developerPortal.untagged')
   const visibleEndpoints = endpointsQuery.data?.items ?? []
@@ -255,7 +265,7 @@ export function VersionsPage({
       documentId.length > 0 &&
       versionId.length > 0 &&
       endpointId.length > 0 &&
-      !isMarkdownDocument,
+      isOpenApiDocument,
   })
   const invalidBranchDeepLink = Boolean(
     branchesQuery.data &&
@@ -356,7 +366,7 @@ export function VersionsPage({
             : []),
         ]}
       />
-      <SelectorGrid>
+      <ContextSelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
@@ -400,7 +410,7 @@ export function VersionsPage({
           placeholder={t('admin.placeholders.selectVersion')}
           options={versionOptions}
         />
-      </SelectorGrid>
+      </ContextSelectorGrid>
       <Tabs
         value={activeWorkspaceTab}
         onValueChange={(value) =>
@@ -416,7 +426,7 @@ export function VersionsPage({
           >
             {t('admin.sections.contentViewer')}
           </TabsTrigger>
-          {!isMarkdownDocument && (
+          {isOpenApiDocument && (
             <TabsTrigger value='endpoints' className='h-auto min-h-9 flex-none'>
               {t('admin.sections.endpoints')}
             </TabsTrigger>
@@ -479,7 +489,11 @@ export function VersionsPage({
               </div>
             </div>
             <LoadingErrorState state={contentQuery} />
-            {selectedVersionContent ? (
+            {selectedVersionContent && isPlainTextDocument ? (
+              <div className='max-h-[36rem] min-w-0 overflow-auto'>
+                <PlainTextDocumentViewer content={selectedVersionContent} />
+              </div>
+            ) : selectedVersionContent ? (
               <pre className='max-h-[36rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
                 {selectedVersionContent}
               </pre>
@@ -498,7 +512,7 @@ export function VersionsPage({
             </>
           )}
         </TabsContent>
-        {!isMarkdownDocument && (
+        {isOpenApiDocument && (
           <TabsContent value='endpoints' className='grid min-w-0 gap-4'>
             <dl className='flex min-w-0 flex-wrap gap-x-6 gap-y-3 border-b pb-4 text-sm'>
               {[

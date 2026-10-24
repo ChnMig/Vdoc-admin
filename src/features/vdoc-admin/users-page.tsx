@@ -171,7 +171,7 @@ export function UsersPage() {
                 >
                   <TableCell>
                     <div className='font-medium'>{user.email}</div>
-                    <div className='mt-1 flex items-center gap-3 text-xs'>
+                    <div className='mt-1 flex items-center justify-center gap-3 text-xs'>
                       <span className='text-muted-foreground'>{user.name}</span>
                       <Button
                         ref={(button) => {
@@ -201,7 +201,7 @@ export function UsersPage() {
                       : t('admin.common.no')}
                   </TableCell>
                   <TableCell>
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='flex flex-wrap justify-center gap-2'>
                       {user.status === ACTIVE_STATUS ? (
                         <ConfirmActionButton
                           label={t('admin.actions.disableUser')}

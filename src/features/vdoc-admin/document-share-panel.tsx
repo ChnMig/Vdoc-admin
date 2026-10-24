@@ -492,7 +492,7 @@ function DocumentSharePanelContent({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className='flex flex-wrap items-center gap-2'>
+                      <div className='flex flex-wrap items-center justify-center gap-2'>
                         <Badge variant='outline'>
                           {share.version_scope === 2
                             ? t('publicShare.allVersions')
@@ -523,7 +523,7 @@ function DocumentSharePanelContent({
                         : '—'}
                     </TableCell>
                     <TableCell>
-                      <div className='flex flex-wrap gap-2'>
+                      <div className='flex flex-wrap justify-center gap-2'>
                         <Button
                           size='sm'
                           variant='outline'

@@ -23,6 +23,7 @@ export function filenameFromContentDisposition(
   if (mediaType === 'application/json') return 'document.json'
   if (mediaType === 'application/yaml') return 'document.yaml'
   if (mediaType === 'text/markdown') return 'document.md'
+  if (mediaType === 'text/plain') return 'document.txt'
   return 'download.bin'
 }
 

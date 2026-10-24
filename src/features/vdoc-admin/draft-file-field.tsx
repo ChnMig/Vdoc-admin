@@ -27,7 +27,7 @@ export function DraftFileField({
           className='sr-only'
           tabIndex={-1}
           aria-describedby={hintId}
-          accept='.yaml,.yml,.json,.md,text/markdown,application/json,application/yaml,text/yaml'
+          accept='.yaml,.yml,.json,.md,.txt,text/markdown,text/plain,application/json,application/yaml,text/yaml'
           onChange={(event) => {
             const nextFile = event.currentTarget.files?.[0]
             if (nextFile) onChange(nextFile)

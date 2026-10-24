@@ -1,4 +1,5 @@
-import { Outlet } from '@tanstack/react-router'
+import { useState } from 'react'
+import { Outlet, useLocation } from '@tanstack/react-router'
 import { useAuthStore } from '@/stores/auth-store'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
@@ -14,14 +15,39 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
+  const pathname = useLocation({ select: (location) => location.pathname })
+  const workspace = [
+    '/',
+    '/documents',
+    '/documents/',
+    '/drafts',
+    '/drafts/',
+    '/versions',
+    '/versions/',
+    '/diffs',
+    '/diffs/',
+  ].includes(pathname)
+  const [sidebarPreference, setSidebarPreference] = useState<{
+    workspace: boolean
+    open: boolean
+  }>()
+  const sidebarOpen =
+    sidebarPreference?.workspace === workspace
+      ? sidebarPreference.open
+      : workspace
+        ? false
+        : defaultOpen
   const authUser = useAuthStore((state) => state.auth.user)
   const hasAuditAccess = authUser?.can_access_audit === true
   return (
     <SearchProvider auditAccess={hasAuditAccess}>
       <LayoutProvider>
-        <SidebarProvider defaultOpen={defaultOpen}>
+        <SidebarProvider
+          open={sidebarOpen}
+          onOpenChange={(open) => setSidebarPreference({ workspace, open })}
+        >
           <SkipToMain />
-          <AppSidebar hasAuditAccess={hasAuditAccess} />
+          <AppSidebar hasAuditAccess={hasAuditAccess} workspace={workspace} />
           <SidebarInset
             className={cn(
               // Set content container, so we can use container queries

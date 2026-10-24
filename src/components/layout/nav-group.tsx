@@ -222,6 +222,13 @@ function SidebarMenuCollapsedDropdown({
 }
 
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
+  if (
+    item.url === '/documents' &&
+    ['/', '/documents', '/drafts', '/versions', '/diffs'].includes(
+      href.split('?')[0].replace(/\/$/, '') || '/'
+    )
+  )
+    return true
   return (
     href === item.url ||
     href.split('?')[0] === item.url ||

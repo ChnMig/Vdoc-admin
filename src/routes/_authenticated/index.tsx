@@ -1,6 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Dashboard } from '@/features/dashboard'
+import { DocumentWorkspacePage } from '@/features/vdoc-admin/document-workspace-page'
 
 export const Route = createFileRoute('/_authenticated/')({
-  component: Dashboard,
+  component: DocumentWorkspaceRoute,
 })
+
+function DocumentWorkspaceRoute() {
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  return (
+    <DocumentWorkspacePage
+      defaultView='content'
+      search={search}
+      onSearchChange={(patch, options) =>
+        void navigate({
+          replace: options?.replace ?? false,
+          search: (current) => ({ ...current, ...patch }),
+        })
+      }
+    />
+  )
+}

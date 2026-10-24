@@ -55,6 +55,7 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { OptionsSelect } from '@/components/options-select'
 import { MarkdownDocumentViewer } from './markdown-document-viewer'
 import { OpenApiCodeViewer } from './openapi-code-viewer'
+import { PlainTextDocumentViewer } from './plain-text-document-viewer'
 
 type LoadState = 'loading' | 'locked' | 'ready' | 'recoverable' | 'unavailable'
 
@@ -522,7 +523,11 @@ function PublicDocumentShareSession({
                 <div className='grid gap-2'>
                   <div className='flex flex-wrap items-center gap-2'>
                     <Badge variant='secondary'>
-                      {metadata.document_type === 2 ? 'Markdown' : 'OpenAPI'}
+                      {metadata.document_type === 3
+                        ? t('publicShare.textLabel')
+                        : metadata.document_type === 2
+                          ? 'Markdown'
+                          : 'OpenAPI'}
                     </Badge>
                     <Badge variant='outline'>
                       {selectedVersion?.version_name}
@@ -606,7 +611,9 @@ function PublicDocumentShareSession({
               </Alert>
             )}
             {content ? (
-              metadata.document_type === 2 ? (
+              metadata.document_type === 3 ? (
+                <PlainTextDocumentViewer content={content.content} />
+              ) : metadata.document_type === 2 ? (
                 <MarkdownDocumentViewer content={content.content} />
               ) : (
                 <OpenApiCodeViewer content={content.content} />

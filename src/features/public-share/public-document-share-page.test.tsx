@@ -74,6 +74,55 @@ describe('PublicDocumentSharePage', () => {
     })
   })
 
+  it('shows a TXT share as literal plain text and keeps its original download available', async () => {
+    const content =
+      '# Release notes\n\n  [link](https://example.test)\n<script>literal</script>'
+    publicShareApiMocks.getPublicShareMetadata.mockReset()
+    publicShareApiMocks.getPublicShareMetadata.mockResolvedValue({
+      document_name: 'Release notes',
+      document_type: 3,
+      version_scope: 1,
+      current_version: {
+        id: versionId,
+        version_name: 'v1',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    })
+    publicShareApiMocks.getPublicShareContent.mockResolvedValue({
+      version_id: versionId,
+      content,
+    })
+    const download = {
+      blob: new Blob([content], { type: 'text/plain' }),
+      filename: 'notes.txt',
+      mimeType: 'text/plain',
+    }
+    publicShareApiMocks.downloadPublicShareVersion.mockResolvedValue(download)
+    const user = userEvent.setup()
+    const screen = render(
+      <LanguageProvider>
+        <PublicDocumentSharePage shareId={shareId} secret={secret} />
+      </LanguageProvider>
+    )
+
+    await screen.findByText('Plain text')
+    expect(screen.container.querySelector('pre')?.textContent).toBe(content)
+    expect(
+      screen.getByText('Release notes', { exact: true })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Release notes' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'link' })).not.toBeInTheDocument()
+    expect(screen.container.querySelector('script')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    await waitFor(() =>
+      expect(publicShareApiMocks.savePublicShareDownload).toHaveBeenCalledWith(
+        download
+      )
+    )
+  })
+
   it('keeps an unlocked protected share open when the display language changes', async () => {
     const user = userEvent.setup()
     const screen = render(

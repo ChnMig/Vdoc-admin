@@ -26,6 +26,7 @@ const adminUser = {
 const project = {
   id: projectId,
   team_id: 'team-closure',
+  team_name: 'Documentation team',
   name: 'Closure Project',
   description: 'End-to-end workflow fixtures',
   status: 1,
@@ -40,6 +41,12 @@ const document = {
   name: 'Closure Handbook',
   document_type: 2,
   relative_path: 'guides/closure.md',
+  file_name: 'closure.md',
+  folder_id: 'folder-guides',
+  workflow_state: 'published',
+  has_draft: true,
+  latest_version_id: latestVersionId,
+  latest_draft_id: editableDraftId,
   description: 'Published workflow handbook',
   status: 1,
   created_by: adminUserId,
@@ -69,7 +76,7 @@ const editableDraft = {
   branch_id: branchId,
   version_name: '1.9.0-draft',
   changelog: 'Still being edited',
-  document_format: 2,
+  document_format: 3,
   source_type: 1,
   status: 1,
   created_by: adminUserId,
@@ -94,7 +101,7 @@ const latestVersion = {
   branch_id: branchId,
   version_name: '2.0.0',
   changelog: 'Current release',
-  document_format: 2,
+  document_format: 3,
   source_type: 1,
   draft_id: submittedDraftId,
   status: 1,
@@ -172,6 +179,27 @@ async function installAdminSession(page: Page) {
   )
 }
 
+async function openWorkspaceFile(
+  page: Page,
+  view: 'content' | 'drafts' | 'versions' | 'diffs' = 'content'
+) {
+  await page.goto(
+    `/documents/?team_id=${project.team_id}&project_id=${projectId}`
+  )
+  const tree = page.getByRole('navigation', { name: 'Files', exact: true })
+  await tree.getByRole('button', { name: 'Expand guides', exact: true }).click()
+  await tree.getByRole('button', { name: /closure\.md/ }).click()
+  await expect(
+    tree.getByRole('button', { name: /closure\.md/ })
+  ).toHaveAttribute('aria-current', 'page')
+  if (view !== 'content') {
+    const tabName = { drafts: 'Drafts', versions: 'Versions', diffs: 'Diffs' }[
+      view
+    ]
+    await page.getByRole('tab', { name: tabName, exact: true }).click()
+  }
+}
+
 async function installAdminApi(
   page: Page,
   onApprove?: (request: {
@@ -198,6 +226,28 @@ async function installAdminApi(
     }
     if (method === 'GET' && path === '/api/v1/private/projects') {
       await fulfillEnvelope(route, [project], { total: 1 })
+      return
+    }
+    if (
+      method === 'GET' &&
+      path === `/api/v1/private/projects/${projectId}/folders`
+    ) {
+      await fulfillEnvelope(
+        route,
+        [
+          {
+            id: 'folder-guides',
+            project_id: projectId,
+            parent_id: null,
+            name: 'guides',
+            path: 'guides',
+            created_by: adminUserId,
+            created_at: timestamp,
+            updated_at: timestamp,
+          },
+        ],
+        { total: 1 }
+      )
       return
     }
     if (
@@ -364,17 +414,24 @@ for (const width of [1280, 390]) {
     }
   })
 
-  test(`document overview uses one statistics request at ${width}px`, async ({
+  test(`workspace loads list metadata first and statistics once on demand at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 })
     await installAdminSession(page)
     await installAdminApi(page)
     const paths: string[] = []
+    const finishedPaths: string[] = []
     page.on('request', (request) => paths.push(new URL(request.url()).pathname))
+    page.on('requestfinished', (request) =>
+      finishedPaths.push(new URL(request.url()).pathname)
+    )
     await page.goto('/documents/')
-    await expect(page.getByText('120 B', { exact: true })).toBeVisible()
-    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(1)
+    const tree = page.getByRole('navigation', { name: 'Files', exact: true })
+    await expect(
+      tree.getByRole('button', { name: 'Expand guides', exact: true })
+    ).toBeVisible()
+    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
     expect(
       paths.some(
         (path) =>
@@ -383,10 +440,41 @@ for (const width of [1280, 390]) {
           path.endsWith('/endpoints')
       )
     ).toBe(false)
-    await expect(page.getByLabel('Document', { exact: true })).toHaveAttribute(
-      'value',
-      documentId
-    )
+    await tree
+      .getByRole('button', { name: 'Expand guides', exact: true })
+      .click()
+    const file = tree.getByRole('button', { name: /closure\.md/ })
+    await expect(file).toContainText('Published')
+    await file.click()
+    await expect(file).toHaveAttribute('aria-current', 'page')
+    await expect(
+      page.getByRole('heading', { name: 'Release Notes', exact: true })
+    ).toBeVisible()
+    await expect
+      .poll(
+        () => finishedPaths.filter((path) => path.includes('/content/')).length
+      )
+      .toBe(1)
+    expect(
+      new Set(paths.filter((path) => path.includes('/content/'))).size
+    ).toBe(1)
+    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
+    await page.getByRole('tab', { name: 'Share', exact: true }).click()
+    await expect
+      .poll(
+        () => finishedPaths.filter((path) => path.endsWith('/overview')).length
+      )
+      .toBe(1)
+    await page.getByRole('tab', { name: 'Content', exact: true }).click()
+    await page.getByRole('tab', { name: 'Share', exact: true }).click()
+    expect(
+      finishedPaths.filter((path) => path.endsWith('/overview'))
+    ).toHaveLength(1)
+    expect(
+      paths.some(
+        (path) => path.endsWith('/versions') || path.endsWith('/endpoints')
+      )
+    ).toBe(false)
   })
 }
 
@@ -444,6 +532,12 @@ test('a comparison completed after document navigation stays in its original his
     ...document,
     id: 'document-other',
     name: 'Other Handbook',
+    file_name: 'other.md',
+    relative_path: 'guides/other.md',
+    workflow_state: 'empty',
+    has_draft: false,
+    latest_version_id: null,
+    latest_draft_id: null,
   }
   const result = {
     id: 'cccccccccccccccccccccccccccccccc',
@@ -516,9 +610,11 @@ test('a comparison completed after document navigation stays in its original his
   )
   await page.getByRole('button', { name: 'Compare', exact: true }).click()
   await expect.poll(() => comparisonStarted).toBe(true)
-  const documentSelect = page.getByLabel('Document', { exact: true })
-  await selectOption(documentSelect, otherDocument.id)
-  await expect(documentSelect).toHaveAttribute('value', otherDocument.id)
+  const tree = page.getByRole('navigation', { name: 'Files', exact: true })
+  const otherFile = tree.getByRole('button', { name: /other\.md/ })
+  await otherFile.click()
+  await expect(otherFile).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('tab', { name: 'Diffs', exact: true }).click()
   await expect(
     page.getByLabel('From version', { exact: true })
   ).toHaveAttribute('value', '')
@@ -531,11 +627,12 @@ test('a comparison completed after document navigation stays in its original his
   releaseComparison()
   await response
   await expect(page).toHaveURL(switchedUrl)
-  await expect(documentSelect).toHaveAttribute('value', otherDocument.id)
+  await expect(otherFile).toHaveAttribute('aria-current', 'page')
   await expect(
     page.getByText('Linked entity is unavailable', { exact: true })
   ).toHaveCount(0)
-  await selectOption(documentSelect, documentId)
+  await tree.getByRole('button', { name: /closure\.md/ }).click()
+  await page.getByRole('tab', { name: 'Diffs', exact: true }).click()
   await page
     .getByRole('tab', { name: 'Stored diff history', exact: true })
     .click()
@@ -577,10 +674,10 @@ for (const viewport of [
         })
       }
     )
-    await page.goto('/drafts/')
+    await openWorkspaceFile(page, 'drafts')
     const draftSelect = page.getByLabel('Draft', { exact: true })
     await selectOption(draftSelect, editableDraftId)
-    const content = page.getByLabel('Content', { exact: true })
+    const content = page.getByRole('textbox', { name: 'Content', exact: true })
     await expect(content).toHaveValue('# Original draft')
     await content.fill('# Local edits to retain')
     await page.clock.install()
@@ -682,12 +779,12 @@ for (const width of [1280, 390]) {
       serverContent = body.content!
       await fulfillEnvelope(route, current)
     })
-    await page.goto('/drafts/')
+    await openWorkspaceFile(page, 'drafts')
     await selectOption(
       page.getByLabel('Draft', { exact: true }),
       editableDraftId
     )
-    const content = page.getByLabel('Content', { exact: true })
+    const content = page.getByRole('textbox', { name: 'Content', exact: true })
     await expect(content).toHaveValue('# Original draft')
     await page
       .getByLabel('Changelog', { exact: true })
@@ -741,7 +838,7 @@ test('draft review confirms and approves the selected submitted draft', async ({
     approvedRequest = request
   })
 
-  await page.goto('/drafts/')
+  await openWorkspaceFile(page, 'drafts')
   const draftSelect = page.getByLabel('Draft', { exact: true })
   await expect(draftSelect).toBeVisible()
   await selectOption(draftSelect, submittedDraftId)
@@ -817,7 +914,7 @@ for (const width of [1280, 390]) {
       }
       await fulfillEnvelope(route, latestVersion)
     })
-    await page.goto('/drafts/')
+    await openWorkspaceFile(page, 'drafts')
     await selectOption(
       page.getByLabel('Draft', { exact: true }),
       submittedDraftId
@@ -867,10 +964,12 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
   await installAdminSession(page)
   await installAdminApi(page)
 
-  await page.goto('/versions/')
+  await openWorkspaceFile(page, 'versions')
   const versionSelect = page.getByLabel('Version', { exact: true })
   await expect(versionSelect).toHaveAttribute('value', latestVersionId)
-  const markdown = page.locator('article')
+  const markdown = page
+    .getByRole('tabpanel', { name: 'Versions', exact: true })
+    .locator('article')
   await expect(
     markdown.getByRole('heading', { name: 'Release Notes' })
   ).toBeVisible()
