@@ -320,15 +320,10 @@ export function DocumentWorkspaceDetail({
                     {t('admin.workspace.backToContent')}
                   </Button>
                 </div>
-                <ReadingTargetGuard
-                  pending={selection.pending}
-                  invalid={selection.invalid}
-                >
-                  <DraftsPage
-                    search={contextSearch}
-                    onSearchChange={changeEmbedded('drafts')}
-                  />
-                </ReadingTargetGuard>
+                <DraftsPage
+                  search={contextSearch}
+                  onSearchChange={changeEmbedded('drafts')}
+                />
               </RetainedBody>
             </RetainedSection>
             <RetainedSection value='tools' active={section === 'tools'}>
