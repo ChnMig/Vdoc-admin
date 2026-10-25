@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { SearchIcon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -9,7 +9,6 @@ import {
   listEndpoints,
   listProjectMembers,
   type AISummaryTarget,
-  type EndpointDTO,
   type EndpointSummaryDTO,
   type VersionDTO,
 } from '@/lib/vdoc-api'
@@ -17,7 +16,6 @@ import { type VdocPageDeepLinkProps } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageOffset } from '@/hooks/use-page-offset'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -31,6 +29,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PlainTextDocumentViewer } from '@/features/public-share/plain-text-document-viewer'
 import { AIContextPanel } from './ai-panels'
+import { EndpointsCard } from './endpoint-browser'
 import { MarkdownFactsCard } from './markdown-facts-card'
 import { MarkdownPreview } from './markdown-preview'
 import {
@@ -59,8 +58,6 @@ import {
   ROLE_ADMIN,
   entityOptionLabel,
   formatDate,
-  methodLabel,
-  jsonPreview,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
 import { useWorkspaceEmbedding } from './workspace-embedding'
@@ -762,254 +759,5 @@ function VersionsTable({
       )}
       {pagination}
     </CollectionCard>
-  )
-}
-
-function EndpointsCard({
-  endpoints,
-  selected,
-  onSelect,
-  detail,
-  groupMode,
-  untaggedLabel,
-  toolbar,
-  loadingState,
-  pagination,
-}: {
-  endpoints: EndpointSummaryDTO[]
-  selected: string
-  onSelect: (id: string) => void
-  detail?: EndpointDTO
-  groupMode: EndpointGroupMode
-  untaggedLabel: string
-  toolbar: React.ReactNode
-  loadingState: React.ComponentProps<typeof LoadingErrorState>['state']
-  pagination: React.ReactNode
-}) {
-  const { t } = useLanguage()
-  const groupedEndpoints = useMemo(() => {
-    const groups = new Map<string, EndpointSummaryDTO[]>()
-    endpoints.forEach((endpoint) => {
-      const keys =
-        groupMode === 'method'
-          ? [methodLabel(endpoint.method)]
-          : endpointTags(endpoint, untaggedLabel)
-      keys.forEach((key) => {
-        const group = groups.get(key) ?? []
-        group.push(endpoint)
-        groups.set(key, group)
-      })
-    })
-    return Array.from(groups.entries()).sort(([left], [right]) =>
-      left.localeCompare(right)
-    )
-  }, [endpoints, groupMode, untaggedLabel])
-
-  return (
-    <CollectionCard
-      title={t('admin.sections.endpoints')}
-      description={t('admin.developerPortal.endpointBrowserDescription')}
-      count={endpoints.length}
-    >
-      {toolbar}
-      <LoadingErrorState state={loadingState} />
-      <div
-        className={
-          detail
-            ? 'grid min-w-0 gap-5 lg:grid-cols-[minmax(15rem,2fr)_minmax(0,3fr)]'
-            : 'min-w-0'
-        }
-      >
-        <div className='grid max-h-[40rem] min-w-0 content-start gap-4 overflow-y-auto pe-1'>
-          {groupedEndpoints.length ? (
-            groupedEndpoints.map(([group, groupEndpoints]) => (
-              <section
-                key={group}
-                className='grid min-w-0 gap-3 border-t pt-4 first:border-0 first:pt-0'
-              >
-                <div className='flex flex-wrap items-center justify-between gap-2'>
-                  <div>
-                    <p className='font-medium'>{group}</p>
-                    <p className='text-xs text-muted-foreground'>
-                      {groupEndpoints.length} {t('admin.common.endpoint')}
-                    </p>
-                  </div>
-                  <Badge variant='secondary'>
-                    {groupMode === 'method'
-                      ? t('admin.fields.method')
-                      : t('admin.developerPortal.tag')}
-                  </Badge>
-                </div>
-                <div className='grid gap-2'>
-                  {groupEndpoints.map((endpoint) => (
-                    <button
-                      key={`${group}-${endpoint.id}`}
-                      type='button'
-                      data-state={
-                        selected === endpoint.id ? 'selected' : undefined
-                      }
-                      className='grid min-w-0 gap-3 rounded-md border bg-background p-3 text-start transition-colors hover:bg-muted/40 data-[state=selected]:border-primary data-[state=selected]:bg-primary/8 sm:grid-cols-[4.5rem_minmax(0,1fr)]'
-                      onClick={() => onSelect(endpoint.id)}
-                    >
-                      <div className='flex items-start gap-2'>
-                        <Badge variant='outline'>
-                          {methodLabel(endpoint.method)}
-                        </Badge>
-                      </div>
-                      <div className='grid gap-2'>
-                        <div className='flex flex-wrap items-center gap-2'>
-                          <code className='font-mono text-xs break-all'>
-                            {endpoint.path}
-                          </code>
-                          {endpoint.deprecated && (
-                            <Badge variant='secondary'>
-                              {t('admin.developerPortal.deprecated')}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className='text-sm text-muted-foreground'>
-                          {endpoint.summary ??
-                            endpoint.operation_id ??
-                            t('admin.developerPortal.noEndpointSummary')}
-                        </p>
-                        <div className='flex flex-wrap gap-1.5'>
-                          {endpointTags(endpoint, untaggedLabel).map((tag) => (
-                            <Badge key={tag} variant='secondary'>
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))
-          ) : (
-            <EmptyState preset='endpoints' />
-          )}
-        </div>
-        {detail && <EndpointDetailPanel endpoint={detail} />}
-      </div>
-      {pagination}
-    </CollectionCard>
-  )
-}
-
-function EndpointDetailPanel({ endpoint }: { endpoint: EndpointDTO }) {
-  const { t } = useLanguage()
-  const untaggedLabel = t('admin.developerPortal.untagged')
-  return (
-    <section className='grid min-w-0 content-start gap-5 border-t pt-5 lg:border-s lg:border-t-0 lg:ps-5 lg:pt-0'>
-      <div className='grid gap-2'>
-        <h3 className='flex min-w-0 flex-wrap items-center gap-2 font-semibold'>
-          <Badge variant='outline'>{methodLabel(endpoint.method)}</Badge>
-          <code className='font-mono text-sm break-all'>{endpoint.path}</code>
-        </h3>
-        <p className='text-sm text-muted-foreground'>
-          {endpoint.summary ??
-            endpoint.operation_id ??
-            t('admin.developerPortal.noEndpointSummary')}
-        </p>
-      </div>
-      <div className='grid min-w-0 gap-5'>
-        <section className='grid min-w-0 gap-4 sm:grid-cols-2'>
-          <div className='min-w-0'>
-            <p className='text-xs font-medium text-muted-foreground'>
-              {t('admin.developerPortal.operationId')}
-            </p>
-            <p className='mt-1 font-mono text-sm break-all'>
-              {endpoint.operation_id ?? t('admin.common.none')}
-            </p>
-          </div>
-          <div className='min-w-0'>
-            <p className='text-xs font-medium text-muted-foreground'>
-              {t('admin.developerPortal.tags')}
-            </p>
-            <div className='mt-2 flex flex-wrap gap-1.5'>
-              {endpointTags(endpoint, untaggedLabel).map((tag) => (
-                <Badge key={tag} variant='secondary'>
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </section>
-        <EndpointJsonSection
-          title={t('admin.fields.request')}
-          rows={[
-            [
-              t('admin.developerPortal.parameters'),
-              endpoint.parameters,
-              endpoint.json_preview?.parameters,
-            ],
-            [
-              t('admin.developerPortal.requestBody'),
-              endpoint.request_body,
-              endpoint.json_preview?.request_body,
-            ],
-          ]}
-        />
-        <EndpointJsonSection
-          title={t('admin.fields.response')}
-          rows={[
-            [
-              t('admin.developerPortal.responses'),
-              endpoint.responses,
-              endpoint.json_preview?.responses,
-            ],
-          ]}
-        />
-        <EndpointJsonSection
-          title={t('admin.developerPortal.runtime')}
-          rows={[
-            [
-              t('admin.developerPortal.security'),
-              endpoint.security,
-              endpoint.json_preview?.security,
-            ],
-            [
-              t('admin.developerPortal.servers'),
-              endpoint.servers,
-              endpoint.json_preview?.servers,
-            ],
-            [
-              t('admin.developerPortal.schemaRefs'),
-              endpoint.schema_refs,
-              endpoint.json_preview?.schema_refs,
-            ],
-            [
-              t('admin.developerPortal.normalizedOperation'),
-              endpoint.normalized_operation,
-              endpoint.json_preview?.normalized_operation,
-            ],
-          ]}
-        />
-      </div>
-    </section>
-  )
-}
-
-function EndpointJsonSection({
-  title,
-  rows,
-}: {
-  title: string
-  rows: Array<[string, unknown, string?]>
-}) {
-  return (
-    <section className='grid min-w-0 gap-3 border-t pt-4'>
-      <p className='font-medium'>{title}</p>
-      <div className='grid gap-3'>
-        {rows.map(([label, value, exactJSON]) => (
-          <div key={label} className='grid min-w-0 gap-2'>
-            <p className='text-xs font-medium text-muted-foreground'>{label}</p>
-            <pre className='max-h-80 overflow-auto rounded-md border bg-background p-3 text-xs leading-relaxed'>
-              {jsonPreview(value, exactJSON)}
-            </pre>
-          </div>
-        ))}
-      </div>
-    </section>
   )
 }

@@ -473,6 +473,10 @@ export function DocumentWorkspaceDetail({
                     projectId={projectId}
                     document={document}
                     selection={selection}
+                    endpointId={search.endpoint_id}
+                    onEndpointChange={(value) =>
+                      onSearchChange({ endpoint_id: value || undefined })
+                    }
                     canWrite={canWrite && branch?.status === 1}
                     onEditDraft={editDraft}
                     presentation='page'

@@ -549,11 +549,31 @@ test('diff version pagination retains selected historical versions', async ({
   await page
     .getByRole('button', { name: 'Search versions', exact: true })
     .click()
-  await page
-    .getByRole('navigation', { name: 'Pagination', exact: true })
-    .getByRole('button', { name: 'Next', exact: true })
-    .click()
+  const sourcePages = page.getByRole('navigation', {
+    name: 'Source version pages',
+    exact: true,
+  })
+  const targetPages = page.getByRole('navigation', {
+    name: 'Target version pages',
+    exact: true,
+  })
+  await sourcePages.getByRole('button', { name: 'Next', exact: true }).click()
   await expect.poll(() => offsets.includes('50')).toBe(true)
+  await expect(
+    sourcePages.getByRole('button', { name: 'Previous', exact: true })
+  ).toBeEnabled()
+  await expect(
+    targetPages.getByRole('button', { name: 'Previous', exact: true })
+  ).toBeDisabled()
+  await expect(from).toHaveAttribute('value', previousVersionId)
+  await expect(page.getByLabel('To version', { exact: true })).toHaveAttribute(
+    'value',
+    latestVersionId
+  )
+  await targetPages.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(
+    targetPages.getByRole('button', { name: 'Previous', exact: true })
+  ).toBeEnabled()
   await expect(from).toHaveAttribute('value', previousVersionId)
   await expect(page.getByLabel('To version', { exact: true })).toHaveAttribute(
     'value',
@@ -989,7 +1009,7 @@ for (const width of [1280, 390]) {
   })
 }
 
-test('versions route renders reviewed Markdown and keeps relative links inert', async ({
+test('version history opens reviewed Markdown and keeps relative links inert', async ({
   page,
 }) => {
   await installAdminSession(page)
@@ -998,9 +1018,14 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
   await openWorkspaceFile(page, 'versions')
   const versionSelect = page.getByLabel('Version', { exact: true })
   await expect(versionSelect).toHaveAttribute('value', latestVersionId)
-  const markdown = page
-    .getByRole('tabpanel', { name: 'Versions', exact: true })
-    .locator('article')
+  const history = page.getByRole('region', { name: 'Versions', exact: true })
+  await expect(history).toBeVisible()
+  await expect(history.locator('article')).toHaveCount(0)
+  await history
+    .getByRole('button', { name: latestVersion.version_name, exact: true })
+    .click()
+  await expect(history).toBeHidden()
+  const markdown = page.getByRole('main').locator('article')
   await expect(
     markdown.getByRole('heading', { name: 'Release Notes' })
   ).toBeVisible()
@@ -1014,7 +1039,12 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
     markdown.getByText(/Read internal details or public docs/)
   ).toBeVisible()
 
-  await selectOption(versionSelect, previousVersionId)
+  await openWorkspaceTool(page, 'versions')
+  await history
+    .getByRole('button', { name: previousVersion.version_name, exact: true })
+    .click()
+  await expect(history).toBeHidden()
+  await expect(versionSelect).toHaveAttribute('value', previousVersionId)
   const historicalReader = page.getByRole('main').locator('article')
   await expect(
     historicalReader.getByRole('heading', { name: 'Previous Notes' })
@@ -1482,6 +1512,16 @@ for (const width of [1280, 390]) {
     await page.goto(
       `/versions/?project_id=${projectId}&document_id=${documentId}&version_id=${latestVersionId}&endpoint_id=endpoint-precision`
     )
+    await expect(page).toHaveURL(
+      new RegExp(`/documents/${documentId}\\?.*workspace_view=content`)
+    )
+    await expect(
+      page.getByRole('tab', { name: 'OpenAPI endpoints', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByLabel('Version', { exact: true })).toHaveAttribute(
+      'value',
+      latestVersionId
+    )
     const preview = page
       .locator('pre')
       .filter({ hasText: '0.123456789012345678901' })
@@ -1490,5 +1530,23 @@ for (const width of [1280, 390]) {
     await expect(preview).not.toContainText('9007199254740992')
     await preview.scrollIntoViewIfNeeded()
     await page.screenshot({ path: testInfo.outputPath('exact-endpoint.png') })
+    await page.getByRole('tab', { name: 'Source', exact: true }).click()
+    await expect
+      .poll(() => new URL(page.url()).searchParams.has('endpoint_id'))
+      .toBe(false)
+    await expect(
+      page.getByRole('tab', { name: 'Source', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
+    await page
+      .getByRole('tab', { name: 'OpenAPI endpoints', exact: true })
+      .click()
+    await page
+      .getByRole('tabpanel', { name: 'OpenAPI endpoints', exact: true })
+      .getByRole('button', { name: /\/precision/ })
+      .click()
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('endpoint_id'))
+      .toBe('endpoint-precision')
+    await expect(preview).toHaveText(responsesJSON)
   })
 }

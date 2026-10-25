@@ -146,6 +146,38 @@ describe('document routes', () => {
     ).toMatchObject({ search: { workspace_view: 'share' } })
   })
 
+  it('opens a legacy endpoint link in the reader with the exact version and branch', () => {
+    expect(
+      redirectedOptions(VersionsRoute, {
+        ...state.search,
+        document_id: 'legacy-document',
+        branch_id: 'selected-branch',
+        version_id: 'selected-version',
+        endpoint_id: 'selected-endpoint',
+      })
+    ).toMatchObject({
+      to: '/documents/$documentId',
+      params: { documentId: 'legacy-document' },
+      replace: true,
+      search: {
+        ...state.search,
+        document_id: undefined,
+        branch_id: 'selected-branch',
+        version_id: 'selected-version',
+        endpoint_id: 'selected-endpoint',
+        workspace_view: 'content',
+      },
+    })
+    expect(
+      redirectedOptions(VersionsRoute, {
+        ...state.search,
+        document_id: 'legacy-document',
+        endpoint_id: 'selected-endpoint',
+        workspace_view: 'versions',
+      })
+    ).toMatchObject({ search: { workspace_view: 'versions' } })
+  })
+
   it.each([DraftsRoute, VersionsRoute, DiffsRoute])(
     'returns a legacy tool URL without document identity to the scoped hierarchy',
     (route) => {

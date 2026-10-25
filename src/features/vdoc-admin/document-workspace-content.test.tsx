@@ -11,6 +11,8 @@ import {
 const api = vi.hoisted(() => ({
   getDraftContent: vi.fn(),
   getVersionContent: vi.fn(),
+  listEndpoints: vi.fn(),
+  getEndpoint: vi.fn(),
 }))
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
@@ -72,23 +74,35 @@ function renderReader(
   {
     presentation = 'panel',
     canWrite = false,
+    documentType = document.document_type,
+    endpointId: initialEndpointId,
   }: {
     presentation?: 'panel' | 'page'
     canWrite?: boolean
+    documentType?: number
+    endpointId?: string
   } = {}
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
+  })
+  let currentSelection = selection
+  let currentEndpointId = initialEndpointId
+  const onEndpointChange = vi.fn((value: string) => {
+    currentEndpointId = value || undefined
+    screen.rerender(element(currentSelection))
   })
   const element = (nextSelection?: DocumentReadingSelection) => (
     <QueryClientProvider client={client}>
       <LanguageProvider>
         <DocumentWorkspaceContent
           projectId={document.project_id}
-          document={document}
+          document={{ ...document, document_type: documentType }}
           selection={nextSelection}
           canWrite={canWrite}
           presentation={presentation}
+          endpointId={currentEndpointId}
+          onEndpointChange={onEndpointChange}
           onEditDraft={vi.fn()}
         />
       </LanguageProvider>
@@ -97,8 +111,11 @@ function renderReader(
   const screen = render(element(selection))
   return {
     ...screen,
-    rerenderSelection: (nextSelection: DocumentReadingSelection) =>
-      screen.rerender(element(nextSelection)),
+    onEndpointChange,
+    rerenderSelection: (nextSelection: DocumentReadingSelection) => {
+      currentSelection = nextSelection
+      screen.rerender(element(nextSelection))
+    },
   }
 }
 
@@ -110,6 +127,34 @@ describe('document workspace reading selection', () => {
       content: 'Published <literal>\r\ncontent\n',
     })
     api.getDraftContent.mockResolvedValue({ content: 'Selected draft content' })
+    api.listEndpoints.mockResolvedValue({
+      items: [
+        {
+          id: 'endpoint-1',
+          version_id: version.id,
+          method: 'GET',
+          path: '/workspace-endpoint',
+          summary: 'Workspace endpoint',
+          deprecated: false,
+          hash: '',
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      total: 1,
+    })
+    api.getEndpoint.mockResolvedValue({
+      id: 'endpoint-1',
+      version_id: version.id,
+      method: 'GET',
+      path: '/workspace-endpoint',
+      summary: 'Workspace endpoint',
+      deprecated: false,
+      hash: '',
+      created_at: '',
+      updated_at: '',
+      responses: { description: 'Endpoint response facts' },
+    })
   })
 
   it('reads an explicitly selected older published version as literal TXT', async () => {
@@ -230,6 +275,116 @@ describe('document workspace reading selection', () => {
     expect(api.getVersionContent.mock.calls[0][2]).toBe('latest-version')
     expect(api.getDraftContent).not.toHaveBeenCalled()
   })
+
+  it('opens published OpenAPI interfaces from the reader and writes selected endpoint state without navigating to version tools', async () => {
+    const screen = renderReader(publishedSelection, {
+      documentType: 1,
+      presentation: 'page',
+    })
+    await waitFor(() => expect(api.getVersionContent).toHaveBeenCalledOnce())
+    expect(api.listEndpoints).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: 'Source' })).toHaveAttribute(
+      'data-state',
+      'active'
+    )
+    fireEvent.mouseDown(
+      screen.getByRole('tab', { name: 'OpenAPI endpoints' }),
+      { button: 0 }
+    )
+    const row = await screen.findByRole('button', {
+      name: /workspace-endpoint/,
+    })
+    fireEvent.click(row)
+    expect(screen.onEndpointChange).toHaveBeenLastCalledWith('endpoint-1')
+    expect(
+      await screen.findByText('Endpoint response facts', { exact: false })
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('tab', { name: 'Versions' })
+    ).not.toBeInTheDocument()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Source' }), {
+      button: 0,
+    })
+    expect(screen.onEndpointChange).toHaveBeenLastCalledWith('')
+    expect(screen.getByRole('tab', { name: 'Source' })).toHaveAttribute(
+      'data-state',
+      'active'
+    )
+  })
+
+  it('opens an exact OpenAPI endpoint deep link directly without fetching raw source', async () => {
+    const screen = renderReader(publishedSelection, {
+      documentType: 1,
+      endpointId: 'endpoint-1',
+    })
+    expect(
+      await screen.findByText('Endpoint response facts', { exact: false })
+    ).toBeVisible()
+    expect(
+      screen.getByRole('tab', { name: 'OpenAPI endpoints' })
+    ).toHaveAttribute('data-state', 'active')
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+    expect(api.getEndpoint).toHaveBeenCalledWith(
+      'project-1',
+      'document-1',
+      'older-version',
+      'endpoint-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(screen.onEndpointChange).not.toHaveBeenCalled()
+  })
+
+  it.each<DocumentReadingSelection>([
+    { mode: 'published', branchId: 'branch-1' },
+    { ...publishedSelection, invalid: true },
+    { ...publishedSelection, pending: true },
+    { ...publishedSelection, branchId: 'foreign-branch' },
+    {
+      ...publishedSelection,
+      version: { ...version, project_id: 'foreign-project' },
+    },
+    {
+      ...publishedSelection,
+      version: { ...version, document_id: 'foreign-document' },
+    },
+  ])(
+    'does not mount endpoint queries or fall back to latest for an invalid OpenAPI owner: %j',
+    async (selection) => {
+      const screen = renderReader(selection, {
+        documentType: 1,
+        endpointId: 'endpoint-1',
+      })
+      await act(async () => Promise.resolve())
+      expect(api.listEndpoints).not.toHaveBeenCalled()
+      expect(api.getEndpoint).not.toHaveBeenCalled()
+      expect(api.getVersionContent).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole('tab', { name: 'OpenAPI endpoints' })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it.each([2, 3])(
+    'keeps non-OpenAPI document type %s in its existing reader without endpoint requests',
+    async (documentType) => {
+      api.getVersionContent.mockResolvedValue({ content: '# Existing content' })
+      const screen = renderReader(publishedSelection, {
+        documentType,
+        endpointId: 'endpoint-1',
+      })
+      expect(
+        await screen.findByText(
+          documentType === 2 ? 'Existing content' : '# Existing content'
+        )
+      ).toBeVisible()
+      expect(
+        screen.queryByRole('tab', { name: 'OpenAPI endpoints' })
+      ).not.toBeInTheDocument()
+      expect(api.listEndpoints).not.toHaveBeenCalled()
+      expect(api.getEndpoint).not.toHaveBeenCalled()
+      expect(api.getVersionContent.mock.calls[0][2]).toBe('older-version')
+    }
+  )
 
   it('offers retry for the selected revision after a content error', async () => {
     api.getVersionContent.mockRejectedValueOnce(

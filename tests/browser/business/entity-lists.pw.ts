@@ -254,6 +254,15 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
   return { reads, writes, lists }
 }
 
+async function openBranchSettings(page: Page) {
+  await page
+    .getByRole('navigation', { name: 'Document tools', exact: true })
+    .filter({ visible: true })
+    .getByRole('button', { name: 'Document settings', exact: true })
+    .click()
+  await page.getByRole('tab', { name: 'Branches', exact: true }).click()
+}
+
 async function noPageOverflow(page: Page) {
   expect(
     await page.evaluate(
@@ -344,10 +353,7 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
     await noPageOverflow(page)
   }
   await page.goto(documentManagementRoute)
-  await page
-    .getByRole('region', { name: 'Reading context', exact: true })
-    .getByRole('button', { name: 'Manage branches', exact: true })
-    .click()
+  await openBranchSettings(page)
   await page.getByRole('button', { name: 'Create branch', exact: true }).click()
   await expect(
     page
@@ -656,11 +662,7 @@ test('document/branch/user/token creation returns to updated lists', async ({
   ]
   for (const flow of flows) {
     await page.goto(flow.route)
-    if (flow.title === 'Create branch')
-      await page
-        .getByRole('region', { name: 'Reading context', exact: true })
-        .getByRole('button', { name: 'Manage branches', exact: true })
-        .click()
+    if (flow.title === 'Create branch') await openBranchSettings(page)
     await page.getByRole('button', { name: flow.title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: flow.title })
     await dialog.getByLabel('Name', { exact: true }).fill(flow.name)

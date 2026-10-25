@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, FileText, GitBranch, SquarePen } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -17,7 +17,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { OpenApiCodeViewer } from '@/features/public-share/openapi-code-viewer'
 import { PlainTextDocumentViewer } from '@/features/public-share/plain-text-document-viewer'
 import { MarkdownPreview } from './markdown-preview'
-import { DOCUMENT_TYPE_MARKDOWN, DOCUMENT_TYPE_TEXT } from './page-utils'
+import {
+  DOCUMENT_TYPE_MARKDOWN,
+  DOCUMENT_TYPE_OPENAPI,
+  DOCUMENT_TYPE_TEXT,
+} from './page-utils'
+
+const DocumentWorkspaceEndpoints = lazy(() =>
+  import('./document-workspace-endpoints').then((module) => ({
+    default: module.DocumentWorkspaceEndpoints,
+  }))
+)
 
 export type DocumentReadingSelection = {
   mode: 'published' | 'draft'
@@ -36,6 +46,8 @@ export function DocumentWorkspaceContent({
   onEditDraft,
   selection,
   presentation = 'panel',
+  endpointId,
+  onEndpointChange,
 }: {
   projectId: string
   document: DocumentDTO
@@ -43,9 +55,15 @@ export function DocumentWorkspaceContent({
   onEditDraft: () => void
   selection?: DocumentReadingSelection
   presentation?: 'panel' | 'page'
+  endpointId?: string
+  onEndpointChange?: (value: string) => void
 }) {
   const { t } = useLanguage()
   const [view, setView] = useState('preview')
+  const [openApiView, setOpenApiView] = useState({
+    context: '',
+    value: 'source',
+  })
   const revision =
     selection?.mode === 'published' ? selection.version : selection?.draft
   const invalid = Boolean(
@@ -66,6 +84,15 @@ export function DocumentWorkspaceContent({
     : mode === 'published'
       ? (document.latest_version_id ?? '')
       : (document.latest_draft_id ?? '')
+  const hasEndpointBrowser =
+    mode === 'published' && document.document_type === DOCUMENT_TYPE_OPENAPI
+  const openApiContext = JSON.stringify([projectId, document.id, targetId])
+  const activeOpenApiView = endpointId
+    ? 'endpoints'
+    : openApiView.context === openApiContext
+      ? openApiView.value
+      : 'source'
+  const showSource = !hasEndpointBrowser || activeOpenApiView === 'source'
   const contentQuery = useQuery({
     queryKey: [
       mode === 'published' ? 'version-content' : 'draft-content',
@@ -81,7 +108,7 @@ export function DocumentWorkspaceContent({
             signal,
           })
         : getDraftContent(projectId, document.id, targetId, 'raw', { signal }),
-    enabled: Boolean(targetId),
+    enabled: Boolean(targetId) && showSource,
     placeholderData: undefined,
   })
   if (selection?.pending)
@@ -176,12 +203,12 @@ export function DocumentWorkspaceContent({
           )}
         </div>
       )}
-      {contentQuery.isLoading && (
+      {showSource && contentQuery.isLoading && (
         <p role='status' className='py-8 text-sm text-muted-foreground'>
           {t('admin.common.loading')}
         </p>
       )}
-      {contentQuery.isError && (
+      {showSource && contentQuery.isError && (
         <Alert variant='destructive'>
           <AlertCircle aria-hidden />
           <AlertTitle>{t('admin.common.error')}</AlertTitle>
@@ -197,64 +224,112 @@ export function DocumentWorkspaceContent({
           </AlertDescription>
         </Alert>
       )}
-      {content === '' && (
+      {showSource && content === '' && (
         <p className='py-8 text-sm text-muted-foreground'>
           {t('admin.workspace.emptyRevision')}
         </p>
       )}
-      {content !== undefined && content !== '' && (
-        <div data-document-content className='min-w-0'>
-          {document.document_type === DOCUMENT_TYPE_MARKDOWN ? (
-            <Tabs
-              value={view}
-              onValueChange={setView}
-              className='min-w-0 gap-4'
-            >
-              <TabsList>
-                <TabsTrigger value='preview'>
-                  {t('admin.workspace.preview')}
-                </TabsTrigger>
-                <TabsTrigger value='source'>
-                  {t('admin.workspace.source')}
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent
-                value='preview'
-                className={cn(
-                  'w-full min-w-0',
-                  presentation === 'page' ? '' : 'mx-auto max-w-[75ch]'
-                )}
-              >
-                <MarkdownPreview
+      {hasEndpointBrowser ? (
+        <Tabs
+          value={activeOpenApiView}
+          onValueChange={(value) => {
+            setOpenApiView({ context: openApiContext, value })
+            if (value === 'source' && endpointId) onEndpointChange?.('')
+          }}
+          className='min-w-0 gap-4'
+        >
+          <TabsList>
+            <TabsTrigger value='source'>
+              {t('admin.workspace.source')}
+            </TabsTrigger>
+            <TabsTrigger value='endpoints'>
+              {t('admin.sections.endpoints')}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value='source' className='min-w-0'>
+            {content !== undefined && content !== '' && (
+              <div data-document-content className='min-w-0'>
+                <OpenApiCodeViewer
                   content={content}
                   variant={presentation === 'page' ? 'article' : 'panel'}
-                  documentTitle={document.name}
                 />
-              </TabsContent>
-              <TabsContent value='source' className='min-w-0'>
-                <pre className='max-w-full overflow-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-6'>
-                  {content}
-                </pre>
-              </TabsContent>
-            </Tabs>
-          ) : document.document_type === DOCUMENT_TYPE_TEXT ? (
-            <PlainTextDocumentViewer
-              content={content}
-              variant={presentation === 'page' ? 'article' : 'panel'}
-              className={cn(
-                'w-full',
-                presentation === 'page'
-                  ? ''
-                  : 'max-w-[75ch] border-0 bg-transparent px-0 py-2 shadow-none sm:p-0'
-              )}
-            />
-          ) : (
-            <OpenApiCodeViewer
-              content={content}
-              variant={presentation === 'page' ? 'article' : 'panel'}
-            />
-          )}
-        </div>
+              </div>
+            )}
+          </TabsContent>
+          <TabsContent value='endpoints' className='min-w-0'>
+            <Suspense
+              fallback={
+                <p role='status' className='py-8 text-sm text-muted-foreground'>
+                  {t('admin.common.loading')}
+                </p>
+              }
+            >
+              <DocumentWorkspaceEndpoints
+                projectId={projectId}
+                documentId={document.id}
+                versionId={targetId}
+                endpointId={endpointId}
+                onEndpointChange={(value) => onEndpointChange?.(value)}
+              />
+            </Suspense>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        content !== undefined &&
+        content !== '' && (
+          <div data-document-content className='min-w-0'>
+            {document.document_type === DOCUMENT_TYPE_MARKDOWN ? (
+              <Tabs
+                value={view}
+                onValueChange={setView}
+                className='min-w-0 gap-4'
+              >
+                <TabsList>
+                  <TabsTrigger value='preview'>
+                    {t('admin.workspace.preview')}
+                  </TabsTrigger>
+                  <TabsTrigger value='source'>
+                    {t('admin.workspace.source')}
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent
+                  value='preview'
+                  className={cn(
+                    'w-full min-w-0',
+                    presentation === 'page' ? '' : 'mx-auto max-w-[75ch]'
+                  )}
+                >
+                  <MarkdownPreview
+                    content={content}
+                    variant={presentation === 'page' ? 'article' : 'panel'}
+                    documentTitle={document.name}
+                  />
+                </TabsContent>
+                <TabsContent value='source' className='min-w-0'>
+                  <pre className='max-w-full overflow-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-6'>
+                    {content}
+                  </pre>
+                </TabsContent>
+              </Tabs>
+            ) : document.document_type === DOCUMENT_TYPE_TEXT ? (
+              <PlainTextDocumentViewer
+                content={content}
+                variant={presentation === 'page' ? 'article' : 'panel'}
+                className={cn(
+                  'w-full',
+                  presentation === 'page'
+                    ? ''
+                    : 'max-w-[75ch] border-0 bg-transparent px-0 py-2 shadow-none sm:p-0'
+                )}
+              />
+            ) : (
+              <OpenApiCodeViewer
+                content={content}
+                variant={presentation === 'page' ? 'article' : 'panel'}
+              />
+            )}
+          </div>
+        )
       )}
     </section>
   )
