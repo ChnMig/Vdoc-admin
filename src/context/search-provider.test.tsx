@@ -6,6 +6,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearDocumentContext } from '@/lib/document-workspace-navigation'
 import { SearchProvider } from '@/context/search-provider'
 
 const COMMAND_MENU_PLACEHOLDER = 'Type a command or search...'
@@ -68,7 +69,7 @@ describe('SearchProvider and CommandMenu', () => {
     expect(getByText('Light')).toBeInTheDocument()
     expect(getByText('Dark')).toBeInTheDocument()
     expect(getByText('System')).toBeInTheDocument()
-    expect(getByText('Documents')).toBeInTheDocument()
+    expect(getByText('Workspace')).toBeInTheDocument()
     expect(screen.queryByText('Drafts')).not.toBeInTheDocument()
     expect(screen.queryByText('Versions')).not.toBeInTheDocument()
     expect(screen.queryByText('Diffs')).not.toBeInTheDocument()
@@ -107,11 +108,11 @@ describe('SearchProvider and CommandMenu', () => {
 
     await openCommandPalette(screen)
 
-    await userEvent.click(screen.getByText('Projects'))
+    await userEvent.click(screen.getByText('Workspace'))
 
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: '/projects',
-      search: true,
+      to: '/documents',
+      search: clearDocumentContext,
     })
     await waitFor(() =>
       expect(

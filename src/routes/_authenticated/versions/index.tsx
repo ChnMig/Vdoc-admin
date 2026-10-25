@@ -1,23 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { DocumentWorkspacePage } from '@/features/vdoc-admin/document-workspace-page'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { legacyDocumentDestination } from '@/lib/document-workspace-navigation'
 
 export const Route = createFileRoute('/_authenticated/versions/')({
-  component: VersionsRoute,
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      ...legacyDocumentDestination(search, 'versions'),
+      replace: true,
+    })
+  },
 })
-
-function VersionsRoute() {
-  const search = Route.useSearch()
-  const navigate = Route.useNavigate()
-  return (
-    <DocumentWorkspacePage
-      defaultView='versions'
-      search={search}
-      onSearchChange={(patch, options) =>
-        void navigate({
-          replace: options?.replace ?? false,
-          search: (current) => ({ ...current, ...patch }),
-        })
-      }
-    />
-  )
-}

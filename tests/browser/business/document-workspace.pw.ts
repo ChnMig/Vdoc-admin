@@ -11,7 +11,7 @@ import { selectOption } from '../helpers/select-option'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 const evidenceDirectory = resolve(
-  '.artifacts/document-workspace-redesign-20261025'
+  '.artifacts/document-workspace-redesign-20261025-beta9'
 )
 const projectId = 'workspace-project'
 const documentId = 'workspace-handbook'
@@ -24,6 +24,21 @@ const mainDraftId = 'draft-main'
 const releaseDraftId = 'draft-release'
 const timestamp = '2026-10-25T08:00:00Z'
 const basePath = `/api/v1/private/projects/${projectId}/documents/${documentId}`
+const browserErrors = new WeakMap<Page, string[]>()
+
+test.beforeEach(({ page }) => {
+  const errors: string[] = []
+  browserErrors.set(page, errors)
+  page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
+})
+
+test.afterEach(({ page }) => {
+  expect(browserErrors.get(page)).toEqual([])
+})
+
 const headers = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': 'Authorization, Content-Type',
@@ -132,7 +147,12 @@ async function envelope(route: Route, detail: unknown, total?: number) {
   })
 }
 
-async function installWorkspace(page: Page, language = 'en') {
+async function installWorkspace(
+  page: Page,
+  language = 'en',
+  role: 'admin' | 'writer' | 'reader' = 'admin',
+  longContent = false
+) {
   const requests: ApiRequest[] = []
   const unexpected: string[] = []
   const branches = [
@@ -168,12 +188,41 @@ async function installWorkspace(page: Page, language = 'en') {
     })
     if (path.endsWith('/identity/me'))
       return envelope(route, {
-        id: 'workspace-admin',
+        id: `workspace-${role}`,
         name: 'Documentation admin',
         email: 'admin@example.test',
-        is_super_admin: true,
+        is_super_admin: role === 'admin',
+        can_access_audit: role === 'admin',
         status: 1,
       })
+    if (path === '/api/v1/private/teams')
+      return envelope(
+        route,
+        [
+          {
+            id: 'workspace-team',
+            name: 'Documentation team',
+            description: 'Shared product knowledge',
+          },
+        ],
+        1
+      )
+    if (path === `/api/v1/private/projects/${projectId}/members`)
+      return envelope(
+        route,
+        [
+          {
+            project_id: projectId,
+            user_id: `workspace-${role}`,
+            user_name: role,
+            user_email: `${role}@example.test`,
+            user_status: 1,
+            status: 1,
+            role: role === 'reader' ? 1 : 2,
+          },
+        ],
+        1
+      )
     if (path === '/api/v1/private/projects')
       return envelope(
         route,
@@ -267,7 +316,10 @@ async function installWorkspace(page: Page, language = 'en') {
       return envelope(route, {
         owner_type: contentMatch[1] === 'versions' ? 'version' : 'draft',
         owner_id: id,
-        content: contentById[id],
+        content:
+          longContent && id === latestId
+            ? `${contentById[id].replace('## Release checklist', `${Array.from({ length: 16 }, (_, index) => `Integration step ${index + 1}: validate the credential scope and the reviewed document contract before enabling traffic.`).join('\n\n')}\n\n## Release checklist`)}\n\n## Appendix\n\n${Array.from({ length: 8 }, () => 'Keep an audit record of the reviewed integration and verify its published version before deployment.').join('\n\n')}`
+            : contentById[id],
         content_kind: 'markdown',
         kind: 'raw',
         hash: `synthetic-${id}`,
@@ -353,14 +405,57 @@ async function chooseWorkspaceOption(trigger: Locator, value: string) {
 }
 
 async function openDocument(page: Page) {
-  await page.goto(`/documents/?team_id=workspace-team&project_id=${projectId}`)
-  const tree = page.getByRole('navigation', { name: 'Files', exact: true })
-  await tree.getByRole('button', { name: 'Expand guides', exact: true }).click()
-  await tree.getByRole('button', { name: /integration\.md/ }).click()
+  await page.goto('/documents')
+  const hierarchy = page.getByRole('navigation', {
+    name: 'Teams and projects',
+    exact: true,
+  })
+  await hierarchy
+    .getByRole('button', { name: 'Documentation team', exact: true })
+    .click()
+  await hierarchy
+    .getByRole('button', { name: 'Developer platform', exact: true })
+    .click()
+  await page.getByRole('button', { name: 'guides', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Integration handbook', exact: true })
+    .click()
+  await expect(page).toHaveURL(new RegExp(`/documents/${documentId}\\?`))
   await expect(
     page.getByRole('heading', { name: 'Integration handbook 2.4', exact: true })
   ).toBeVisible()
+  return page.getByRole('navigation', { name: 'Files', exact: true })
+}
+
+async function showFiles(page: Page) {
+  const tree = page.getByRole('navigation', { name: 'Files', exact: true })
+  if (!(await tree.isVisible()))
+    await page.getByRole('button', { name: 'Show files', exact: true }).click()
+  await expect(tree).toBeVisible()
   return tree
+}
+
+async function closeMobileFiles(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) < 768) {
+    await page
+      .getByRole('dialog', { name: 'Files', exact: true })
+      .getByRole('button', { name: 'Close', exact: true })
+      .click()
+    await expect(
+      page.getByRole('dialog', { name: 'Files', exact: true })
+    ).toHaveCount(0)
+  }
+}
+
+async function openTool(
+  page: Page,
+  name: 'Versions' | 'Diffs' | 'Document AI' | 'Document settings'
+) {
+  const navigation = page
+    .getByRole('navigation', { name: 'Document tools', exact: true })
+    .filter({ visible: true })
+    .first()
+  await navigation.getByRole('button', { name, exact: true }).click()
 }
 
 async function assertNoPageOverflow(page: Page) {
@@ -371,13 +466,48 @@ async function assertNoPageOverflow(page: Page) {
   expect(content).toBeLessThanOrEqual(viewport)
 }
 
+async function assertReadingColumns(page: Page, width: number) {
+  const files = page.getByRole('complementary', { name: 'Files', exact: true })
+  const reader = page.locator('[data-document-page] main#content')
+  const tools = page.getByRole('complementary', {
+    name: 'Document outline and tools',
+    exact: true,
+  })
+  await expect(reader).toBeVisible()
+  if (width >= 1280) {
+    await expect(files).toBeVisible()
+    await expect(tools).toBeVisible()
+    const [fileBounds, readerBounds, toolBounds] = await Promise.all([
+      files.boundingBox(),
+      reader.boundingBox(),
+      tools.boundingBox(),
+    ])
+    expect(fileBounds).not.toBeNull()
+    expect(readerBounds).not.toBeNull()
+    expect(toolBounds).not.toBeNull()
+    expect(readerBounds!.x).toBeGreaterThanOrEqual(
+      fileBounds!.x + fileBounds!.width
+    )
+    expect(toolBounds!.x).toBeGreaterThanOrEqual(
+      readerBounds!.x + readerBounds!.width
+    )
+    expect(readerBounds!.width).toBeGreaterThan(600)
+    expect(toolBounds!.width).toBeGreaterThanOrEqual(200)
+  } else {
+    await expect(files).toHaveCount(0)
+    await expect(tools).toBeHidden()
+    await expect(
+      page.getByRole('button', { name: 'Show files', exact: true })
+    ).toBeVisible()
+    expect((await reader.boundingBox())?.width).toBe(width)
+  }
+}
+
 async function capture(page: Page, name: string, width: number) {
   await mkdir(evidenceDirectory, { recursive: true })
-  const dialog = page.getByRole('dialog')
-  if (await dialog.isVisible())
-    await dialog.getByRole('heading').first().click()
-  else await page.getByRole('heading', { level: 1 }).first().click()
   await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur()
     window.scrollTo(0, 0)
     return document.fonts.ready
   })
@@ -390,13 +520,15 @@ async function capture(page: Page, name: string, width: number) {
   })
 }
 
-for (const width of [1440, 390]) {
+for (const width of [1440, 1920, 390]) {
   test(`document reading preserves exact revision and folder selection at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
     const api = await installWorkspace(page)
-    const tree = await openDocument(page)
+    await openDocument(page)
+    await assertReadingColumns(page, width)
+    const tree = await showFiles(page)
     const iconPaths: string[] = []
     for (const [fileName, typeName] of [
       [/platform\.yaml/, 'OpenAPI'],
@@ -404,32 +536,35 @@ for (const width of [1440, 390]) {
       [/operations\.txt/, 'TXT'],
     ] as const) {
       const file = tree.getByRole('button', { name: fileName })
-      await expect(file).toContainText(typeName)
+      await expect(file).toHaveAccessibleName(new RegExp(typeName))
       const icon = file.locator('svg').first()
       await expect(icon).toBeVisible()
       iconPaths.push(await icon.innerHTML())
     }
     expect(new Set(iconPaths).size).toBe(3)
+    await closeMobileFiles(page)
     await capture(page, 'content-current', width)
+    await showFiles(page)
     await tree
       .getByRole('button', { name: 'Collapse guides', exact: true })
       .click()
     await expect(
       tree.getByRole('button', { name: /integration\.md/ })
     ).toHaveCount(0)
-    await expect(
-      page.getByRole('heading', {
-        name: 'Integration handbook 2.4',
-        exact: true,
-      })
-    ).toBeVisible()
-    expect(new URL(page.url()).searchParams.get('document_id')).toBe(documentId)
+    expect(new URL(page.url()).pathname).toBe(`/documents/${documentId}`)
     await tree
       .getByRole('button', { name: 'Expand guides', exact: true })
       .click()
     await expect(
       tree.getByRole('button', { name: /integration\.md/ })
     ).toHaveAttribute('aria-current', 'page')
+    await closeMobileFiles(page)
+    await expect(
+      page.getByRole('heading', {
+        name: 'Integration handbook 2.4',
+        exact: true,
+      })
+    ).toBeVisible()
     await chooseWorkspaceOption(
       page.getByRole('combobox', { name: 'Version', exact: true }),
       historicalId
@@ -446,10 +581,6 @@ for (const width of [1440, 390]) {
         exact: true,
       })
     ).toHaveCount(0)
-    if (width === 390)
-      await page
-        .getByRole('button', { name: 'Hide files', exact: true })
-        .click()
     await capture(page, 'content-historical', width)
     await chooseWorkspaceOption(
       page.getByRole('combobox', { name: 'Content state', exact: true }),
@@ -519,7 +650,7 @@ for (const width of [1440, 390]) {
       .boundingBox()
     expect(expiryBounds).not.toBeNull()
     expect(passwordBounds).not.toBeNull()
-    if (width === 1440)
+    if (width >= 1440)
       expect(Math.abs(expiryBounds!.y - passwordBounds!.y)).toBeLessThanOrEqual(
         1
       )
@@ -567,19 +698,12 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     const api = await installWorkspace(page)
     await openDocument(page)
-    if (width === 390)
-      await page
-        .getByRole('button', { name: 'Hide files', exact: true })
-        .click()
     await chooseWorkspaceOption(
       page.getByRole('combobox', { name: 'Version', exact: true }),
       historicalId
     )
-    await page.getByRole('tab', { name: 'Document tools', exact: true }).click()
-    const toolTabs = page
-      .getByRole('tabpanel', { name: 'Document tools', exact: true })
-      .getByRole('tablist')
-      .first()
+    await openTool(page, 'Versions')
+    const toolTabs = page.getByRole('tablist').filter({ visible: true }).first()
     await expect(
       toolTabs.getByRole('tab', { name: 'Versions', exact: true })
     ).toBeVisible()
@@ -591,7 +715,7 @@ for (const width of [1440, 390]) {
       page.getByRole('combobox', { name: 'To version', exact: true })
     ).toBeVisible()
     await capture(page, 'tools-diffs', width)
-    await page.getByRole('tab', { name: 'Document AI', exact: true }).click()
+    await openTool(page, 'Document AI')
     await expect(
       page.getByText(`Summary for exact revision ${historicalId}.`, {
         exact: true,
@@ -650,7 +774,7 @@ for (const width of [1440, 390]) {
         exact: true,
       })
     ).toBeVisible()
-    await page.getByRole('tab', { name: 'Document AI', exact: true }).click()
+    await openTool(page, 'Document AI')
     await expect(
       page.getByText(`Summary for exact revision ${releaseDraftId}.`, {
         exact: true,
@@ -665,8 +789,9 @@ for (const width of [1440, 390]) {
       )
     ).toBe(true)
     await capture(page, 'ai-draft', width)
+    await openTool(page, 'Document settings')
     await page
-      .getByRole('button', { name: 'Manage branches', exact: true })
+      .getByRole('tab', { name: 'Manage branches', exact: true })
       .click()
     await expect(
       page.getByRole('tab', { name: 'Manage branches', exact: true })
@@ -701,5 +826,215 @@ for (const width of [1440, 390]) {
       resolve(evidenceDirectory, `tools-ai-requests-${width}.json`),
       JSON.stringify(api.requests, null, 2)
     )
+  })
+
+  test(`hierarchy opens a standalone document and returns without a navigation loop at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const api = await installWorkspace(page)
+    await openDocument(page)
+    await expect(page.locator('[data-document-page]')).toBeVisible()
+    await expect(
+      page.getByRole('navigation', { name: 'Teams and projects', exact: true })
+    ).toHaveCount(0)
+    await showFiles(page)
+    await page
+      .getByRole('button', { name: 'Back to workspace', exact: true })
+      .click()
+    await expect(page).toHaveURL(new RegExp(`/documents\\?`))
+    await expect(
+      page.getByRole('heading', { name: 'Workspace', exact: true })
+    ).toBeVisible()
+    await expect(page.locator('[data-document-page]')).toHaveCount(0)
+    expect(new URL(page.url()).searchParams.get('document_id')).toBeNull()
+    await capture(page, 'workspace-hierarchy', width)
+    await page.getByRole('button', { name: 'guides', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Integration handbook', exact: true })
+      .click()
+    await expect(page).toHaveURL(new RegExp(`/documents/${documentId}\\?`))
+    await expect(
+      page.getByRole('heading', {
+        name: 'Integration handbook 2.4',
+        exact: true,
+      })
+    ).toBeVisible()
+    await page.goBack()
+    await expect(
+      page.getByRole('heading', { name: 'Workspace', exact: true })
+    ).toBeVisible()
+    await expect(page.locator('[data-document-page]')).toHaveCount(0)
+    await page.waitForLoadState('networkidle')
+    expect(new URL(page.url()).pathname).toBe('/documents')
+    expect(api.unexpected).toEqual([])
+  })
+
+  test(`outline links locate document sections within the reader at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const api = await installWorkspace(page, 'en', 'admin', true)
+    await openDocument(page)
+    if (width === 390)
+      await page
+        .getByRole('button', { name: 'On this page', exact: true })
+        .click()
+    const outline = page.getByRole('navigation', {
+      name: 'On this page',
+      exact: true,
+    })
+    const link = outline.getByRole('link', {
+      name: 'Release checklist',
+      exact: true,
+    })
+    await expect(link).toBeVisible()
+    await link.click()
+    if (width === 390)
+      await expect(
+        page.getByRole('dialog', { name: 'On this page', exact: true })
+      ).toHaveCount(0)
+    const reader = page.locator('[data-document-page] main#content')
+    const target = reader.getByRole('heading', {
+      name: 'Release checklist',
+      exact: true,
+    })
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(100)
+    await expect
+      .poll(async () => {
+        const targetBox = await target.boundingBox()
+        const readerBox = await reader.boundingBox()
+        return Boolean(
+          targetBox &&
+          readerBox &&
+          targetBox.y >= readerBox.y &&
+          targetBox.y + targetBox.height <= readerBox.y + readerBox.height
+        )
+      })
+      .toBe(true)
+    await expect(
+      page.getByRole('combobox', { name: 'Version', exact: true })
+    ).toHaveAttribute('value', latestId)
+    await capture(page, 'outline-section', width)
+    expect(api.unexpected).toEqual([])
+  })
+
+  test(`draft editor retains unsaved input across the document AI sidebar at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const api = await installWorkspace(page)
+    await page.goto(
+      `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}&branch_id=${mainBranchId}&content_mode=draft&draft_id=${mainDraftId}`
+    )
+    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
+    const editor = page.locator('textarea[name="content"]')
+    await expect(editor).toHaveValue(contentById[mainDraftId])
+    const unsavedContent =
+      '# Unsaved integration changes\n\nKeep this exact local draft while using document tools.'
+    await editor.fill(unsavedContent)
+    await page
+      .getByRole('textbox', { name: 'Version name', exact: true })
+      .fill('2.5.0-local')
+    await openTool(page, 'Document AI')
+    await expect(
+      page.getByText(`Summary for exact revision ${mainDraftId}.`, {
+        exact: true,
+      })
+    ).toBeVisible()
+    await page
+      .getByLabel('AI chat message', { exact: true })
+      .fill('Explain this saved draft without replacing my local edits.')
+    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
+    await expect(editor).toHaveValue(unsavedContent)
+    await expect(
+      page.getByRole('textbox', { name: 'Version name', exact: true })
+    ).toHaveValue('2.5.0-local')
+    expect(new URL(page.url()).searchParams.get('draft_id')).toBe(mainDraftId)
+    expect(
+      api.requests.filter((request) =>
+        ['POST', 'PATCH'].includes(request.method)
+      )
+    ).toEqual([])
+    await capture(page, 'draft-unsaved', width)
+    expect(api.unexpected).toEqual([])
+  })
+
+  test(`reader can inspect exact revisions and AI without management actions at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    const api = await installWorkspace(page, 'en', 'reader')
+    await openDocument(page)
+    await showFiles(page)
+    await expect(
+      page.getByRole('button', { name: 'New document', exact: true })
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: 'New folder', exact: true })
+    ).toHaveCount(0)
+    await closeMobileFiles(page)
+    for (const name of [
+      'Share',
+      'Edit draft',
+      'Document settings',
+      'Manage branches',
+    ])
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(
+        0
+      )
+    await capture(page, 'reader-current', width)
+    await chooseWorkspaceOption(
+      page.getByRole('combobox', { name: 'Version', exact: true }),
+      historicalId
+    )
+    await expect(
+      page.getByRole('heading', {
+        name: 'Historical handbook 2.3',
+        exact: true,
+      })
+    ).toBeVisible()
+    await openTool(page, 'Document AI')
+    await expect(
+      page.getByText(`Summary for exact revision ${historicalId}.`, {
+        exact: true,
+      })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Regenerate AI summary', exact: true })
+    ).toBeDisabled()
+    await page
+      .getByLabel('AI chat message', { exact: true })
+      .fill('Summarize this historical release.')
+    await page
+      .getByRole('button', { name: 'Send AI message', exact: true })
+      .click()
+    await expect(
+      page.getByText('This answer uses the selected document revision.', {
+        exact: false,
+      })
+    ).toBeVisible()
+    expect(
+      api.requests.find(
+        (request) =>
+          request.method === 'POST' &&
+          request.path.endsWith('/ai/chat-sessions')
+      )?.body
+    ).toMatchObject({
+      document_id: documentId,
+      context_type: 'version',
+      context_id: historicalId,
+    })
+    expect(
+      api.requests.some(
+        (request) =>
+          request.path === '/api/v1/private/teams' ||
+          request.path === '/api/v1/private/users'
+      )
+    ).toBe(false)
+    await capture(page, 'reader-ai', width)
+    expect(api.unexpected).toEqual([])
   })
 }

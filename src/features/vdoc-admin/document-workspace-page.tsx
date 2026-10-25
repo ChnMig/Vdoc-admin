@@ -1,6 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, FolderTree } from 'lucide-react'
+import {
+  ArrowLeft,
+  FileText,
+  FolderGit2,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { cn } from '@/lib/utils'
@@ -11,7 +17,6 @@ import {
   listDocuments,
   listProjectMembers,
   listProjects,
-  type ProjectDTO,
 } from '@/lib/vdoc-api'
 import { invalidateVdocQueries } from '@/lib/vdoc-query-invalidation'
 import type {
@@ -19,14 +24,16 @@ import type {
   VdocRouteSearch,
 } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { LanguageSwitch } from '@/components/language-switch'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
-import { Search } from '@/components/search'
-import { ThemeSwitch } from '@/components/theme-switch'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
 import { DocumentFileTree } from './document-file-tree'
 import {
   DocumentFormFields,
@@ -38,12 +45,7 @@ import {
   emptyDocumentSelection,
   type WorkspaceView,
 } from './document-workspace-model'
-import {
-  FormDialog,
-  LoadingErrorState,
-  NativeSelect,
-  TextField,
-} from './page-shared'
+import { FormDialog, LoadingErrorState, TextField } from './page-shared'
 import {
   ACTIVE_STATUS,
   ROLE_ADMIN,
@@ -68,6 +70,8 @@ export function DocumentWorkspacePage({
   const [localSearch, setLocalSearch] = useState<VdocRouteSearch>(search)
   const routeSearch = onSearchChange ? search : localSearch
   const [filesVisible, setFilesVisible] = useState(true)
+  const [mobileFilesOpen, setMobileFilesOpen] = useState(false)
+  const isMobile = useIsMobile()
   const changeSearch = (patch: Partial<VdocRouteSearch>, replace = false) => {
     if (onSearchChange) onSearchChange(patch, { replace })
     else setLocalSearch((current) => ({ ...current, ...patch }))
@@ -91,13 +95,15 @@ export function DocumentWorkspacePage({
   const teamId =
     routeSearch.team_id ??
     requestedProject?.team_id ??
-    teamOptions[0]?.value ??
+    (routeSearch.document_id ? undefined : teamOptions[0]?.value) ??
     ''
   const teamProjects = projects.filter((project) => project.team_id === teamId)
   const project = routeSearch.project_id
     ? teamProjects.find((candidate) => candidate.id === routeSearch.project_id)
-    : (teamProjects.find((candidate) => candidate.status === ACTIVE_STATUS) ??
-      teamProjects[0])
+    : routeSearch.document_id
+      ? undefined
+      : (teamProjects.find((candidate) => candidate.status === ACTIVE_STATUS) ??
+        teamProjects[0])
   const projectId = project?.id ?? ''
   const effectiveScope = `${sessionVersion}:${teamId}:${projectId}`
   const currentScope = useRef<string | null>(effectiveScope)
@@ -153,8 +159,9 @@ export function DocumentWorkspacePage({
   }, [mutationScope])
   const unavailable = Boolean(
     (projectsQuery.isSuccess &&
-      ((routeSearch.team_id &&
-        !teamOptions.some((team) => team.value === teamId)) ||
+      ((routeSearch.document_id && !routeSearch.project_id) ||
+        (routeSearch.team_id &&
+          !teamOptions.some((team) => team.value === teamId)) ||
         (routeSearch.project_id && !project))) ||
     (documentsQuery.isSuccess && routeSearch.document_id && !document) ||
     (foldersQuery.isSuccess && folderId && !folder)
@@ -166,17 +173,6 @@ export function DocumentWorkspacePage({
     setStoredProject(projectId)
     setStoredDocument(document?.id ?? '')
   }, [projectId, document?.id, setStoredProject, setStoredDocument])
-  const selectProject = (
-    selected: ProjectDTO | undefined,
-    selectedTeam = teamId
-  ) =>
-    changeSearch({
-      ...emptyDocumentSelection,
-      team_id: selectedTeam || undefined,
-      project_id: selected?.id,
-      folder_id: undefined,
-      workspace_view: 'content',
-    })
   const createMutation = useMutation({
     mutationFn: async (request: {
       projectId: string
@@ -225,203 +221,227 @@ export function DocumentWorkspacePage({
         changeSearch({ folder_id: result.id })
     },
   })
-  return (
-    <>
-      <Header>
-        <Search className='me-auto' />
-        <LanguageSwitch />
-        <ThemeSwitch />
-        <ProfileDropdown />
-      </Header>
-      <Main fluid className='min-w-0 pt-2'>
-        <div className='mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3'>
-          <div>
-            <h1 className='text-2xl font-semibold tracking-tight'>
-              {t('admin.workspace.title')}
-            </h1>
-            <p className='mt-1 max-w-3xl text-sm leading-6 text-muted-foreground'>
-              {t('admin.workspace.description')}
+  const backToWorkspace = () =>
+    changeSearch({
+      ...emptyDocumentSelection,
+      folder_id: undefined,
+      workspace_view: 'content',
+    })
+  const navigationActions = (
+    <Button
+      variant='ghost'
+      size='icon'
+      className='size-8 shrink-0'
+      aria-label={
+        isMobile || !filesVisible
+          ? t('admin.workspace.showFiles')
+          : t('admin.workspace.hideFiles')
+      }
+      aria-expanded={isMobile ? mobileFilesOpen : filesVisible}
+      aria-controls='workspace-files'
+      onClick={() =>
+        isMobile
+          ? setMobileFilesOpen(true)
+          : setFilesVisible((visible) => !visible)
+      }
+    >
+      {filesVisible && !isMobile ? (
+        <PanelLeftClose aria-hidden className='size-4' />
+      ) : (
+        <PanelLeftOpen aria-hidden className='size-4' />
+      )}
+    </Button>
+  )
+  const fileNavigation = (
+    <div
+      id='workspace-files'
+      className='flex h-full min-h-0 min-w-0 flex-col bg-muted/20'
+    >
+      <div className='shrink-0 border-b px-3 py-3'>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='mb-4 h-8 gap-2 text-muted-foreground'
+          onClick={backToWorkspace}
+        >
+          <ArrowLeft aria-hidden className='size-4' />
+          {t('admin.workspace.backToWorkspace')}
+        </Button>
+        <div className='flex min-w-0 items-center gap-2 px-2 pb-1'>
+          <FolderGit2
+            aria-hidden
+            className='size-5 shrink-0 text-muted-foreground'
+          />
+          <div className='min-w-0'>
+            <p className='truncate text-sm font-semibold' title={project?.name}>
+              {project?.name ?? t('admin.fields.project')}
+            </p>
+            <p className='mt-0.5 truncate text-xs text-muted-foreground'>
+              {project?.team_name}
             </p>
           </div>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() => setFilesVisible((visible) => !visible)}
-            aria-expanded={filesVisible}
-            aria-controls='workspace-files'
-          >
-            <FolderTree aria-hidden />
-            {filesVisible
-              ? t('admin.workspace.hideFiles')
-              : t('admin.workspace.showFiles')}
-          </Button>
         </div>
-        <div className='mb-5 grid min-w-0 gap-3 border-b pb-5 sm:max-w-2xl sm:grid-cols-2'>
-          <NativeSelect
-            label={t('admin.fields.team')}
-            value={teamId}
-            placeholder={t('admin.workspace.chooseTeam')}
-            options={teamOptions}
-            onChange={(value) =>
-              selectProject(
-                projects.find(
-                  (item) =>
-                    item.team_id === value && item.status === ACTIVE_STATUS
-                ) ?? projects.find((item) => item.team_id === value),
-                value
-              )
+      </div>
+      <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3'>
+        {canMutate && (
+          <div className='flex flex-wrap gap-2 px-3'>
+            <FormDialog
+              title={t('admin.workspace.newDocument')}
+              submitLabel={t('admin.common.create')}
+              triggerSize='sm'
+              pending={createMutation.isPending}
+              disabled={unavailable}
+              submissionScope={`${effectiveScope}:${folderId}`}
+              onSubmit={(formData) =>
+                createMutation.mutateAsync({
+                  projectId,
+                  owner: mutationScope,
+                  formData,
+                })
+              }
+            >
+              <DocumentFormFields
+                projectId={projectId}
+                initialFolderId={folderId}
+              />
+            </FormDialog>
+            <FormDialog
+              title={t('admin.workspace.newFolder')}
+              submitLabel={t('admin.workspace.createFolder')}
+              triggerVariant='outline'
+              triggerSize='sm'
+              pending={folderMutation.isPending}
+              disabled={unavailable}
+              submissionScope={`${effectiveScope}:${folderId}`}
+              onSubmit={(formData) =>
+                folderMutation.mutateAsync({
+                  projectId,
+                  parentId: folderId,
+                  name: fieldValue(formData, 'name'),
+                  owner: mutationScope,
+                })
+              }
+            >
+              <p className='text-sm text-muted-foreground'>
+                {folder?.path ?? t('admin.workspace.rootFolder')}
+              </p>
+              <TextField
+                label={t('admin.workspace.folderName')}
+                name='name'
+                required
+              />
+            </FormDialog>
+          </div>
+        )}
+        <LoadingErrorState state={documentsQuery} />
+        <LoadingErrorState state={foldersQuery} />
+        {!documentsQuery.isPending && !foldersQuery.isPending && (
+          <DocumentFileTree
+            key={`${effectiveScope}`}
+            folders={folders}
+            documents={documentsQuery.data?.items ?? []}
+            documentId={document?.id}
+            folderId={folderId}
+            onDocumentSelect={(selected) => {
+              changeSearch(documentSelection(selected))
+              setMobileFilesOpen(false)
+            }}
+            onFolderSelect={(selected) =>
+              changeSearch({ folder_id: selected || 'root' })
             }
           />
-          <NativeSelect
-            label={t('admin.fields.project')}
-            value={projectId}
-            placeholder={t('admin.workspace.chooseProject')}
-            options={teamProjects.map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
-            onChange={(value) =>
-              selectProject(teamProjects.find((item) => item.id === value))
-            }
-          />
-        </div>
-        <LoadingErrorState state={projectsQuery} />
-        {unavailable && (
-          <Alert variant='destructive' className='mb-5'>
-            <AlertDescription>
-              {t('admin.workspace.unavailable')}
-            </AlertDescription>
-          </Alert>
         )}
-        {!projectId && !projectsQuery.isPending && (
-          <p className='py-12 text-center text-sm text-muted-foreground'>
-            {teamId
-              ? t('admin.workspace.noProjects')
-              : t('admin.workspace.chooseScope')}
-          </p>
-        )}
-        {projectId && (
-          <div
-            className={cn(
-              'grid min-w-0 items-start gap-5',
-              filesVisible && 'lg:grid-cols-[18rem_minmax(0,1fr)]'
+      </div>
+    </div>
+  )
+  return (
+    <div
+      className={cn(
+        'grid h-svh min-h-0 min-w-0 overflow-hidden bg-card',
+        filesVisible && !isMobile && 'grid-cols-[17rem_minmax(0,1fr)]'
+      )}
+    >
+      {!isMobile && filesVisible && (
+        <aside
+          className='min-h-0 min-w-0 overflow-hidden border-e'
+          aria-label={t('admin.workspace.files')}
+        >
+          {fileNavigation}
+        </aside>
+      )}
+      {isMobile && (
+        <Sheet open={mobileFilesOpen} onOpenChange={setMobileFilesOpen}>
+          <SheetContent side='left' className='w-[min(20rem,88vw)] gap-0 p-0'>
+            <SheetHeader className='sr-only'>
+              <SheetTitle>{t('admin.workspace.files')}</SheetTitle>
+              <SheetDescription>{project?.name}</SheetDescription>
+            </SheetHeader>
+            {fileNavigation}
+          </SheetContent>
+        </Sheet>
+      )}
+      <div className='min-h-0 min-w-0'>
+        {document && !unavailable ? (
+          <DocumentWorkspaceDetail
+            key={`${effectiveScope}:${document.id}`}
+            projectId={projectId}
+            projectName={project?.name}
+            document={document}
+            search={{ ...routeSearch, workspace_view: view }}
+            canManage={canManage}
+            canWrite={canWrite}
+            interactive={Boolean(
+              project?.status === ACTIVE_STATUS &&
+              document.status === ACTIVE_STATUS
             )}
-          >
-            {filesVisible && (
-              <aside
-                id='workspace-files'
-                className='flex max-h-80 min-w-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card py-3 lg:sticky lg:top-4 lg:max-h-[calc(100svh-12rem)]'
-              >
-                <div className='flex min-w-0 flex-wrap items-center justify-between gap-2 px-3'>
-                  <h2 className='text-sm font-semibold'>
-                    {t('admin.workspace.files')}{' '}
-                    <span className='ms-1 font-normal text-muted-foreground'>
-                      {documentsQuery.data?.items.length ?? 0}
-                    </span>
-                  </h2>
-                </div>
-                {canMutate && (
-                  <div className='flex flex-wrap gap-2 px-3'>
-                    <FormDialog
-                      title={t('admin.workspace.newDocument')}
-                      submitLabel={t('admin.common.create')}
-                      triggerSize='sm'
-                      pending={createMutation.isPending}
-                      disabled={unavailable}
-                      submissionScope={`${effectiveScope}:${folderId}`}
-                      onSubmit={(formData) =>
-                        createMutation.mutateAsync({
-                          projectId,
-                          owner: mutationScope,
-                          formData,
-                        })
-                      }
-                    >
-                      <DocumentFormFields
-                        projectId={projectId}
-                        initialFolderId={folderId}
-                      />
-                    </FormDialog>
-                    <FormDialog
-                      title={t('admin.workspace.newFolder')}
-                      submitLabel={t('admin.workspace.createFolder')}
-                      triggerVariant='outline'
-                      triggerSize='sm'
-                      pending={folderMutation.isPending}
-                      disabled={unavailable}
-                      submissionScope={`${effectiveScope}:${folderId}`}
-                      onSubmit={(formData) =>
-                        folderMutation.mutateAsync({
-                          projectId,
-                          parentId: folderId,
-                          name: fieldValue(formData, 'name'),
-                          owner: mutationScope,
-                        })
-                      }
-                    >
-                      <p className='text-sm text-muted-foreground'>
-                        {folder?.path ?? t('admin.workspace.rootFolder')}
-                      </p>
-                      <TextField
-                        label={t('admin.workspace.folderName')}
-                        name='name'
-                        required
-                      />
-                    </FormDialog>
+            navigationActions={navigationActions}
+            onSearchChange={changeSearch}
+          />
+        ) : (
+          <div className='flex h-full min-h-0 flex-col'>
+            <header className='flex h-14 shrink-0 items-center gap-3 border-b px-4'>
+              {navigationActions}
+              <p className='truncate text-sm font-medium'>
+                {project?.name ?? t('admin.workspace.title')}
+              </p>
+            </header>
+            <div
+              id='content'
+              tabIndex={-1}
+              className='min-h-0 flex-1 overflow-y-auto p-5 focus:outline-none'
+            >
+              <LoadingErrorState state={projectsQuery} />
+              <LoadingErrorState state={documentsQuery} />
+              {unavailable && (
+                <Alert variant='destructive'>
+                  <AlertDescription>
+                    {t('admin.workspace.unavailable')}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {!projectsQuery.isPending &&
+                (!projectId || !documentsQuery.isPending) && (
+                  <div className='grid min-h-72 place-content-center justify-items-center gap-3 py-12 text-center'>
+                    <FileText
+                      aria-hidden
+                      className='size-9 text-muted-foreground'
+                    />
+                    <h1 className='text-lg font-semibold'>
+                      {folder?.name ?? t('admin.workspace.selectFile')}
+                    </h1>
+                    <p className='max-w-md text-sm leading-6 text-muted-foreground'>
+                      {t('admin.workspace.selectFileDescription')}
+                    </p>
+                    <Button variant='outline' onClick={backToWorkspace}>
+                      <ArrowLeft aria-hidden />
+                      {t('admin.workspace.backToWorkspace')}
+                    </Button>
                   </div>
                 )}
-                <LoadingErrorState state={documentsQuery} />
-                <LoadingErrorState state={foldersQuery} />
-                {!documentsQuery.isPending && !foldersQuery.isPending && (
-                  <DocumentFileTree
-                    key={`${effectiveScope}`}
-                    folders={folders}
-                    documents={documentsQuery.data?.items ?? []}
-                    documentId={document?.id}
-                    folderId={folderId}
-                    onDocumentSelect={(selected) =>
-                      changeSearch(documentSelection(selected))
-                    }
-                    onFolderSelect={(selected) =>
-                      changeSearch({ folder_id: selected || 'root' })
-                    }
-                  />
-                )}
-              </aside>
-            )}
-            <div className='min-w-0 rounded-lg border bg-card p-4 sm:p-5'>
-              {document ? (
-                <DocumentWorkspaceDetail
-                  key={`${effectiveScope}:${document.id}`}
-                  projectId={projectId}
-                  document={document}
-                  search={{ ...routeSearch, workspace_view: view }}
-                  canManage={canManage}
-                  canWrite={canWrite}
-                  interactive={Boolean(
-                    project?.status === ACTIVE_STATUS &&
-                    document.status === ACTIVE_STATUS
-                  )}
-                  onSearchChange={changeSearch}
-                />
-              ) : (
-                <div className='grid min-h-72 place-content-center justify-items-center gap-3 px-5 py-12 text-center'>
-                  <FileText
-                    aria-hidden
-                    className='size-9 text-muted-foreground'
-                  />
-                  <h2 className='text-lg font-semibold'>
-                    {folder?.name ?? t('admin.workspace.selectFile')}
-                  </h2>
-                  <p className='max-w-md text-sm leading-6 text-muted-foreground'>
-                    {t('admin.workspace.selectFileDescription')}
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}
-      </Main>
-    </>
+      </div>
+    </div>
   )
 }

@@ -4,6 +4,7 @@
     "entryGzipBytes": 200000,
     "pageChunkBytes": 40000,
     "routeGzipBytes": 300000,
-    "minimumPageChunks": 12
-  }
+    "minimumPageChunks": 10
+  },
+  "pageStructureNote": "The document workspace replaces the drafts, versions, and diffs pages with redirects and adds a standalone document route, leaving 10 independently loaded workbench pages."
 }

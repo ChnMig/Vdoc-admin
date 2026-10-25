@@ -49,24 +49,35 @@ import {
   accountStatusLabel,
 } from './page-utils'
 
-export function ProjectsPage() {
+type ProjectsPageProps = {
+  projectId?: string
+  section?: 'members' | 'settings'
+}
+
+export function ProjectsPage({
+  projectId: controlledProjectId,
+  section,
+}: ProjectsPageProps = {}) {
   const { t } = useLanguage()
   const authUser = useAuthStore((state) => state.auth.user)
   const isSuperAdmin = Boolean(authUser?.is_super_admin)
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const invalidate = useInvalidateResources()
   const { projectsQuery, projectId, setProjectId, projectOptions } =
-    useProjectsAndSelection()
+    useProjectsAndSelection(controlledProjectId)
+  const showProjectSettings = section !== 'members'
+  const showMembers = section !== 'settings'
+  const showProjectCreation = !section && controlledProjectId === undefined
   const memberScope = `${sessionVersion}:${projectId}`
   const teamsQuery = useQuery({
     queryKey: ['teams'],
     queryFn: ({ signal }) => listTeams({ signal }),
-    enabled: isSuperAdmin,
+    enabled: isSuperAdmin && showProjectCreation,
   })
   const usersQuery = useQuery({
     queryKey: ['users'],
     queryFn: ({ signal }) => listUsers({ signal }),
-    enabled: isSuperAdmin,
+    enabled: isSuperAdmin && showMembers,
   })
   const selectedProject = projectsQuery.data?.items.find(
     (project) => project.id === projectId
@@ -84,7 +95,7 @@ export function ProjectsPage() {
   const memberCandidatesQuery = useQuery({
     queryKey: ['project-member-candidates', projectId],
     queryFn: ({ signal }) => listProjectMemberCandidates(projectId, { signal }),
-    enabled: projectId.length > 0 && canManageSelectedProject,
+    enabled: showMembers && projectId.length > 0 && canManageSelectedProject,
   })
   const memberCandidatesLoading = isSuperAdmin
     ? usersQuery.isLoading || membersQuery.isLoading
@@ -214,159 +225,176 @@ export function ProjectsPage() {
           error: projectsQuery.error,
         }}
       />
-      <NameDescriptionTable
-        emptyPreset='projects'
-        actions={
-          isSuperAdmin && (
-            <FormDialog
-              title={t('admin.sections.createProject')}
-              submitLabel={t('admin.common.create')}
-              pending={createMutation.isPending}
-              submissionScope={String(sessionVersion)}
-              onSubmit={(formData) =>
-                createMutation.mutateAsync({
-                  team_id: fieldValue(formData, 'team_id'),
-                  admin_user_id: fieldValue(formData, 'admin_user_id'),
-                  name: fieldValue(formData, 'name'),
-                  description: fieldValue(formData, 'description'),
-                })
-              }
-            >
-              <div className='grid gap-4'>
+      {showProjectSettings && (
+        <NameDescriptionTable
+          emptyPreset='projects'
+          actions={
+            isSuperAdmin &&
+            showProjectCreation && (
+              <FormDialog
+                title={t('admin.sections.createProject')}
+                submitLabel={t('admin.common.create')}
+                pending={createMutation.isPending}
+                submissionScope={String(sessionVersion)}
+                onSubmit={(formData) =>
+                  createMutation.mutateAsync({
+                    team_id: fieldValue(formData, 'team_id'),
+                    admin_user_id: fieldValue(formData, 'admin_user_id'),
+                    name: fieldValue(formData, 'name'),
+                    description: fieldValue(formData, 'description'),
+                  })
+                }
+              >
+                <div className='grid gap-4'>
+                  <NativeSelect
+                    name='team_id'
+                    label={t('admin.fields.team')}
+                    placeholder={t('admin.placeholders.selectTeam')}
+                    options={teamOptions}
+                    required
+                  />
+                  <NativeSelect
+                    name='admin_user_id'
+                    label={t('admin.fields.initialAdmin')}
+                    placeholder={t('admin.placeholders.useCurrentUser')}
+                    options={projectAdminOptions}
+                    hint={t('admin.projects.initialAdminHint')}
+                  />
+                  <TextField
+                    label={t('admin.fields.name')}
+                    name='name'
+                    required
+                  />
+                  <TextField
+                    label={t('admin.fields.description')}
+                    name='description'
+                  />
+                </div>
+              </FormDialog>
+            )
+          }
+          items={
+            section === 'settings' || controlledProjectId !== undefined
+              ? selectedProject
+                ? [selectedProject]
+                : []
+              : (projectsQuery.data?.items ?? [])
+          }
+          canEdit={(id) =>
+            projectsQuery.data?.items.find((project) => project.id === id)
+              ?.status === ACTIVE_STATUS &&
+            (isSuperAdmin || (id === projectId && canManageSelectedProject))
+          }
+          onUpdate={(id, name, description) =>
+            updateMutation.mutateAsync({ id, name, description })
+          }
+          onArchive={(id) => archiveMutation.mutateAsync(id)}
+          pending={updateMutation.isPending || archiveMutation.isPending}
+        />
+      )}
+      {showMembers && (
+        <CollectionCard
+          title={t('admin.sections.members')}
+          count={membersQuery.data?.items.length ?? 0}
+          actions={
+            canManageSelectedProject && (
+              <FormDialog
+                title={t('admin.actions.addMember')}
+                submitLabel={t('admin.common.add')}
+                pending={addMemberMutation.isPending}
+                disabled={
+                  !projectId ||
+                  memberCandidatesLoading ||
+                  memberCandidatesIsError ||
+                  !memberCandidateOptions.length
+                }
+                submissionScope={memberScope}
+                description={selectedProject?.name}
+                onSubmit={(formData) =>
+                  addMemberMutation.mutateAsync({
+                    projectId,
+                    sessionVersion,
+                    userId: fieldValue(formData, 'user_id'),
+                    role: numberValue(formData, 'role', ROLE_READER),
+                  })
+                }
+              >
                 <NativeSelect
-                  name='team_id'
-                  label={t('admin.fields.team')}
-                  placeholder={t('admin.placeholders.selectTeam')}
-                  options={teamOptions}
+                  name='user_id'
+                  label={t('admin.fields.user')}
+                  placeholder={t('admin.placeholders.selectUser')}
+                  options={memberCandidateOptions}
                   required
                 />
                 <NativeSelect
-                  name='admin_user_id'
-                  label={t('admin.fields.initialAdmin')}
-                  placeholder={t('admin.placeholders.useCurrentUser')}
-                  options={projectAdminOptions}
-                  hint={t('admin.projects.initialAdminHint')}
+                  name='role'
+                  label={t('admin.fields.role')}
+                  placeholder={t('admin.roles.reader')}
+                  options={roleOptions(t)}
+                  defaultValue={String(ROLE_READER)}
                 />
-                <TextField
-                  label={t('admin.fields.name')}
-                  name='name'
-                  required
-                />
-                <TextField
-                  label={t('admin.fields.description')}
-                  name='description'
+              </FormDialog>
+            )
+          }
+        >
+          <div className='grid min-w-0 gap-5'>
+            {controlledProjectId === undefined && !section && (
+              <div className='max-w-md'>
+                <NativeSelect
+                  label={t('admin.fields.project')}
+                  value={projectId}
+                  onChange={setProjectId}
+                  placeholder={t('admin.placeholders.selectProject')}
+                  options={projectOptions}
                 />
               </div>
-            </FormDialog>
-          )
-        }
-        items={projectsQuery.data?.items ?? []}
-        canEdit={(id) =>
-          projectsQuery.data?.items.find((project) => project.id === id)
-            ?.status === ACTIVE_STATUS &&
-          (isSuperAdmin || (id === projectId && canManageSelectedProject))
-        }
-        onUpdate={(id, name, description) =>
-          updateMutation.mutateAsync({ id, name, description })
-        }
-        onArchive={(id) => archiveMutation.mutateAsync(id)}
-        pending={updateMutation.isPending || archiveMutation.isPending}
-      />
-      <CollectionCard
-        title={t('admin.sections.members')}
-        count={membersQuery.data?.items.length ?? 0}
-        actions={
-          canManageSelectedProject && (
-            <FormDialog
-              title={t('admin.actions.addMember')}
-              submitLabel={t('admin.common.add')}
-              pending={addMemberMutation.isPending}
-              disabled={
-                !projectId ||
-                memberCandidatesLoading ||
-                memberCandidatesIsError ||
-                !memberCandidateOptions.length
-              }
-              submissionScope={memberScope}
-              description={selectedProject?.name}
-              onSubmit={(formData) =>
-                addMemberMutation.mutateAsync({
+            )}
+            {canManageSelectedProject && (
+              <>
+                <LoadingErrorState
+                  state={{
+                    isLoading: memberCandidatesLoading,
+                    isError: memberCandidatesIsError,
+                    error: memberCandidatesError,
+                  }}
+                />
+                {!memberCandidatesLoading &&
+                  !memberCandidatesIsError &&
+                  !memberCandidateOptions.length && (
+                    <p className='text-sm text-muted-foreground'>
+                      {t('admin.emptyStates.memberCandidates.description')}
+                    </p>
+                  )}
+              </>
+            )}
+            <MembersTable
+              key={memberScope}
+              members={membersQuery.data?.items ?? []}
+              users={[
+                ...(usersQuery.data?.items ?? []),
+                ...(memberCandidatesQuery.data?.items ?? []),
+              ]}
+              onRole={(userId, role) =>
+                roleMutation.mutateAsync({
                   projectId,
                   sessionVersion,
-                  userId: fieldValue(formData, 'user_id'),
-                  role: numberValue(formData, 'role', ROLE_READER),
+                  userId,
+                  role,
                 })
               }
-            >
-              <NativeSelect
-                name='user_id'
-                label={t('admin.fields.user')}
-                placeholder={t('admin.placeholders.selectUser')}
-                options={memberCandidateOptions}
-                required
-              />
-              <NativeSelect
-                name='role'
-                label={t('admin.fields.role')}
-                placeholder={t('admin.roles.reader')}
-                options={roleOptions(t)}
-                defaultValue={String(ROLE_READER)}
-              />
-            </FormDialog>
-          )
-        }
-      >
-        <div className='grid min-w-0 gap-5'>
-          <div className='max-w-md'>
-            <NativeSelect
-              label={t('admin.fields.project')}
-              value={projectId}
-              onChange={setProjectId}
-              placeholder={t('admin.placeholders.selectProject')}
-              options={projectOptions}
+              onRemove={(userId) =>
+                removeMutation.mutateAsync({
+                  projectId,
+                  sessionVersion,
+                  userId,
+                })
+              }
+              pending={roleMutation.isPending || removeMutation.isPending}
+              readOnly={!canManageSelectedProject}
             />
           </div>
-          {canManageSelectedProject && (
-            <>
-              <LoadingErrorState
-                state={{
-                  isLoading: memberCandidatesLoading,
-                  isError: memberCandidatesIsError,
-                  error: memberCandidatesError,
-                }}
-              />
-              {!memberCandidatesLoading &&
-                !memberCandidatesIsError &&
-                !memberCandidateOptions.length && (
-                  <p className='text-sm text-muted-foreground'>
-                    {t('admin.emptyStates.memberCandidates.description')}
-                  </p>
-                )}
-            </>
-          )}
-          <MembersTable
-            key={memberScope}
-            members={membersQuery.data?.items ?? []}
-            users={[
-              ...(usersQuery.data?.items ?? []),
-              ...(memberCandidatesQuery.data?.items ?? []),
-            ]}
-            onRole={(userId, role) =>
-              roleMutation.mutateAsync({
-                projectId,
-                sessionVersion,
-                userId,
-                role,
-              })
-            }
-            onRemove={(userId) =>
-              removeMutation.mutateAsync({ projectId, sessionVersion, userId })
-            }
-            pending={roleMutation.isPending || removeMutation.isPending}
-            readOnly={!canManageSelectedProject}
-          />
-        </div>
-      </CollectionCard>
+        </CollectionCard>
+      )}
     </PageChrome>
   )
 }

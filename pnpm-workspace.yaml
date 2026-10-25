@@ -1,2 +1,4 @@
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  '@tanstack/react-router@1.170.46': patches/@tanstack__react-router@1.170.46.patch

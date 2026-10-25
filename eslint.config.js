@@ -64,6 +64,8 @@ export default defineConfig(
   },
   {
     files: [
+      'src/routes/_authenticated/index.tsx',
+      'src/routes/_authenticated/documents/$documentId.tsx',
       'src/routes/_authenticated/documents/index.tsx',
       'src/routes/_authenticated/drafts/index.tsx',
       'src/routes/_authenticated/versions/index.tsx',

@@ -1,12 +1,17 @@
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
-const optionalEntityId = z.preprocess((value) => {
-  if (typeof value !== 'string') return undefined
-  const normalized = value.trim()
-  return normalized.length > 0 && normalized.length <= 128
-    ? normalized
-    : undefined
-}, z.string().optional())
+const optionalEntityId = z.optional(
+  z.pipe(
+    z.transform((value: unknown) => {
+      if (typeof value !== 'string') return undefined
+      const normalized = value.trim()
+      return normalized.length > 0 && normalized.length <= 128
+        ? normalized
+        : undefined
+    }),
+    z.optional(z.string())
+  )
+)
 
 export const vdocRouteSearchSchema = z.object({
   team_id: optionalEntityId,
@@ -21,11 +26,21 @@ export const vdocRouteSearchSchema = z.object({
   to_version_id: optionalEntityId,
   diff_id: optionalEntityId,
   token_id: optionalEntityId,
-  content_mode: z.enum(['published', 'draft']).optional().catch(undefined),
-  workspace_view: z
-    .enum(['content', 'drafts', 'versions', 'diffs', 'share', 'manage', 'ai'])
-    .optional()
-    .catch(undefined),
+  content_mode: z.catch(z.optional(z.enum(['published', 'draft'])), undefined),
+  workspace_view: z.catch(
+    z.optional(
+      z.enum([
+        'content',
+        'drafts',
+        'versions',
+        'diffs',
+        'share',
+        'manage',
+        'ai',
+      ])
+    ),
+    undefined
+  ),
 })
 
 export type VdocRouteSearch = z.infer<typeof vdocRouteSearchSchema>

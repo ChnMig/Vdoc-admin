@@ -2,8 +2,8 @@ import { GitBranch } from 'lucide-react'
 import type { BranchDTO, DraftListDTO, VersionDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
+import { OptionsSelect } from '@/components/options-select'
 import type { DocumentReadingSelection } from './document-workspace-content'
-import { NativeSelect } from './page-shared'
 
 export function DocumentWorkspaceToolbar({
   selection,
@@ -30,12 +30,14 @@ export function DocumentWorkspaceToolbar({
   return (
     <section
       aria-label={t('admin.workspace.readingContext')}
-      className='@container/document-toolbar border-b pb-4'
+      className='w-full min-w-0 flex-1 basis-full'
     >
-      <div className='grid min-w-0 items-start gap-3 @xl/document-toolbar:grid-cols-[minmax(0,1fr)_minmax(0,.7fr)_minmax(0,1.2fr)]'>
-        <div className='grid min-w-0 gap-2'>
-          <NativeSelect
-            label={t('admin.fields.branch')}
+      <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_6.5rem_minmax(0,1fr)] items-center gap-2 sm:flex'>
+        <div className='flex min-w-0 items-center gap-1 sm:w-48'>
+          <OptionsSelect
+            fallbackToFirstOption={false}
+            className='h-8 gap-1 border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-muted'
+            aria-label={t('admin.fields.branch')}
             value={selection.branchId}
             placeholder={t('admin.placeholders.selectBranch')}
             onChange={onBranchChange}
@@ -46,18 +48,21 @@ export function DocumentWorkspaceToolbar({
           />
           {canManage && (
             <Button
-              variant='link'
-              size='sm'
-              className='h-auto w-fit justify-start gap-1.5 p-0 text-xs'
+              variant='ghost'
+              size='icon'
+              className='hidden size-7 shrink-0 sm:inline-flex'
+              aria-label={t('admin.workspace.manageBranches')}
+              title={t('admin.workspace.manageBranches')}
               onClick={onManageBranches}
             >
               <GitBranch aria-hidden className='size-3.5' />
-              {t('admin.workspace.manageBranches')}
             </Button>
           )}
         </div>
-        <NativeSelect
-          label={t('admin.workspace.contentState')}
+        <OptionsSelect
+          fallbackToFirstOption={false}
+          className='h-8 gap-1 border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-muted sm:w-28'
+          aria-label={t('admin.workspace.contentState')}
           value={selection.mode}
           placeholder={t('admin.workspace.contentState')}
           onChange={(value) => onModeChange(value as 'published' | 'draft')}
@@ -66,21 +71,29 @@ export function DocumentWorkspaceToolbar({
             { value: 'draft', label: t('admin.workspace.draft') },
           ]}
         />
-        <NativeSelect
-          label={
+        <OptionsSelect
+          fallbackToFirstOption={false}
+          className='h-8 gap-1 border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-muted sm:w-48'
+          aria-label={
             selection.mode === 'published'
               ? t('admin.fields.version')
               : t('admin.fields.draft')
           }
           value={selection.version?.id ?? selection.draft?.id ?? ''}
           placeholder={
-            selection.pending
-              ? t('admin.common.loading')
-              : t(
+            selection.invalid
+              ? t(
                   selection.mode === 'published'
-                    ? 'admin.workspace.noPublishedContent'
-                    : 'admin.workspace.noDraftContent'
+                    ? 'admin.fields.version'
+                    : 'admin.fields.draft'
                 )
+              : selection.pending
+                ? t('admin.common.loading')
+                : t(
+                    selection.mode === 'published'
+                      ? 'admin.workspace.noPublishedContent'
+                      : 'admin.workspace.noDraftContent'
+                  )
           }
           onChange={onRevisionChange}
           options={(selection.mode === 'published' ? versions : drafts).map(

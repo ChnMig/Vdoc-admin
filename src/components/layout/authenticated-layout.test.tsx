@@ -66,7 +66,7 @@ vi.mock('@/components/layout/app-sidebar', () => ({
 }))
 
 vi.mock('@/components/skip-to-main', () => ({
-  SkipToMain: () => null,
+  SkipToMain: () => <a href='#content'>Skip to main</a>,
 }))
 
 describe('AuthenticatedLayout audit capability', () => {
@@ -111,6 +111,54 @@ describe('AuthenticatedLayout audit capability', () => {
       'data-workspace',
       'false'
     )
+  })
+
+  it.each(['/documents/document-1', '/documents/document-1/'])(
+    'gives %s the full viewport without the management sidebar shell',
+    (pathname) => {
+      routeState.pathname = pathname
+      const screen = render(
+        <AuthenticatedLayout>
+          <div>Document content</div>
+        </AuthenticatedLayout>
+      )
+
+      expect(screen.getByTestId('sidebar-provider')).toBeInTheDocument()
+      expect(screen.queryByTestId('app-sidebar')).not.toBeInTheDocument()
+      expect(screen.getByTestId('search-provider')).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: 'Skip to main' })
+      ).toHaveAttribute('href', '#content')
+      expect(screen.getByText('Document content').parentElement).toHaveClass(
+        'h-svh',
+        'bg-background',
+        'overflow-hidden'
+      )
+    }
+  )
+
+  it('renders the document outlet inside the independent shell', () => {
+    routeState.pathname = '/documents/document-1'
+    const screen = render(<AuthenticatedLayout />)
+    expect(screen.getByText('Outlet')).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
+
+  it('keeps the sidebar context mounted across workspace and document transitions', () => {
+    routeState.pathname = '/documents/document-1'
+    const screen = render(<AuthenticatedLayout />)
+    const provider = screen.getByTestId('sidebar-provider')
+
+    routeState.pathname = '/documents'
+    screen.rerender(<AuthenticatedLayout />)
+    expect(screen.getByTestId('sidebar-provider')).toBe(provider)
+    expect(screen.getByTestId('app-sidebar')).toBeInTheDocument()
+
+    routeState.pathname = '/documents/document-1'
+    screen.rerender(<AuthenticatedLayout />)
+    expect(screen.getByTestId('sidebar-provider')).toBe(provider)
+    expect(screen.queryByTestId('app-sidebar')).not.toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
   })
 
   it.each([

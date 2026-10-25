@@ -1,21 +1,21 @@
-import { z } from 'zod'
+import { z } from 'zod/mini'
 import { parsePublicShareOrigin } from './public-share-config'
 
 const documentShareIdSchema = z
   .string()
-  .regex(/^[0-9a-f]{32}$/)
+  .check(z.regex(/^[0-9a-f]{32}$/))
   .brand('DocumentShareId')
 const documentShareSecretSchema = z
   .string()
-  .regex(/^vdoc_share_[0-9a-f]{48}$/)
+  .check(z.regex(/^vdoc_share_[0-9a-f]{48}$/))
   .brand('DocumentShareSecret')
 const publicVersionIdSchema = z
   .string()
-  .regex(/^[0-9a-f]{32}$/)
+  .check(z.regex(/^[0-9a-f]{32}$/))
   .brand('PublicVersionId')
 const publicShareSessionIdSchema = z
   .string()
-  .regex(/^[0-9a-f]{32}$/)
+  .check(z.regex(/^[0-9a-f]{32}$/))
   .brand('PublicShareSessionId')
 
 export type DocumentShareId = z.infer<typeof documentShareIdSchema>

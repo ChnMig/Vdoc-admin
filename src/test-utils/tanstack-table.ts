@@ -1,4 +1,4 @@
-import { type Table } from '@tanstack/react-table'
+import { type Table, type TableFeatures } from '@tanstack/react-table'
 import { vi } from 'vitest'
 
 /**
@@ -11,6 +11,6 @@ export function createTableMock(rowCount = 2) {
   const table = {
     getFilteredSelectedRowModel: () => ({ rows }),
     resetRowSelection,
-  } as unknown as Table<Record<string, unknown>>
+  } as unknown as Table<TableFeatures, Record<string, unknown>>
   return { table, resetRowSelection }
 }

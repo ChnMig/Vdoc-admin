@@ -2,6 +2,10 @@ import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, ChevronRight, Laptop, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import {
+  clearDocumentContext,
+  isWorkspaceEntryPath,
+} from '@/lib/document-workspace-navigation'
 import { useLanguage } from '@/context/language-provider'
 import { useSearch } from '@/context/search-provider'
 import { useTheme } from '@/context/theme-provider'
@@ -15,6 +19,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command'
 import { visibleNavGroups } from './layout/data/visible-sidebar-data'
+import type { NavLink } from './layout/types'
 import { ScrollArea } from './ui/scroll-area'
 
 export function CommandMenu({
@@ -30,6 +35,10 @@ export function CommandMenu({
     useAuthStore((state) => state.auth.user?.is_super_admin)
   )
   const navGroups = visibleNavGroups(isSuperAdmin, auditAccess)
+  const navigateTo = (destination: NavLink['url']) =>
+    isWorkspaceEntryPath(destination)
+      ? navigate({ to: '/documents', search: clearDocumentContext })
+      : navigate({ to: destination, search: true })
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
@@ -67,9 +76,7 @@ export function CommandMenu({
                         key={`${navItem.url}-${i}`}
                         value={navLabel}
                         onSelect={() => {
-                          runCommand(() =>
-                            navigate({ to: navItem.url, search: true })
-                          )
+                          runCommand(() => navigateTo(navItem.url))
                         }}
                       >
                         <div className='flex size-4 items-center justify-center'>
@@ -89,9 +96,7 @@ export function CommandMenu({
                         key={`${navItem.title}-${subItem.url}-${subIndex}`}
                         value={`${navLabel}-${subItem.url}`}
                         onSelect={() => {
-                          runCommand(() =>
-                            navigate({ to: subItem.url, search: true })
-                          )
+                          runCommand(() => navigateTo(subItem.url))
                         }}
                       >
                         <div className='flex size-4 items-center justify-center'>

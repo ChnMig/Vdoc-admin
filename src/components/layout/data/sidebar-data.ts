@@ -1,12 +1,9 @@
 import {
-  Boxes,
-  FileText,
+  FolderTree,
   GraduationCap,
   History,
   KeyRound,
-  Layers3,
   Settings,
-  Users,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
 import { getAdminBranding } from '@/lib/branding'
@@ -33,30 +30,10 @@ export const sidebarData: SidebarData = {
       titleKey: 'nav.groupWorkspaceSetup',
       items: [
         {
-          title: 'Documents',
-          titleKey: 'nav.documents',
+          title: 'Workspace',
+          titleKey: 'nav.workspace',
           url: '/documents',
-          icon: FileText,
-        },
-        {
-          title: 'Users',
-          titleKey: 'nav.users',
-          url: '/users',
-          icon: Users,
-          requiresSuperAdmin: true,
-        },
-        {
-          title: 'Teams',
-          titleKey: 'nav.teams',
-          url: '/teams',
-          icon: Boxes,
-          requiresSuperAdmin: true,
-        },
-        {
-          title: 'Projects',
-          titleKey: 'nav.projects',
-          url: '/projects',
-          icon: Layers3,
+          icon: FolderTree,
         },
       ],
     },

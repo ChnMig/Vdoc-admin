@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Bot, MessageSquare } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { cn } from '@/lib/utils'
 import {
   createAIChatSession,
   getAIChatSession,
@@ -32,12 +33,14 @@ type AIContextPanelProps = {
   readonly target?: AISummaryTarget
   readonly interactive?: boolean
   readonly canRegenerate?: boolean
+  readonly presentation?: 'panel' | 'sidebar'
 }
 
 export function AIContextPanel({
   target,
   interactive = true,
   canRegenerate = interactive,
+  presentation = 'panel',
 }: AIContextPanelProps) {
   const targetKey = targetIdentityKey(target)
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -49,6 +52,7 @@ export function AIContextPanel({
       targetKey={targetKey}
       interactive={interactive}
       canRegenerate={canRegenerate}
+      presentation={presentation}
     />
   )
 }
@@ -58,6 +62,7 @@ function AIContextPanelContent({
   targetKey,
   interactive = true,
   canRegenerate = interactive,
+  presentation = 'panel',
 }: AIContextPanelProps & { readonly targetKey: string }) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
@@ -186,30 +191,39 @@ function AIContextPanelContent({
     messages.filter((message) => message.session_id === activeSessionId)
   )
 
+  const sidebar = presentation === 'sidebar'
+  const Container = sidebar ? 'div' : Card
   return (
-    <Card className='@container/ai overflow-hidden'>
-      <CardHeader className='border-b pb-5'>
-        <div className='flex flex-wrap items-start justify-between gap-3'>
-          <div className='grid gap-2'>
-            <Badge className='w-fit' variant='secondary'>
-              {t('admin.ai.badge')}
+    <Container className='@container/ai min-w-0 overflow-hidden'>
+      {!sidebar && (
+        <CardHeader className='border-b pb-5'>
+          <div className='flex flex-wrap items-start justify-between gap-3'>
+            <div className='grid gap-2'>
+              <Badge className='w-fit' variant='secondary'>
+                {t('admin.ai.badge')}
+              </Badge>
+              <CardTitle>{t('admin.ai.panelTitle')}</CardTitle>
+              <CardDescription>
+                {target
+                  ? t('admin.ai.panelDescription', {
+                      ownerType: target.ownerType,
+                      ownerId: target.ownerId,
+                    })
+                  : t('admin.ai.noTarget')}
+              </CardDescription>
+            </div>
+            <Badge variant='outline'>
+              {target?.ownerType ?? t('admin.common.none')}
             </Badge>
-            <CardTitle>{t('admin.ai.panelTitle')}</CardTitle>
-            <CardDescription>
-              {target
-                ? t('admin.ai.panelDescription', {
-                    ownerType: target.ownerType,
-                    ownerId: target.ownerId,
-                  })
-                : t('admin.ai.noTarget')}
-            </CardDescription>
           </div>
-          <Badge variant='outline'>
-            {target?.ownerType ?? t('admin.common.none')}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className='grid gap-5 p-5 @min-[42rem]/ai:grid-cols-2'>
+        </CardHeader>
+      )}
+      <CardContent
+        className={cn(
+          'grid min-w-0 gap-6',
+          sidebar ? 'p-0' : 'p-5 @min-[42rem]/ai:grid-cols-2'
+        )}
+      >
         <section className='grid content-start gap-3'>
           {!interactive && target && (
             <Alert>
@@ -229,6 +243,7 @@ function AIContextPanelContent({
               type='button'
               variant='outline'
               size='sm'
+              className={sidebar ? 'h-7 px-2 text-xs' : undefined}
               disabled={
                 !target ||
                 !canRegenerate ||
@@ -346,7 +361,7 @@ function AIContextPanelContent({
           />
         </section>
       </CardContent>
-    </Card>
+    </Container>
   )
 }
 

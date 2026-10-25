@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -16,9 +16,14 @@ import { OptionsSelect } from '@/components/options-select'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { AISettingsPanel } from './ai-settings'
 import { ChangePasswordPanel } from './change-password-panel'
 import { ReleaseStatusPanel } from './release-status-panel'
+
+const AISettingsPanel = lazy(() =>
+  import('./ai-settings').then(({ AISettingsPanel }) => ({
+    default: AISettingsPanel,
+  }))
+)
 
 const categories = ['account', 'appearance', 'ai', 'version'] as const
 type SettingsCategory = (typeof categories)[number]
@@ -115,7 +120,18 @@ export function SettingsPage() {
                   )}
                   {item === 'appearance' && <AppearanceSettings />}
                   {item === 'ai' && identity && (
-                    <AISettingsPanel user={identity} />
+                    <Suspense
+                      fallback={
+                        <p
+                          role='status'
+                          className='py-6 text-sm text-muted-foreground'
+                        >
+                          {t('admin.common.loading')}
+                        </p>
+                      }
+                    >
+                      <AISettingsPanel user={identity} />
+                    </Suspense>
                   )}
                   {item === 'version' && (
                     <div className='grid min-w-0 gap-6'>

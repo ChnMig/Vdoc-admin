@@ -184,14 +184,11 @@ async function openWorkspaceFile(
   view: 'content' | 'drafts' | 'versions' | 'diffs' = 'content'
 ) {
   await page.goto(
-    `/documents/?team_id=${project.team_id}&project_id=${projectId}`
+    `/documents/${documentId}?team_id=${project.team_id}&project_id=${projectId}`
   )
-  const tree = page.getByRole('navigation', { name: 'Files', exact: true })
-  await tree.getByRole('button', { name: 'Expand guides', exact: true }).click()
-  await tree.getByRole('button', { name: /closure\.md/ }).click()
   await expect(
-    tree.getByRole('button', { name: /closure\.md/ })
-  ).toHaveAttribute('aria-current', 'page')
+    page.getByRole('heading', { name: document.name, exact: true })
+  ).toBeVisible()
   if (view === 'drafts') {
     await selectOption(
       page.getByLabel('Content state', { exact: true }),
@@ -202,12 +199,9 @@ async function openWorkspaceFile(
 }
 
 async function openWorkspaceTool(page: Page, view: 'versions' | 'diffs') {
-  await page.getByRole('tab', { name: 'Document tools', exact: true }).click()
-  const tabs = page.getByRole('tablist').filter({
-    has: page.getByRole('tab', { name: 'Diffs', exact: true }),
-  })
-  await tabs
-    .getByRole('tab', {
+  await page
+    .getByRole('navigation', { name: 'Document tools', exact: true })
+    .getByRole('button', {
       name: view === 'diffs' ? 'Diffs' : 'Versions',
       exact: true,
     })
@@ -248,6 +242,22 @@ async function installAdminApi(
     }
     if (method === 'GET' && path === '/api/v1/private/projects') {
       await fulfillEnvelope(route, [project], { total: 1 })
+      return
+    }
+    if (method === 'GET' && path === '/api/v1/private/teams') {
+      await fulfillEnvelope(
+        route,
+        [
+          {
+            id: project.team_id,
+            name: project.team_name,
+            created_by: adminUserId,
+            created_at: timestamp,
+            updated_at: timestamp,
+          },
+        ],
+        { total: 1 }
+      )
       return
     }
     if (
@@ -456,10 +466,12 @@ for (const width of [1280, 390]) {
     page.on('requestfinished', (request) =>
       finishedPaths.push(new URL(request.url()).pathname)
     )
-    await page.goto('/documents/')
-    const tree = page.getByRole('navigation', { name: 'Files', exact: true })
+    await page.goto(
+      `/documents?team_id=${project.team_id}&project_id=${projectId}`
+    )
+    const files = page.getByRole('tabpanel', { name: 'Documents', exact: true })
     await expect(
-      tree.getByRole('button', { name: 'Expand guides', exact: true })
+      files.getByRole('button', { name: 'guides', exact: true })
     ).toBeVisible()
     expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
     expect(
@@ -470,13 +482,11 @@ for (const width of [1280, 390]) {
           path.endsWith('/endpoints')
       )
     ).toBe(false)
-    await tree
-      .getByRole('button', { name: 'Expand guides', exact: true })
-      .click()
-    const file = tree.getByRole('button', { name: /closure\.md/ })
+    await files.getByRole('button', { name: 'guides', exact: true }).click()
+    const file = files.getByRole('button', { name: document.name, exact: true })
     await expect(file).toContainText('Published')
     await file.click()
-    await expect(file).toHaveAttribute('aria-current', 'page')
+    await expect(page).toHaveURL(new RegExp(`/documents/${documentId}[?]`))
     await expect(
       page.getByRole('heading', { name: 'Release Notes', exact: true })
     ).toBeVisible()
@@ -1005,9 +1015,7 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
   ).toBeVisible()
 
   await selectOption(versionSelect, previousVersionId)
-  const historicalReader = page
-    .getByRole('tabpanel', { name: 'Document', exact: true })
-    .locator('article')
+  const historicalReader = page.getByRole('main').locator('article')
   await expect(
     historicalReader.getByRole('heading', { name: 'Previous Notes' })
   ).toBeVisible()

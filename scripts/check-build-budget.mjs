@@ -30,7 +30,25 @@ assert(manifest[layoutKey], 'Authenticated layout must remain lazy')
 const layoutImports = staticImports(layoutKey)
 const entrySize = measure(entryImports)
 assert(entrySize.gzipBytes <= limits.entryGzipBytes, 'Entry exceeds gzip budget')
-const pages = Object.keys(manifest).filter((key) => /^src\/routes\/_authenticated\/(?:(?:audit|diffs|documents|drafts|mcp-tokens|projects|settings|skill|teams|users|versions)\/)?index\.tsx\?tsr-split=component$/.test(key))
+const requiredPages = [
+  'index',
+  'audit/index',
+  'documents/index',
+  'documents/$documentId',
+  'mcp-tokens/index',
+  'projects/index',
+  'settings/index',
+  'skill/index',
+  'teams/index',
+  'users/index',
+]
+for (const page of requiredPages) {
+  assert(manifest[`src/routes/_authenticated/${page}.tsx?tsr-split=component`], `${page} must remain an independently loaded page`)
+}
+for (const legacy of ['drafts', 'versions', 'diffs']) {
+  assert(!manifest[`src/routes/_authenticated/${legacy}/index.tsx?tsr-split=component`], `${legacy} must redirect into the document workspace instead of loading an obsolete page`)
+}
+const pages = Object.keys(manifest).filter((key) => /^src\/routes\/_authenticated\/(?:.+\/)?(?:index|\$documentId)\.tsx\?tsr-split=component$/.test(key))
 assert(pages.length >= limits.minimumPageChunks, 'Workbench pages must load independently')
 assert(!Object.values(manifest).some((chunk) => /\/pages-/.test(chunk.file)), 'Monolithic pages bundle returned')
 const report = { entry: entrySize, pages: {} }

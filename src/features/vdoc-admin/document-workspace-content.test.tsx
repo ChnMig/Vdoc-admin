@@ -67,7 +67,16 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function renderReader(selection?: DocumentReadingSelection) {
+function renderReader(
+  selection?: DocumentReadingSelection,
+  {
+    presentation = 'panel',
+    canWrite = false,
+  }: {
+    presentation?: 'panel' | 'page'
+    canWrite?: boolean
+  } = {}
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -78,7 +87,8 @@ function renderReader(selection?: DocumentReadingSelection) {
           projectId={document.project_id}
           document={document}
           selection={nextSelection}
-          canWrite={false}
+          canWrite={canWrite}
+          presentation={presentation}
           onEditDraft={vi.fn()}
         />
       </LanguageProvider>
@@ -116,6 +126,27 @@ describe('document workspace reading selection', () => {
     expect(screen.container.querySelector('literal')).toBeNull()
     expect(screen.getByText('branch-1')).toBeVisible()
     expect(screen.getByText('Release 1.0')).toBeVisible()
+  })
+
+  it('renders a page reader without a duplicate revision toolbar or edit action', async () => {
+    const screen = renderReader(publishedSelection, {
+      presentation: 'page',
+      canWrite: true,
+    })
+    expect(await screen.findByText('Published <literal> content')).toBeVisible()
+    expect(screen.queryByText('Release 1.0')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Edit draft' })
+    ).not.toBeInTheDocument()
+    expect(screen.container.querySelector('article')).not.toHaveClass(
+      'panel-control',
+      'border',
+      'bg-card'
+    )
+    expect(
+      screen.container.querySelector('[data-document-content]')
+    ).toHaveTextContent('Published <literal>')
+    expect(api.getVersionContent.mock.calls[0][2]).toBe('older-version')
   })
 
   it('aborts the old request and does not show late published content after switching to a draft', async () => {

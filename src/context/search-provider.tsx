@@ -1,5 +1,17 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { CommandMenu } from '@/components/command-menu'
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
+
+const CommandMenu = lazy(() =>
+  import('@/components/command-menu').then(({ CommandMenu }) => ({
+    default: CommandMenu,
+  }))
+)
 
 type SearchContextType = {
   open: boolean
@@ -33,7 +45,11 @@ export function SearchProvider({
   return (
     <SearchContext value={{ open, setOpen }}>
       {children}
-      <CommandMenu auditAccess={auditAccess} />
+      {open && (
+        <Suspense fallback={null}>
+          <CommandMenu auditAccess={auditAccess} />
+        </Suspense>
+      )}
     </SearchContext>
   )
 }

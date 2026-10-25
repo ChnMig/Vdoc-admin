@@ -5,7 +5,12 @@ import { PublicDocumentSharePage } from '@/features/public-share/public-document
 
 export const Route = createFileRoute('/share/$shareId')({
   beforeLoad: () => ({
-    shareSecret: parseAndEraseDocumentShareFragment(window.location, history),
+    shareSecret: parseAndEraseDocumentShareFragment(window.location, {
+      // Erasing a capability is not navigation. Bypass the router's patched
+      // instance method so its subscribers do not reload this route without it.
+      replaceState: (_state, title, url) =>
+        History.prototype.replaceState.call(history, history.state, title, url),
+    }),
   }),
   component: PublicShareRoute,
 })

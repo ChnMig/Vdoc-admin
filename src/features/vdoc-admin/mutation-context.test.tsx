@@ -496,6 +496,9 @@ describe('promotion completion', () => {
       })
       const view = renderPage(<DraftsPage />, client)
       const user = userEvent.setup()
+      await waitFor(() =>
+        expect(view.getByLabelText('Document')).toHaveValue(documentA.id)
+      )
       await user.click(view.getByRole('tab', { name: 'Draft history' }))
       const source = await view.findByLabelText('Source branch')
       const target = view.getByLabelText('Target branch')
@@ -511,6 +514,9 @@ describe('promotion completion', () => {
       await waitFor(() => expect(api.promoteDraft).toHaveBeenCalledOnce())
       if (scenario === 'new-document') {
         await selectOption(view.getByLabelText('Document'), documentB.id, user)
+        await user.click(view.getByRole('tab', { name: 'Draft history' }))
+        expect(source.isConnected).toBe(true)
+        expect(source).toBeVisible()
         await selectOption(source, 'main-b', user)
         await selectOption(target, 'release-b', user)
       }

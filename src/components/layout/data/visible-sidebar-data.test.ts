@@ -8,30 +8,27 @@ function visibleTitles(isSuperAdmin: boolean, hasAuditAccess: boolean) {
 }
 
 describe('visibleNavGroups', () => {
-  it('uses one document workspace entry while keeping management destinations', () => {
+  it('combines documents and management into one workspace destination', () => {
     const titles = visibleTitles(true, true)
-    expect(titles.filter((title) => title === 'Documents')).toHaveLength(1)
-    expect(titles).not.toEqual(
-      expect.arrayContaining(['Drafts', 'Versions', 'Diffs', 'Dashboard'])
-    )
+    expect(titles.filter((title) => title === 'Workspace')).toHaveLength(1)
+    for (const removed of [
+      'Drafts',
+      'Versions',
+      'Diffs',
+      'Dashboard',
+      'Documents',
+      'Projects',
+      'Teams',
+      'Users',
+    ])
+      expect(titles).not.toContain(removed)
     expect(titles).toEqual(
-      expect.arrayContaining([
-        'Projects',
-        'Teams',
-        'Users',
-        'MCP Tokens',
-        'Audit Logs',
-        'Settings',
-      ])
+      expect.arrayContaining(['MCP Tokens', 'Audit Logs', 'Settings'])
     )
   })
-  it('reserves Users and Teams for SuperAdmin', () => {
-    expect(visibleTitles(false, true)).not.toEqual(
-      expect.arrayContaining(['Users', 'Teams'])
-    )
-    expect(visibleTitles(true, false)).toEqual(
-      expect.arrayContaining(['Users', 'Teams'])
-    )
+  it('shows the workspace to every authenticated role', () => {
+    expect(visibleTitles(false, false)).toContain('Workspace')
+    expect(visibleTitles(true, false)).toContain('Workspace')
   })
 
   it('shows Audit Logs only to SuperAdmin or a project admin', () => {

@@ -1,0 +1,79 @@
+diff --git a/dist/cjs/lazyRouteComponent.cjs b/dist/cjs/lazyRouteComponent.cjs
+index b2a3d8b8ab098d94c610cfbc00dc025557c13af9..e5c9e70e0da7905b4f8048c72f55f5c5d58f5f93 100644
+--- a/dist/cjs/lazyRouteComponent.cjs
++++ b/dist/cjs/lazyRouteComponent.cjs
+@@ -23,7 +23,6 @@ function lazyRouteComponent(importer, exportName) {
+ 			error = void 0;
+ 			loadPromise = importer().then((res) => {
+ 				if (!(_tanstack_router_core_isServer.isServer ?? typeof window === "undefined")) {
+-					loadPromise = void 0;
+ 					lazyComp.preload = void 0;
+ 				}
+ 				comp = res[exportName ?? "default"];
+@@ -46,10 +45,8 @@ function lazyRouteComponent(importer, exportName) {
+ 			}
+ 			throw error;
+ 		}
+-		if (!comp) {
+-			if (require_utils.reactUse) require_utils.reactUse(load());
+-			else throw load();
+-		}
++		if (require_utils.reactUse) require_utils.reactUse(load());
++		else if (!comp) throw load();
+ 		return react.createElement(comp, props);
+ 	};
+ 	lazyComp.preload = load;
+diff --git a/dist/esm/lazyRouteComponent.js b/dist/esm/lazyRouteComponent.js
+index 7788648a35e73af6625769575ec15596b4abe2ee..1e2f9cb1dc959fc32181e891e5505f676b02cba1 100644
+--- a/dist/esm/lazyRouteComponent.js
++++ b/dist/esm/lazyRouteComponent.js
+@@ -21,7 +21,6 @@ function lazyRouteComponent(importer, exportName) {
+ 			error = void 0;
+ 			loadPromise = importer().then((res) => {
+ 				if (!(isServer ?? typeof window === "undefined")) {
+-					loadPromise = void 0;
+ 					lazyComp.preload = void 0;
+ 				}
+ 				comp = res[exportName ?? "default"];
+@@ -44,10 +43,8 @@ function lazyRouteComponent(importer, exportName) {
+ 			}
+ 			throw error;
+ 		}
+-		if (!comp) {
+-			if (reactUse) reactUse(load());
+-			else throw load();
+-		}
++		if (reactUse) reactUse(load());
++		else if (!comp) throw load();
+ 		return React$1.createElement(comp, props);
+ 	};
+ 	lazyComp.preload = load;
+diff --git a/src/lazyRouteComponent.tsx b/src/lazyRouteComponent.tsx
+index a7b58c449914f93cffa02233cb95324efc660309..8f632f64a8890ef6a8594fd2c7194402bd1bd108 100644
+--- a/src/lazyRouteComponent.tsx
++++ b/src/lazyRouteComponent.tsx
+@@ -33,7 +33,6 @@ export function lazyRouteComponent<
+         .then((res) => {
+           // Resolved clients have no preload work; SSR can reuse the import.
+           if (!(isServer ?? typeof window === 'undefined')) {
+-            loadPromise = undefined
+             ;(lazyComp as any).preload = undefined
+           }
+           comp = res[exportName ?? 'default']
+@@ -70,12 +69,10 @@ export function lazyRouteComponent<
+       throw error
+     }
+ 
+-    if (!comp) {
+-      if (reactUse) {
+-        reactUse(load())
+-      } else {
+-        throw load()
+-      }
++    if (reactUse) {
++      reactUse(load())
++    } else if (!comp) {
++      throw load()
+     }
+ 
+     return React.createElement(comp, props)

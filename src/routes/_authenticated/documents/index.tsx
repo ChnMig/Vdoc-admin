@@ -1,7 +1,15 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { DocumentWorkspacePage } from '@/features/vdoc-admin/document-workspace-page'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import {
+  documentWorkspaceNavigation,
+  legacyDocumentDestination,
+} from '@/lib/document-workspace-navigation'
+import { WorkspaceHierarchyPage } from '@/features/vdoc-admin/workspace-hierarchy-page'
 
 export const Route = createFileRoute('/_authenticated/documents/')({
+  beforeLoad: ({ search }) => {
+    if (search.document_id)
+      throw redirect({ ...legacyDocumentDestination(search), replace: true })
+  },
   component: DocumentsRoute,
 })
 
@@ -9,14 +17,19 @@ function DocumentsRoute() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   return (
-    <DocumentWorkspacePage
-      defaultView='content'
+    <WorkspaceHierarchyPage
       search={search}
       onSearchChange={(patch, options) =>
-        void navigate({
-          replace: options?.replace ?? false,
-          search: (current) => ({ ...current, ...patch }),
-        })
+        void navigate(documentWorkspaceNavigation(search, patch, options))
+      }
+      onDocumentOpen={(projectId, documentId, teamId) =>
+        void navigate(
+          documentWorkspaceNavigation(search, {
+            project_id: projectId,
+            team_id: teamId,
+            document_id: documentId,
+          })
+        )
       }
     />
   )

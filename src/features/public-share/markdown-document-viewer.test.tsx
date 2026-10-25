@@ -45,4 +45,50 @@ describe('MarkdownDocumentViewer', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('relative script')).toBeInTheDocument()
   })
+
+  it('uses an unframed article and omits only a matching leading document title', () => {
+    const screen = render(
+      <MarkdownDocumentViewer
+        variant='article'
+        documentTitle='Release guide'
+        content={
+          '\n# **Release** guide\n\nIntroduction.\n\n## Install\n\n# Release guide'
+        }
+      />
+    )
+    const article = screen.container.querySelector('article')!
+    expect(article).not.toHaveClass('panel-control', 'border', 'bg-card')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { name: 'Install' })).toBeVisible()
+  })
+
+  it.each([
+    ['# Another title', 'Release guide', 'Another title'],
+    ['Introduction.\n\n# Release guide', 'Release guide', 'Release guide'],
+  ])(
+    'keeps a different title or a heading following other content',
+    (content, documentTitle, heading) => {
+      const screen = render(
+        <MarkdownDocumentViewer
+          variant='article'
+          content={content}
+          documentTitle={documentTitle}
+        />
+      )
+      expect(screen.getByRole('heading', { name: heading })).toBeVisible()
+    }
+  )
+
+  it('preserves a matching title in the default public-share panel', () => {
+    const screen = render(
+      <MarkdownDocumentViewer
+        content='# Release guide'
+        documentTitle='Release guide'
+      />
+    )
+    expect(screen.getByRole('heading', { name: 'Release guide' })).toBeVisible()
+    expect(screen.container.querySelector('article')).toHaveClass(
+      'panel-control'
+    )
+  })
 })

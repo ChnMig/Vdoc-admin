@@ -562,6 +562,24 @@ function ScopedFormDialog({
   ...formProps
 }: FormDialogProps) {
   const [open, setOpen] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!open || !formProps.pending) return
+    const content = contentRef.current
+    const active = document.activeElement
+    // A disabled submit button loses its place in the dialog's tab order.
+    if (
+      content &&
+      active instanceof HTMLElement &&
+      content.contains(active) &&
+      active.matches(':disabled')
+    ) {
+      const firstField = content.querySelector<HTMLElement>(
+        'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled)'
+      )
+      ;(firstField ?? content).focus()
+    }
+  }, [open, formProps.pending])
   const changeOpen = (nextOpen: boolean) => {
     setOpen(nextOpen)
     onOpenChange?.(nextOpen)
@@ -585,6 +603,7 @@ function ScopedFormDialog({
         </Button>
       </DialogTrigger>
       <DialogContent
+        ref={contentRef}
         className='max-h-[calc(100dvh-2rem)] overflow-y-auto'
         showCloseButton={!formProps.pending}
         {...(!description ? { 'aria-describedby': undefined } : {})}

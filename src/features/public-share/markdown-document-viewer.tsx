@@ -6,13 +6,24 @@ import { publicMarkdownLink } from './public-markdown-link'
 
 export type MarkdownDocumentViewerProps = {
   readonly content: string
+  readonly variant?: 'panel' | 'article'
+  readonly documentTitle?: string
 }
 
 export function MarkdownDocumentViewer({
   content,
+  variant = 'panel',
+  documentTitle,
 }: MarkdownDocumentViewerProps) {
+  const article = variant === 'article'
   return (
-    <article className='min-w-0 overflow-hidden rounded-lg border bg-card p-5 text-sm leading-6 text-card-foreground shadow-[var(--shadow-card)] panel-control sm:p-6'>
+    <article
+      className={
+        article
+          ? 'min-w-0 text-base leading-[1.9] break-words text-foreground'
+          : 'min-w-0 overflow-hidden rounded-lg border bg-card p-5 text-sm leading-6 text-card-foreground shadow-[var(--shadow-card)] panel-control sm:p-6'
+      }
+    >
       <ReactMarkdown
         skipHtml
         remarkPlugins={[remarkGfm]}
@@ -32,19 +43,29 @@ export function MarkdownDocumentViewer({
               className={cn('accent-primary', className)}
             />
           ),
-          h1: ({ className, node: _node, ...props }) => (
-            <h1
-              className={cn(
-                'mb-4 text-2xl font-semibold tracking-[-0.02em] text-balance',
-                className
-              )}
-              {...props}
-            />
-          ),
+          h1: ({ className, node, ...props }) =>
+            article &&
+            documentTitle &&
+            node?.position?.start.offset !== undefined &&
+            !content.slice(0, node.position.start.offset).trim() &&
+            normalizeHeading(headingText(node)) ===
+              normalizeHeading(documentTitle) ? null : (
+              <h1
+                className={cn(
+                  article
+                    ? 'mb-7 scroll-mt-8 text-[2rem] leading-[1.35] font-semibold tracking-[-0.02em] text-balance'
+                    : 'mb-4 text-2xl font-semibold tracking-[-0.02em] text-balance',
+                  className
+                )}
+                {...props}
+              />
+            ),
           h2: ({ className, node: _node, ...props }) => (
             <h2
               className={cn(
-                'mt-8 mb-3 text-xl font-semibold tracking-[-0.01em] text-balance',
+                article
+                  ? 'mt-11 mb-4 scroll-mt-8 text-2xl leading-[1.45] font-semibold tracking-[-0.01em] text-balance'
+                  : 'mt-8 mb-3 text-xl font-semibold tracking-[-0.01em] text-balance',
                 className
               )}
               {...props}
@@ -53,7 +74,18 @@ export function MarkdownDocumentViewer({
           h3: ({ className, node: _node, ...props }) => (
             <h3
               className={cn(
-                'mt-6 mb-2 text-lg font-semibold text-balance',
+                article
+                  ? 'mt-8 mb-3 scroll-mt-8 text-xl leading-normal font-semibold text-balance'
+                  : 'mt-6 mb-2 text-lg font-semibold text-balance',
+                className
+              )}
+              {...props}
+            />
+          ),
+          h4: ({ className, node: _node, ...props }) => (
+            <h4
+              className={cn(
+                'mt-6 mb-2 scroll-mt-8 text-base font-semibold text-balance',
                 className
               )}
               {...props}
@@ -62,7 +94,9 @@ export function MarkdownDocumentViewer({
           p: ({ className, node: _node, ...props }) => (
             <p
               className={cn(
-                'my-3 max-w-prose text-pretty break-words',
+                article
+                  ? 'my-5 text-pretty break-words'
+                  : 'my-3 max-w-prose text-pretty break-words',
                 className
               )}
               {...props}
@@ -70,20 +104,32 @@ export function MarkdownDocumentViewer({
           ),
           ul: ({ className, node: _node, ...props }) => (
             <ul
-              className={cn('my-3 list-disc space-y-1 pl-6', className)}
+              className={cn(
+                article
+                  ? 'my-5 list-disc space-y-2 pl-6'
+                  : 'my-3 list-disc space-y-1 pl-6',
+                className
+              )}
               {...props}
             />
           ),
           ol: ({ className, node: _node, ...props }) => (
             <ol
-              className={cn('my-3 list-decimal space-y-1 pl-6', className)}
+              className={cn(
+                article
+                  ? 'my-5 list-decimal space-y-2 pl-6'
+                  : 'my-3 list-decimal space-y-1 pl-6',
+                className
+              )}
               {...props}
             />
           ),
           blockquote: ({ className, node: _node, ...props }) => (
             <blockquote
               className={cn(
-                'my-4 rounded-md bg-muted px-4 py-3 text-muted-foreground',
+                article
+                  ? 'my-6 border-s border-border ps-4 text-muted-foreground'
+                  : 'my-4 rounded-md bg-muted px-4 py-3 text-muted-foreground',
                 className
               )}
               {...props}
@@ -92,7 +138,9 @@ export function MarkdownDocumentViewer({
           pre: ({ className, node: _node, ...props }) => (
             <pre
               className={cn(
-                'my-4 max-w-full overflow-x-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-5',
+                article
+                  ? 'my-6 max-w-full overflow-x-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-sm leading-6 [&>code]:bg-transparent [&>code]:p-0 [&>code]:whitespace-pre'
+                  : 'my-4 max-w-full overflow-x-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-5',
                 className
               )}
               {...props}
@@ -136,6 +184,22 @@ export function MarkdownDocumentViewer({
       </ReactMarkdown>
     </article>
   )
+}
+
+type HeadingTextNode = {
+  type: string
+  value?: string
+  children?: readonly HeadingTextNode[]
+}
+
+function headingText(node: HeadingTextNode): string {
+  return node.type === 'text'
+    ? (node.value ?? '')
+    : (node.children?.map(headingText).join('') ?? '')
+}
+
+function normalizeHeading(text: string) {
+  return text.trim().replace(/\s+/g, ' ')
 }
 
 function PublicMarkdownAnchor({

@@ -17,7 +17,8 @@ const projectId = 'list-project'
 const documentId = 'list-document'
 const documentPath = `${rootPath}/projects/${projectId}/documents`
 const branchPath = `${documentPath}/${documentId}/branches`
-const documentManagementRoute = `/documents?team_id=list-team&project_id=${projectId}&document_id=${documentId}&workspace_view=manage`
+const projectWorkspaceRoute = `/documents?team_id=list-team&project_id=${projectId}`
+const documentManagementRoute = `/documents/${documentId}?team_id=list-team&project_id=${projectId}&workspace_view=manage`
 const syntheticSecret = 'synthetic-entity-list-token-capability'
 
 type Resource = Record<string, unknown> & { id: string; name: string }
@@ -344,6 +345,7 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
   }
   await page.goto(documentManagementRoute)
   await page
+    .getByRole('region', { name: 'Reading context', exact: true })
     .getByRole('button', { name: 'Manage branches', exact: true })
     .click()
   await page.getByRole('button', { name: 'Create branch', exact: true }).click()
@@ -421,6 +423,17 @@ test('creation errors retain input and success refreshes list; pending keeps foc
   expect(
     await dialog.evaluate((element) => element.contains(document.activeElement))
   ).toBe(true)
+  for (const key of ['Tab', 'Shift+Tab']) {
+    for (let step = 0; step < 4; step++) {
+      await page.keyboard.press(key)
+      expect(
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement)
+        ),
+        `Pending dialog keeps focus after ${key} step ${step + 1}`
+      ).toBe(true)
+    }
+  }
   finishRequest?.()
   await expect(dialog).toHaveCount(0)
   await expect(
@@ -518,9 +531,11 @@ test('document creation can upload its first TXT draft inside a newly created ne
   page,
 }) => {
   const state = await fixture(page)
-  await page.goto('/documents')
-  await page.getByRole('button', { name: 'New document', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: 'New document' })
+  await page.goto(projectWorkspaceRoute)
+  await page
+    .getByRole('button', { name: 'Create document', exact: true })
+    .click()
+  const dialog = page.getByRole('dialog', { name: 'Create document' })
   await dialog.getByLabel('Name', { exact: true }).fill('Display title')
   await dialog
     .getByRole('button', { name: 'New subfolder', exact: true })
@@ -576,9 +591,10 @@ test('document creation can upload its first TXT draft inside a newly created ne
   await expect(
     page.getByRole('heading', { name: 'Display title', exact: true })
   ).toBeVisible()
+  expect(new URL(page.url()).pathname).toMatch(/^\/documents\/created-\d+$/)
   await expect(
     page.getByRole('navigation', { name: 'Files' }).getByRole('button', {
-      name: /independent\.txt.*Display title/,
+      name: /Display title.*independent\.txt/,
     })
   ).toHaveAttribute('aria-current', 'page')
 })
@@ -615,8 +631,8 @@ test('document/branch/user/token creation returns to updated lists', async ({
       },
     },
     {
-      route: '/documents',
-      title: 'New document',
+      route: projectWorkspaceRoute,
+      title: 'Create document',
       name: 'Created handbook',
       fill: async () => {
         await page
@@ -642,6 +658,7 @@ test('document/branch/user/token creation returns to updated lists', async ({
     await page.goto(flow.route)
     if (flow.title === 'Create branch')
       await page
+        .getByRole('region', { name: 'Reading context', exact: true })
         .getByRole('button', { name: 'Manage branches', exact: true })
         .click()
     await page.getByRole('button', { name: flow.title, exact: true }).click()
@@ -650,11 +667,12 @@ test('document/branch/user/token creation returns to updated lists', async ({
     await flow.fill()
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(dialog).toHaveCount(0)
-    if (flow.title === 'New document')
+    if (flow.title === 'Create document') {
       await expect(
         page.getByRole('heading', { name: flow.name, exact: true })
       ).toBeVisible()
-    else if (flow.title === 'Create branch')
+      expect(new URL(page.url()).pathname).toMatch(/^\/documents\/created-\d+$/)
+    } else if (flow.title === 'Create branch')
       await expect(
         page
           .getByRole('region', { name: /^Branches/ })
@@ -680,11 +698,21 @@ test('readers see project and document lists without create/edit actions', async
   page,
 }) => {
   await fixture(page, { regular: true })
-  for (const route of ['/projects', '/documents']) {
+  for (const route of ['/projects', projectWorkspaceRoute]) {
     await page.goto(route)
-    if (route === '/documents') {
+    if (route === projectWorkspaceRoute) {
+      const documents = page.getByRole('tabpanel', {
+        name: 'Documents',
+        exact: true,
+      })
+      await documents
+        .getByRole('button', { name: 'guides', exact: true })
+        .click()
       await expect(
-        page.getByRole('navigation', { name: 'Files' })
+        documents.getByRole('button', {
+          name: 'Published handbook',
+          exact: true,
+        })
       ).toBeVisible()
     } else await expect(page.getByRole('table').first()).toBeVisible()
     await expect(

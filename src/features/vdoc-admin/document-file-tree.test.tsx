@@ -159,7 +159,10 @@ describe('document file tree', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Expand Reference' })
-    ).toHaveAttribute('aria-pressed', 'true')
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      screen.getByRole('button', { name: 'Expand Reference' })
+    ).toHaveAttribute('data-creation-target', 'true')
 
     await user.click(screen.getByRole('button', { name: 'Collapse Guides' }))
     screen.rerenderTree({ folderId: 'guides' })
@@ -171,7 +174,101 @@ describe('document file tree', () => {
     const root = within(
       screen.getByRole('navigation', { name: 'Files' })
     ).getAllByRole('button')[0]
-    expect(root).toHaveAttribute('aria-pressed', 'true')
+    expect(root).toHaveAttribute('aria-pressed', 'false')
+    expect(root).toHaveAttribute('data-creation-target', 'true')
+  })
+
+  it('highlights only the open document while folder clicks keep a separate creation target', async () => {
+    const user = userEvent.setup()
+    const screen = renderTree({
+      documentId: 'intro',
+      folderId: 'guides',
+    })
+    const navigation = screen.getByRole('navigation', { name: 'Files' })
+    const folder = screen.getByRole('button', { name: 'Collapse Guides' })
+    const selected = screen.getByRole('button', { name: /intro.txt/ })
+
+    expect(selected).toHaveAttribute('aria-current', 'page')
+    expect(selected).toHaveClass('bg-primary/8')
+    expect(navigation.querySelectorAll('[aria-current]')).toHaveLength(1)
+    expect(navigation.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0)
+    expect(folder).not.toHaveClass('bg-primary/8')
+    expect(folder).toHaveAttribute('data-creation-target', 'true')
+
+    await user.click(folder)
+    expect(screen.onFolderSelect).toHaveBeenLastCalledWith('guides')
+    expect(screen.onDocumentSelect).not.toHaveBeenCalled()
+    expect(folder).toHaveAttribute('aria-expanded', 'false')
+    expect(folder).not.toHaveClass('bg-primary/8')
+
+    screen.rerenderTree({ documentId: undefined })
+    expect(folder).toHaveAttribute('aria-current', 'location')
+    expect(folder).toHaveClass('bg-primary/8')
+    expect(navigation.querySelectorAll('[aria-current]')).toHaveLength(1)
+  })
+
+  it('shows one document title and keeps the distinct filename and workflow available accessibly', () => {
+    const document = {
+      ...makeDocument('intro', 'guides', 2),
+      name: 'A readable document title',
+      file_name: 'service-integration.md',
+      relative_path: 'Guides/service-integration.md',
+      workflow_state: 'published' as const,
+      has_draft: true,
+    }
+    const screen = renderTree({
+      documents: [document],
+      documentId: document.id,
+    })
+    const row = screen.getByRole('button', {
+      name: /Markdown A readable document title service-integration.md Published Has unpublished draft/,
+    })
+
+    expect(within(row).getAllByText('A readable document title')).toHaveLength(
+      1
+    )
+    expect(within(row).getByText('service-integration.md')).toHaveClass(
+      'sr-only'
+    )
+    expect(row).toHaveAttribute(
+      'title',
+      'A readable document title\nGuides/service-integration.md'
+    )
+    expect(row.querySelectorAll('svg')).toHaveLength(1)
+    expect(within(row).getByTitle('Has unpublished draft')).toBeInTheDocument()
+  })
+
+  it('keeps deeply nested folder rows aligned without unbounded indentation', () => {
+    const folders = Array.from({ length: 24 }, (_, index) =>
+      makeFolder(
+        `folder-${index}`,
+        `Level ${index}`,
+        index ? `folder-${index - 1}` : null,
+        Array.from({ length: index + 1 }, (_, depth) => `Level ${depth}`).join(
+          '/'
+        )
+      )
+    )
+    const screen = renderTree({
+      folders,
+      documents: [makeDocument('intro', 'folder-23')],
+      documentId: 'intro',
+    })
+    const shallow = screen.getByRole('button', { name: 'Collapse Level 0' })
+    const deep = screen.getByRole('button', { name: 'Collapse Level 23' })
+    const selected = screen.getByRole('button', { name: /intro.txt/ })
+
+    expect(
+      screen.getAllByRole('button', { name: /Collapse Level/ })
+    ).toHaveLength(24)
+    expect(parseFloat(shallow.style.paddingInlineStart)).toBeLessThan(
+      parseFloat(deep.style.paddingInlineStart)
+    )
+    expect(parseFloat(deep.style.paddingInlineStart)).toBeLessThanOrEqual(4.5)
+    expect(selected.style.paddingInlineStart).toBe(
+      deep.style.paddingInlineStart
+    )
+    expect(selected).toHaveAttribute('aria-current', 'page')
   })
 
   it('finds legacy document ancestors from the relative path', () => {

@@ -1,6 +1,6 @@
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentDTO, DraftDTO } from '@/lib/vdoc-api'
+import type { DocumentDTO, DraftDTO, VersionDTO } from '@/lib/vdoc-api'
 import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 import { LanguageProvider } from '@/context/language-provider'
 import type { DocumentReadingSelection } from './document-workspace-content'
@@ -10,6 +10,11 @@ const reading = vi.hoisted(() => ({
   selection: {} as DocumentReadingSelection,
   editorMounted: vi.fn(),
   editorUnmounted: vi.fn(),
+  draftNavigate: undefined as
+    ((patch: Partial<VdocRouteSearch>) => void) | undefined,
+  versionNavigate: undefined as
+    ((patch: Partial<VdocRouteSearch>) => void) | undefined,
+  shareProps: vi.fn(),
 }))
 
 vi.mock('./use-document-reading-selection', () => ({
@@ -32,17 +37,36 @@ vi.mock('./document-workspace-branches', () => ({
   DocumentWorkspaceBranches: () => null,
 }))
 vi.mock('./document-workspace-share', () => ({
-  DocumentWorkspaceShare: () => null,
+  DocumentWorkspaceShare: (props: unknown) => {
+    reading.shareProps(props)
+    return <p>Exact document share context</p>
+  },
+}))
+vi.mock('./versions-page', () => ({
+  VersionsPage: ({
+    onSearchChange,
+  }: {
+    onSearchChange: (patch: Partial<VdocRouteSearch>) => void
+  }) => {
+    reading.versionNavigate = onSearchChange
+    return <p>Version tools</p>
+  },
+}))
+vi.mock('./document-workspace-ai', () => ({
+  DocumentWorkspaceAI: () => <p>Document AI tools</p>,
 }))
 vi.mock('./drafts-page', async () => {
   const { useEffect, useState } = await import('react')
   return {
     DraftsPage: function StatefulDraftEditor({
       search,
+      onSearchChange,
     }: {
       search: VdocRouteSearch
+      onSearchChange: (patch: Partial<VdocRouteSearch>) => void
     }) {
       const id = search.draft_id ?? 'new-draft'
+      reading.draftNavigate = onSearchChange
       const [sessions, setSessions] = useState<
         Record<string, { content: string; conflict: boolean }>
       >({})
@@ -90,6 +114,7 @@ const document: DocumentDTO = {
   id: 'document-1',
   project_id: 'project-1',
   name: 'Guide',
+  latest_version_id: 'latest-version',
   document_type: 2,
   status: 1,
   created_by: 'user-1',
@@ -117,15 +142,19 @@ const selection = (id: string): DocumentReadingSelection => ({
   draft: draft(id),
 })
 
-function renderDetail(initial: DocumentReadingSelection) {
+function renderDetail(
+  initial: DocumentReadingSelection,
+  { canManage = false }: { canManage?: boolean } = {}
+) {
   reading.selection = initial
   let search: VdocRouteSearch = {
     project_id: document.project_id,
     document_id: document.id,
     branch_id: 'branch-1',
     draft_id: initial.draft?.id,
-    content_mode: 'draft',
-    workspace_view: 'drafts',
+    version_id: initial.version?.id,
+    content_mode: initial.mode,
+    workspace_view: initial.mode === 'draft' ? 'drafts' : 'content',
   }
   const changes = vi.fn()
   const element = () => (
@@ -134,7 +163,7 @@ function renderDetail(initial: DocumentReadingSelection) {
         projectId={document.project_id}
         document={document}
         search={search}
-        canManage={false}
+        canManage={canManage}
         canWrite
         interactive
         onSearchChange={changes}
@@ -147,7 +176,16 @@ function renderDetail(initial: DocumentReadingSelection) {
     changes,
     rerenderSelection(next: DocumentReadingSelection, requestedId: string) {
       reading.selection = next
-      search = { ...search, draft_id: requestedId }
+      search = {
+        ...search,
+        draft_id: next.mode === 'draft' ? requestedId : undefined,
+        version_id: next.mode === 'published' ? requestedId : undefined,
+        content_mode: next.mode,
+      }
+      screen.rerender(element())
+    },
+    rerenderView(workspace_view: VdocRouteSearch['workspace_view']) {
+      search = { ...search, workspace_view }
       screen.rerender(element())
     },
   }
@@ -156,6 +194,8 @@ function renderDetail(initial: DocumentReadingSelection) {
 describe('document workspace draft editor retention', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    reading.draftNavigate = undefined
+    reading.versionNavigate = undefined
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
   })
 
@@ -194,5 +234,108 @@ describe('document workspace draft editor retention', () => {
     expect(reading.editorMounted).toHaveBeenCalledOnce()
     expect(reading.editorUnmounted).not.toHaveBeenCalled()
     expect(screen.changes).not.toHaveBeenCalled()
+  })
+
+  it('retains unsaved draft text and unresolved conflicts while navigating preview, version tools, and AI', async () => {
+    const screen = renderDetail(selection('draft-a'))
+    const editor = await screen.findByLabelText('Working draft content')
+    fireEvent.change(editor, {
+      target: { value: 'Unsaved work must survive navigation' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Mark draft conflict' }))
+
+    for (const view of ['content', 'versions', 'ai'] as const) {
+      screen.rerenderView(view)
+      if (view === 'versions') await screen.findByText('Version tools')
+      if (view === 'ai') await screen.findByText('Document AI tools')
+      expect(editor.isConnected).toBe(true)
+      expect(editor).not.toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      screen.rerenderView('drafts')
+      expect(screen.getByLabelText('Working draft content')).toBe(editor)
+      expect(editor).toHaveValue('Unsaved work must survive navigation')
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Unresolved draft conflict'
+      )
+    }
+    expect(reading.editorMounted).toHaveBeenCalledOnce()
+    expect(reading.editorUnmounted).not.toHaveBeenCalled()
+    expect(screen.changes).not.toHaveBeenCalled()
+  })
+
+  it('ignores navigation from inactive retained panes and stale selection callbacks', async () => {
+    const screen = renderDetail(selection('draft-a'))
+    await screen.findByLabelText('Working draft content')
+    const draftNavigate = reading.draftNavigate!
+    screen.rerenderView('versions')
+    await screen.findByText('Version tools')
+    const versionNavigate = reading.versionNavigate!
+    act(() => draftNavigate({ draft_id: 'stale-hidden-draft' }))
+    expect(screen.changes).not.toHaveBeenCalled()
+
+    act(() => versionNavigate({ version_id: 'selected-historical-version' }))
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      {
+        version_id: 'selected-historical-version',
+        content_mode: 'published',
+        draft_id: undefined,
+      },
+      true
+    )
+    screen.changes.mockClear()
+    screen.rerenderView('drafts')
+    act(() => versionNavigate({ version_id: 'stale-hidden-version' }))
+    expect(screen.changes).not.toHaveBeenCalled()
+
+    screen.rerenderSelection(selection('draft-b'), 'draft-b')
+    act(() => draftNavigate({ draft_id: 'stale-before-selection-change' }))
+    expect(screen.changes).not.toHaveBeenCalled()
+    act(() => reading.draftNavigate!({ draft_id: 'current-draft-selection' }))
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      {
+        draft_id: 'current-draft-selection',
+        content_mode: 'draft',
+        version_id: undefined,
+      },
+      true
+    )
+  })
+
+  it('shares the exact selected historical version and passes no published version for a draft', async () => {
+    const historicalVersion: VersionDTO = {
+      ...draft('historical-version'),
+      id: 'historical-version',
+      draft_id: 'historical-draft',
+      published_by: 'user-1',
+      published_at: '',
+    }
+    const screen = renderDetail(
+      { mode: 'published', branchId: 'branch-1', version: historicalVersion },
+      { canManage: true }
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    const dialog = within(
+      await screen.findByRole('dialog', { name: 'Share · Guide' })
+    )
+    expect(
+      await dialog.findByText('Exact document share context')
+    ).toBeVisible()
+    expect(reading.shareProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: 'project-1',
+        document,
+        selectedBranchId: 'branch-1',
+        selectedVersionId: 'historical-version',
+        embedded: true,
+      })
+    )
+
+    screen.rerenderSelection(selection('draft-a'), 'draft-a')
+    expect(reading.shareProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        selectedBranchId: 'branch-1',
+        selectedVersionId: null,
+      })
+    )
   })
 })

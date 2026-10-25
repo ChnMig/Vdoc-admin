@@ -26,6 +26,7 @@ type OptionsSelectProps = Pick<
   readonly placeholder?: string
   readonly disabled?: boolean
   readonly required?: boolean
+  readonly fallbackToFirstOption?: boolean
   readonly onChange?: (value: string) => void
 }
 
@@ -37,6 +38,7 @@ export function OptionsSelect({
   placeholder,
   disabled = false,
   required = false,
+  fallbackToFirstOption = true,
   onChange,
   className,
   'aria-describedby': describedBy,
@@ -54,7 +56,9 @@ export function OptionsSelect({
     (option) => option.value === requestedValue
   )
     ? requestedValue
-    : (options[0]?.value ?? '')
+    : fallbackToFirstOption
+      ? (options[0]?.value ?? '')
+      : ''
   const validationMessage =
     invalidSelection && required && !disabled && selectedValue === ''
       ? t('common.selectRequired')

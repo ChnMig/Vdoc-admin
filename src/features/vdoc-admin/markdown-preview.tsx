@@ -7,7 +7,15 @@ const Viewer = lazy(() =>
   }))
 )
 
-export function MarkdownPreview({ content }: { content: string }) {
+export function MarkdownPreview({
+  content,
+  variant = 'panel',
+  documentTitle,
+}: {
+  content: string
+  variant?: 'panel' | 'article'
+  documentTitle?: string
+}) {
   const { t } = useLanguage()
   return (
     <Suspense
@@ -17,7 +25,11 @@ export function MarkdownPreview({ content }: { content: string }) {
         </p>
       }
     >
-      <Viewer content={content} />
+      <Viewer
+        content={content}
+        variant={variant}
+        documentTitle={documentTitle}
+      />
     </Suspense>
   )
 }

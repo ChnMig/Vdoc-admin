@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  FolderRoot,
   Search,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -146,13 +147,13 @@ export function DocumentFileTree({
               setSearchExpansion({ query: nextQuery, collapsed: new Set() })
           }}
           placeholder={t('admin.workspace.searchFiles')}
-          className='h-9 ps-9'
+          className='h-8 border-transparent bg-muted/60 ps-9 text-sm shadow-none hover:border-input focus-visible:border-input'
         />
       </div>
       <nav
         ref={navigationRef}
         aria-label={t('admin.workspace.files')}
-        className='min-w-0 overflow-auto px-2 pb-4'
+        className='min-h-0 min-w-0 overflow-x-hidden overflow-y-auto px-2 pb-4'
         onKeyDown={(event) => {
           if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
             return
@@ -187,29 +188,25 @@ export function DocumentFileTree({
         <button
           type='button'
           aria-current={!folderId && !documentId ? 'location' : undefined}
-          aria-pressed={!folderId}
+          aria-pressed={!folderId && !documentId}
+          data-creation-target={!folderId || undefined}
           className={cn(
-            'mb-1 flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
-            !folderId && 'bg-accent font-medium'
+            'mb-1 grid min-h-9 w-full grid-cols-[0.875rem_1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 text-start text-sm hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
+            !folderId && !documentId && 'bg-primary/8 font-medium text-primary'
           )}
           onClick={() => onFolderSelect('')}
         >
-          <FolderOpen
+          <span aria-hidden className='size-3.5' />
+          <FolderRoot
             aria-hidden
             className='size-4 shrink-0 text-muted-foreground'
           />
           <span className='truncate'>{t('admin.workspace.rootFolder')}</span>
         </button>
-        <ul className='min-w-0'>
+        <ul className='min-w-0 space-y-0.5'>
           {rows.map((row) =>
             row.kind === 'folder' ? (
-              <li
-                key={`folder:${row.folder.id}`}
-                className='min-w-0'
-                style={{
-                  paddingInlineStart: `${Math.min(row.depth, 6) * 0.875}rem`,
-                }}
-              >
+              <li key={`folder:${row.folder.id}`} className='min-w-0'>
                 <button
                   type='button'
                   aria-label={t(
@@ -244,10 +241,16 @@ export function DocumentFileTree({
                       ? 'location'
                       : undefined
                   }
-                  aria-pressed={folderId === row.folder.id}
+                  aria-pressed={folderId === row.folder.id && !documentId}
+                  data-creation-target={folderId === row.folder.id || undefined}
+                  style={{
+                    paddingInlineStart: `${0.5 + Math.min(row.depth, 5) * 0.75}rem`,
+                  }}
                   className={cn(
-                    'flex min-h-10 w-full min-w-0 items-center gap-2 rounded-md px-2 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
-                    folderId === row.folder.id && 'bg-accent font-medium'
+                    'grid min-h-9 w-full min-w-0 grid-cols-[0.875rem_1rem_minmax(0,1fr)] items-center gap-2 rounded-md py-1 pe-2 text-start text-sm hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
+                    folderId === row.folder.id &&
+                      !documentId &&
+                      'bg-primary/8 font-medium text-primary'
                   )}
                 >
                   {folderIsExpanded(row.folder.id) ? (
@@ -278,28 +281,58 @@ export function DocumentFileTree({
                 </button>
               </li>
             ) : (
-              <li
-                key={`document:${row.document.id}`}
-                style={{
-                  paddingInlineStart: `${Math.min(row.depth, 6) * 0.875}rem`,
-                }}
-              >
+              <li key={`document:${row.document.id}`} className='min-w-0'>
                 <button
                   type='button'
+                  aria-label={[
+                    row.document.document_type === DOCUMENT_TYPE_OPENAPI
+                      ? t('admin.types.openapi')
+                      : row.document.document_type === DOCUMENT_TYPE_MARKDOWN
+                        ? t('admin.types.markdown')
+                        : row.document.document_type === DOCUMENT_TYPE_TEXT
+                          ? t('admin.types.text')
+                          : undefined,
+                    row.document.name ||
+                      row.document.file_name ||
+                      row.document.relative_path?.split('/').pop(),
+                    row.document.name &&
+                    row.document.file_name !== row.document.name
+                      ? row.document.file_name
+                      : undefined,
+                    t(`admin.workspace.${documentWorkflowState(row.document)}`),
+                    row.document.has_draft &&
+                    documentWorkflowState(row.document) === 'published'
+                      ? t('admin.workspace.hasDraft')
+                      : undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   aria-current={
                     row.document.id === documentId ? 'page' : undefined
                   }
                   onClick={() => onDocumentSelect(row.document)}
-                  title={row.document.relative_path ?? row.document.name}
+                  title={[
+                    row.document.name,
+                    row.document.relative_path ?? row.document.file_name,
+                  ]
+                    .filter(Boolean)
+                    .join('\n')}
+                  style={{
+                    paddingInlineStart: `${0.5 + Math.min(row.depth, 5) * 0.75}rem`,
+                  }}
                   className={cn(
-                    'flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md py-1.5 ps-7 pe-2 text-start hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
+                    'grid min-h-9 w-full min-w-0 grid-cols-[0.875rem_1rem_minmax(0,1fr)_0.375rem] items-center gap-2 rounded-md py-1 pe-2 text-start text-sm hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
                     row.document.id === documentId &&
-                      'bg-primary/10 text-primary'
+                      'bg-primary/8 font-medium text-primary'
                   )}
                 >
+                  <span aria-hidden className='size-3.5' />
                   <DocumentTypeIcon
                     documentType={row.document.document_type}
-                    className='text-muted-foreground'
+                    className={cn(
+                      'text-muted-foreground',
+                      row.document.id === documentId && 'text-primary'
+                    )}
                   />
                   {row.document.document_type === DOCUMENT_TYPE_OPENAPI ||
                   row.document.document_type === DOCUMENT_TYPE_MARKDOWN ||
@@ -315,28 +348,44 @@ export function DocumentFileTree({
                       )}
                     </span>
                   ) : null}
-                  <span className='grid min-w-0 flex-1 gap-0.5'>
-                    <span className='truncate text-sm font-medium'>
-                      {row.document.file_name ??
-                        row.document.relative_path?.split('/').pop() ??
-                        row.document.name}
-                    </span>
-                    <span className='truncate text-xs text-muted-foreground'>
-                      {row.document.name}
-                    </span>
+                  <span className='min-w-0 truncate'>
+                    {row.document.name ||
+                      row.document.file_name ||
+                      row.document.relative_path?.split('/').pop()}
+                    {row.document.file_name &&
+                      row.document.file_name !== row.document.name && (
+                        <span className='sr-only'>
+                          {' '}
+                          {row.document.file_name}
+                        </span>
+                      )}
                   </span>
-                  <span className='shrink-0 text-[11px] text-muted-foreground'>
-                    {t(
-                      `admin.workspace.${documentWorkflowState(row.document)}`
+                  <span
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      (documentWorkflowState(row.document) === 'draft' ||
+                        row.document.has_draft) &&
+                        'bg-[var(--status-review)]',
+                      documentWorkflowState(row.document) === 'published' &&
+                        !row.document.has_draft &&
+                        'bg-[var(--status-ready)]'
                     )}
-                    {row.document.has_draft &&
-                    documentWorkflowState(row.document) === 'published' ? (
-                      <span
-                        className='ms-1 inline-block size-1.5 rounded-full bg-[var(--status-review)]'
-                        role='img'
-                        aria-label={t('admin.workspace.hasDraft')}
-                      />
-                    ) : null}
+                    title={t(
+                      row.document.has_draft &&
+                        documentWorkflowState(row.document) === 'published'
+                        ? 'admin.workspace.hasDraft'
+                        : `admin.workspace.${documentWorkflowState(row.document)}`
+                    )}
+                  >
+                    <span className='sr-only'>
+                      {t(
+                        `admin.workspace.${documentWorkflowState(row.document)}`
+                      )}
+                      {row.document.has_draft &&
+                        documentWorkflowState(row.document) === 'published' && (
+                          <span> {t('admin.workspace.hasDraft')}</span>
+                        )}
+                    </span>
                   </span>
                 </button>
               </li>

@@ -1,4 +1,3 @@
-import { Bot } from 'lucide-react'
 import type { AISummaryTarget, DocumentDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
@@ -44,16 +43,10 @@ export function DocumentWorkspaceAI({
       aria-label={t('admin.workspace.aiContext')}
       className='grid min-w-0 gap-4'
     >
-      <div className='flex flex-wrap items-start justify-between gap-3 border-b pb-4'>
-        <div className='grid gap-1.5'>
-          <h2 className='flex items-center gap-2 text-sm font-semibold'>
-            <Bot aria-hidden className='size-4 text-muted-foreground' />
-            {t('admin.workspace.aiContext')}
-          </h2>
-          <p className='text-sm text-muted-foreground'>
-            {t('admin.workspace.aiContextDescription')}
-          </p>
-        </div>
+      <div className='grid min-w-0 gap-3 border-b pb-4'>
+        <p className='text-xs leading-5 text-muted-foreground'>
+          {t('admin.workspace.aiContextDescription')}
+        </p>
         {target && (
           <div className='flex min-w-0 items-center gap-2 text-xs'>
             <Badge variant='secondary'>
@@ -97,6 +90,7 @@ export function DocumentWorkspaceAI({
           target={target}
           interactive={interactive}
           canRegenerate={canRegenerate}
+          presentation='sidebar'
         />
       )}
     </section>

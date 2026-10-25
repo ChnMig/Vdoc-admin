@@ -195,13 +195,13 @@ function renderWorkspace(
   defaultView?: 'drafts' | 'versions' | 'diffs'
 ) {
   const changes = vi.fn()
-  function Harness() {
+  function Harness({ routeSearch }: { routeSearch?: VdocRouteSearch }) {
     const [search, setSearch] = useState(initialSearch)
     return (
       <>
         <button onClick={() => setSearch(initialSearch)}>Restore URL</button>
         <DocumentWorkspacePage
-          search={search}
+          search={routeSearch ?? search}
           defaultView={defaultView}
           onSearchChange={(patch, options) => {
             changes(patch, options)
@@ -215,17 +215,29 @@ function renderWorkspace(
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   clients.push(client)
+  const element = (routeSearch?: VdocRouteSearch) => (
+    <QueryClientProvider client={client}>
+      <LanguageProvider>
+        <Harness routeSearch={routeSearch} />
+      </LanguageProvider>
+    </QueryClientProvider>
+  )
+  const screen = render(element())
   return {
-    ...render(
-      <QueryClientProvider client={client}>
-        <LanguageProvider>
-          <Harness />
-        </LanguageProvider>
-      </QueryClientProvider>
-    ),
+    ...screen,
+    rerenderSearch: (routeSearch: VdocRouteSearch) =>
+      screen.rerender(element(routeSearch)),
     changes,
     client,
   }
+}
+
+function documentTools(screen: ReturnType<typeof renderWorkspace>) {
+  return within(
+    within(
+      screen.getByRole('complementary', { name: 'Document outline and tools' })
+    ).getByRole('navigation', { name: 'Document tools' })
+  )
 }
 
 describe('document workspace', () => {
@@ -399,7 +411,7 @@ describe('document workspace', () => {
     expect(screen.getByRole('button', { name: 'Edit draft' })).toBeEnabled()
   })
 
-  it('clears subordinate IDs when changing team and never carries the old file into another project', async () => {
+  it('replaces the previous file and selected context when the hub navigates to another project scope', async () => {
     const screen = renderWorkspace({
       team_id: 'team-1',
       project_id: 'project-1',
@@ -414,29 +426,27 @@ describe('document workspace', () => {
       diff_id: 'diff-1',
     })
     await screen.findByText('Published <literal> text')
-    await selectOption(screen.getByRole('combobox', { name: 'Team' }), 'team-2')
+    screen.rerenderSearch({
+      team_id: 'team-2',
+      project_id: 'project-2',
+      workspace_view: 'content',
+    })
     expect(await screen.findByText('Other file')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Published guide' })
     ).not.toBeInTheDocument()
-    expect(screen.changes).toHaveBeenLastCalledWith(
-      {
-        team_id: 'team-2',
-        content_mode: undefined,
-        project_id: 'project-2',
-        folder_id: undefined,
-        workspace_view: 'content',
-        document_id: undefined,
-        branch_id: undefined,
-        draft_id: undefined,
-        version_id: undefined,
-        endpoint_id: undefined,
-        from_version_id: undefined,
-        to_version_id: undefined,
-        diff_id: undefined,
-      },
-      { replace: false }
-    )
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: 'Version' })
+    ).not.toBeInTheDocument()
+    expect(screen.changes).not.toHaveBeenCalled()
+    expect(useVdocContextStore.getState().projectId).toBe('project-2')
+    expect(useVdocContextStore.getState().documentId).toBe('')
+    expect(
+      api.getVersionContent.mock.calls.every(([id]) => id === 'project-1')
+    ).toBe(true)
     expect(
       api.listDocuments.mock.calls.some(([id]) => id === 'project-2')
     ).toBe(true)
@@ -646,7 +656,9 @@ describe('document workspace', () => {
       screen.queryByText('Published <literal> text')
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
-    await userEvent.click(screen.getByRole('tab', { name: 'Document AI' }))
+    await userEvent.click(
+      documentTools(screen).getByRole('button', { name: 'Document AI' })
+    )
     await screen.findAllByText(
       'The selected branch or revision is unavailable. Choose another branch or revision.'
     )
@@ -687,7 +699,12 @@ describe('document workspace', () => {
     expect(api.getVersionContent).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
     await act(async () => pending.resolve(version('version-0')))
-    expect(await screen.findByText('Historical body exact')).toBeVisible()
+    const activeVersionPane = within(
+      await screen.findByRole('tabpanel', { name: 'Versions' })
+    )
+    await waitFor(() =>
+      expect(activeVersionPane.getByText('Historical body exact')).toBeVisible()
+    )
     expect(
       api.getVersionContent.mock.calls.every((call) => call[2] === 'version-0')
     ).toBe(true)
@@ -817,7 +834,7 @@ describe('document workspace', () => {
     expect(screen.getByText('Published <literal> text')).toBeVisible()
   })
 
-  it('opens legacy pane deep links, retains working text between tabs, and restores URL controlled selection', async () => {
+  it('opens legacy pane deep links, retains working text between document tools, and restores URL controlled selection', async () => {
     const screen = renderWorkspace(
       {
         team_id: 'team-1',
@@ -834,24 +851,34 @@ describe('document workspace', () => {
       screen.getByLabelText('Working draft text'),
       'Unsaved edits'
     )
-    await userEvent.click(screen.getByRole('tab', { name: 'Document tools' }))
+    await userEvent.click(
+      documentTools(screen).getByRole('button', { name: 'Versions' })
+    )
     expect(await screen.findByText('Version pane')).toBeVisible()
-    await userEvent.click(screen.getByRole('tab', { name: 'Diffs' }))
+    await userEvent.click(
+      documentTools(screen).getByRole('button', { name: 'Diffs' })
+    )
     expect(await screen.findByText('Diff pane')).toBeVisible()
     expect(
       screen.queryByRole('textbox', { name: 'Working draft text' })
     ).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'Document' }))
+    await userEvent.click(
+      documentTools(screen).getByRole('button', { name: 'On this page' })
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Edit draft' }))
     expect(screen.getByLabelText('Working draft text')).toHaveValue(
       'Unsaved edits'
     )
     await userEvent.click(screen.getByRole('button', { name: 'Restore URL' }))
     expect(await screen.findByText('Draft pane exact-draft')).toBeVisible()
-    expect(screen.getByRole('tab', { name: 'Document' })).toHaveAttribute(
-      'data-state',
-      'active'
-    )
+    expect(
+      screen.getByRole('heading', { name: 'Editing and review' })
+    ).toBeVisible()
+    expect(
+      within(screen.getByRole('banner')).getByRole('button', {
+        name: 'Back to preview',
+      })
+    ).toBeEnabled()
   })
 
   it('explicit embedding removes duplicate chrome and only the scope selector fields', () => {
@@ -904,8 +931,8 @@ describe('document workspace', () => {
       </LanguageProvider>
     )
     expect(
-      screen.getByRole('button', { name: /deep.txt/ }).parentElement
-    ).toHaveStyle({ paddingInlineStart: '5.25rem' })
+      screen.getByRole('button', { name: /deep.txt/ }).style.paddingInlineStart
+    ).toBe('4.25rem')
     await userEvent.click(
       screen.getByRole('button', { name: 'Collapse Folder 0' })
     )

@@ -4,19 +4,49 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
-import { version } from './package.json'
+import packageInfo from './package.json' with { type: 'json' }
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
   define: {
     __VDOC_ADMIN_BUILD_INFO__: JSON.stringify({
       version:
-        command === 'build' ? process.env.VERSION || `v${version}` : 'dev',
+        command === 'build'
+          ? process.env.VERSION || `v${packageInfo.version}`
+          : 'dev',
       gitCommit: process.env.GIT_COMMIT || 'unknown',
       buildTime: process.env.BUILD_TIME || 'unknown',
     }),
   },
-  build: { manifest: true },
+  build: {
+    manifest: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'workbench-shell',
+              test: /\/src\/components\/layout\/authenticated-layout\.tsx$/,
+              includeDependenciesRecursively: true,
+              priority: 5,
+            },
+            {
+              name: 'document-workspace',
+              test: /\/src\/features\/vdoc-admin\/document-workspace-detail\.tsx$/,
+              includeDependenciesRecursively: false,
+              priority: 10,
+            },
+            {
+              name: 'bootstrap',
+              test: /\/src\/main\.tsx$/,
+              includeDependenciesRecursively: true,
+              priority: 20,
+            },
+          ],
+        },
+      },
+    },
+  },
   plugins: [
     tanstackRouter({
       target: 'react',
@@ -27,7 +57,7 @@ export default defineConfig(({ command }) => ({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   optimizeDeps: {

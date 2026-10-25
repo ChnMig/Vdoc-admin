@@ -3284,6 +3284,11 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     apiMocks.listDiffs.mockResolvedValue({ items: [diffFixture], total: 1 })
     const screen = renderDiffsPage()
 
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue(
+        markdownDocumentFixture.id
+      )
+    )
     await userEvent.click(
       screen.getByRole('tab', { name: 'Stored diff history' })
     )
@@ -3723,6 +3728,11 @@ describe('DraftsPage lifecycle boundaries', () => {
     })
     const screen = renderDraftsPage()
     const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue(
+        markdownDocumentFixture.id
+      )
+    )
     await user.click(screen.getByRole('tab', { name: 'Draft history' }))
     const historyDraft = await screen.findByRole('button', { name: 'draft v1' })
     historyDraft.focus()
