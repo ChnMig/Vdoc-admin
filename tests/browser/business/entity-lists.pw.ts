@@ -343,6 +343,9 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
     await noPageOverflow(page)
   }
   await page.goto(documentManagementRoute)
+  await page
+    .getByRole('button', { name: 'Manage branches', exact: true })
+    .click()
   await page.getByRole('button', { name: 'Create branch', exact: true }).click()
   await expect(
     page
@@ -351,7 +354,8 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
   ).toBeVisible()
   await page.keyboard.press('Escape')
   const branchRow = page
-    .getByRole('row')
+    .getByRole('region', { name: /^Branches/ })
+    .getByRole('listitem')
     .filter({ hasText: 'Main environment branch' })
   await expect(branchRow.locator('input')).toHaveCount(0)
   await branchRow.getByRole('button', { name: 'Edit', exact: true }).click()
@@ -636,6 +640,10 @@ test('document/branch/user/token creation returns to updated lists', async ({
   ]
   for (const flow of flows) {
     await page.goto(flow.route)
+    if (flow.title === 'Create branch')
+      await page
+        .getByRole('button', { name: 'Manage branches', exact: true })
+        .click()
     await page.getByRole('button', { name: flow.title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: flow.title })
     await dialog.getByLabel('Name', { exact: true }).fill(flow.name)
@@ -645,6 +653,13 @@ test('document/branch/user/token creation returns to updated lists', async ({
     if (flow.title === 'New document')
       await expect(
         page.getByRole('heading', { name: flow.name, exact: true })
+      ).toBeVisible()
+    else if (flow.title === 'Create branch')
+      await expect(
+        page
+          .getByRole('region', { name: /^Branches/ })
+          .getByRole('listitem')
+          .filter({ hasText: flow.name })
       ).toBeVisible()
     else
       await expect(

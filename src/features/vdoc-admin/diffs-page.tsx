@@ -56,6 +56,7 @@ import {
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
 import { useVersionChoices } from './use-version-choices'
+import { useWorkspaceEmbedding } from './workspace-embedding'
 
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 
@@ -71,6 +72,7 @@ export function DiffsPage({
   onSearchChange,
 }: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
+  const embedded = useWorkspaceEmbedding()
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const {
@@ -728,11 +730,13 @@ export function DiffsPage({
           </CollectionCard>
         </TabsContent>
       </Tabs>
-      <AIContextPanel
-        target={activeDiffAITarget}
-        interactive={activeDiffAIInteractive}
-        canRegenerate={canRegenerateDiffSummary}
-      />
+      {!embedded && (
+        <AIContextPanel
+          target={activeDiffAITarget}
+          interactive={activeDiffAIInteractive}
+          canRegenerate={canRegenerateDiffSummary}
+        />
+      )}
     </PageChrome>
   )
 }

@@ -161,6 +161,62 @@ describe('public share API', () => {
     expect(requestInit?.headers).not.toHaveProperty('Cookie')
   })
 
+  it('accepts a fixed-version share while preserving its exact published version', async () => {
+    const metadata = {
+      document_name: 'Published release policy',
+      document_type: 2,
+      version_scope: 3,
+      current_version: {
+        id: versionId,
+        version_name: 'v1-fixed',
+        published_at: '2026-07-20T00:00:00Z',
+      },
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ detail: metadata }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      getPublicShareMetadata({
+        baseUrl,
+        shareId,
+        secret,
+        signal: new AbortController().signal,
+      })
+    ).resolves.toEqual(metadata)
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('still rejects an unknown version scope when the document type is valid', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          detail: {
+            document_name: 'Published release policy',
+            document_type: 2,
+            version_scope: 4,
+            current_version: {
+              id: versionId,
+              version_name: 'v1',
+              published_at: '2026-07-20T00:00:00Z',
+            },
+          },
+        })
+      )
+    )
+
+    await expect(
+      getPublicShareMetadata({
+        baseUrl,
+        shareId,
+        secret,
+        signal: new AbortController().signal,
+      })
+    ).rejects.toMatchObject({ status: 'INVALID_RESPONSE' })
+  })
+
   it('uses one request for versions and content with isolated timeout signals', async () => {
     const controller = new AbortController()
     const fetchMock = vi

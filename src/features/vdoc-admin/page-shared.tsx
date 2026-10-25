@@ -373,9 +373,10 @@ export function ContextSelectorGrid({
 }) {
   const embedded = useWorkspaceEmbedding()
   const fields = Children.toArray(children)
-  return (
-    <SelectorGrid>{embedded ? fields.slice(scopeFields) : fields}</SelectorGrid>
-  )
+  const visibleFields = embedded ? fields.slice(scopeFields) : fields
+  return visibleFields.length ? (
+    <SelectorGrid>{visibleFields}</SelectorGrid>
+  ) : null
 }
 
 function sameFormValues(left: FormData, right: FormData) {

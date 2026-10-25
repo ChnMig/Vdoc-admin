@@ -21,8 +21,9 @@ export const vdocRouteSearchSchema = z.object({
   to_version_id: optionalEntityId,
   diff_id: optionalEntityId,
   token_id: optionalEntityId,
+  content_mode: z.enum(['published', 'draft']).optional().catch(undefined),
   workspace_view: z
-    .enum(['content', 'drafts', 'versions', 'diffs', 'share', 'manage'])
+    .enum(['content', 'drafts', 'versions', 'diffs', 'share', 'manage', 'ai'])
     .optional()
     .catch(undefined),
 })

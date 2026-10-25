@@ -89,6 +89,7 @@ import {
   type QueryState,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
+import { useWorkspaceEmbedding } from './workspace-embedding'
 
 const DRAFT_STATUS_DRAFT = 1
 
@@ -172,6 +173,7 @@ export function DraftsPage({
   onSearchChange,
 }: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
+  const embedded = useWorkspaceEmbedding()
   const invalidate = useInvalidateResources()
   const authUser = useAuthStore((state) => state.auth.user)
   const authSessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -285,7 +287,10 @@ export function DraftsPage({
     draftId,
   ])
   const activeWorkspaceTab =
-    workspaceTab.context === workspaceContext ? workspaceTab.value : 'workspace'
+    workspaceTab.context === workspaceContext &&
+    (!embedded || workspaceTab.value !== 'ai')
+      ? workspaceTab.value
+      : 'workspace'
   const [contentKind, setContentKind] = useState('raw')
   const [reviewNote, setReviewNote] = useState('')
   const [pendingReviewAction, setPendingReviewAction] = useState<{
@@ -583,7 +588,7 @@ export function DraftsPage({
             : []),
         ]}
       />
-      <ContextSelectorGrid>
+      <ContextSelectorGrid scopeFields={4}>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
@@ -658,7 +663,9 @@ export function DraftsPage({
           <TabsTrigger value='history'>
             {t('admin.draftEditor.history')}
           </TabsTrigger>
-          <TabsTrigger value='ai'>{t('admin.ai.badge')}</TabsTrigger>
+          {!embedded && (
+            <TabsTrigger value='ai'>{t('admin.ai.badge')}</TabsTrigger>
+          )}
         </TabsList>
         <TabsContent
           value='workspace'
@@ -1007,18 +1014,20 @@ export function DraftsPage({
             </>
           )}
         </TabsContent>
-        <TabsContent
-          value='ai'
-          forceMount
-          hidden={activeWorkspaceTab !== 'ai'}
-          className='min-w-0'
-        >
-          <AIContextPanel
-            target={selectedDraftAITarget}
-            interactive={selectedDraftAIInteractive}
-            canRegenerate={canPublishForRole && selectedDraftAIInteractive}
-          />
-        </TabsContent>
+        {!embedded && (
+          <TabsContent
+            value='ai'
+            forceMount
+            hidden={activeWorkspaceTab !== 'ai'}
+            className='min-w-0'
+          >
+            <AIContextPanel
+              target={selectedDraftAITarget}
+              interactive={selectedDraftAIInteractive}
+              canRegenerate={canPublishForRole && selectedDraftAIInteractive}
+            />
+          </TabsContent>
+        )}
       </Tabs>
       <ConfirmDialog
         open={pendingReviewAction !== undefined}

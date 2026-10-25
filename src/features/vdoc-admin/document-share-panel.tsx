@@ -16,6 +16,7 @@ import {
   revealDocumentShare,
   revokeDocumentShare,
   type DocumentShareExpiryPreset,
+  type CreateDocumentSharePayload,
 } from '@/lib/document-share-api'
 import { documentSharePasswordError } from '@/lib/document-share-password'
 import {
@@ -57,6 +58,10 @@ export function DocumentSharePanel({
   publishedBranchIds,
   canManage,
   interactive,
+  selectedBranchId,
+  selectedVersionId,
+  selectedVersionName,
+  embedded = false,
 }: {
   readonly projectId: string
   readonly documentId: string
@@ -65,8 +70,18 @@ export function DocumentSharePanel({
   readonly publishedBranchIds: readonly string[]
   readonly canManage: boolean
   readonly interactive: boolean
+  readonly selectedBranchId?: string
+  readonly selectedVersionId?: string | null
+  readonly selectedVersionName?: string
+  readonly embedded?: boolean
 }) {
-  const stateKey = `${projectId}:${documentId}:${interactive ? 'active' : 'readonly'}`
+  const selectionKey =
+    selectedVersionId === undefined
+      ? 'uncontrolled'
+      : selectedVersionId === null
+        ? 'draft'
+        : `${selectedBranchId}:${selectedVersionId}`
+  const stateKey = `${projectId}:${documentId}:${canManage ? 'manager' : 'viewer'}:${interactive ? 'active' : 'readonly'}:${selectionKey}`
 
   return (
     <DocumentSharePanelContent
@@ -78,6 +93,10 @@ export function DocumentSharePanel({
       publishedBranchIds={publishedBranchIds}
       canManage={canManage}
       interactive={interactive}
+      selectedBranchId={selectedBranchId}
+      selectedVersionId={selectedVersionId}
+      selectedVersionName={selectedVersionName}
+      embedded={embedded}
     />
   )
 }
@@ -90,6 +109,10 @@ function DocumentSharePanelContent({
   publishedBranchIds,
   canManage,
   interactive,
+  selectedBranchId,
+  selectedVersionId,
+  selectedVersionName,
+  embedded,
 }: {
   readonly projectId: string
   readonly documentId: string
@@ -98,8 +121,12 @@ function DocumentSharePanelContent({
   readonly publishedBranchIds: readonly string[]
   readonly canManage: boolean
   readonly interactive: boolean
+  readonly selectedBranchId?: string
+  readonly selectedVersionId?: string | null
+  readonly selectedVersionName?: string
+  readonly embedded: boolean
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const queryClient = useQueryClient()
   const [activeLink, setActiveLink] = useState('')
   const [sharePassword, setSharePassword] = useState('')
@@ -118,6 +145,19 @@ function DocumentSharePanelContent({
   const shareableBranches = branches.filter(
     (branch) => branch.status === 1 && publishedBranchIds.includes(branch.id)
   )
+  const controlledSelection = selectedVersionId !== undefined
+  const selectedBranch = shareableBranches.find(
+    (branch) => branch.id === selectedBranchId
+  )
+  const selectionCanShare =
+    !controlledSelection || Boolean(selectedVersionId && selectedBranch)
+  const expiryLabelKeys = {
+    '1_month': 'publicShare.expiryPresets.oneMonth',
+    '3_months': 'publicShare.expiryPresets.threeMonths',
+    '6_months': 'publicShare.expiryPresets.sixMonths',
+    '1_year': 'publicShare.expiryPresets.oneYear',
+    permanent: 'publicShare.expiryPresets.permanent',
+  } as const
   const passwordValidationError = documentSharePasswordError(sharePassword, {
     optional: true,
   })
@@ -233,6 +273,7 @@ function DocumentSharePanelContent({
   })
 
   const mutationError = createMutation.error ?? revealMutation.error
+  const ShareContainer = embedded ? 'div' : Card
 
   async function copyActiveLink() {
     if (!activeLink) return
@@ -250,134 +291,223 @@ function DocumentSharePanelContent({
   if (!canManage || !documentId) return null
 
   return (
-    <Card className='overflow-hidden'>
-      <CardHeader className='border-b'>
-        <div className='flex items-start gap-3'>
-          <span className='flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary'>
-            <Link2 className='size-4' />
-          </span>
-          <div className='grid gap-1'>
-            <CardTitle>{t('publicShare.managementTitle')}</CardTitle>
-            <CardDescription>
-              {t('publicShare.managementDescription')}
-            </CardDescription>
+    <ShareContainer className='@container/share min-w-0 overflow-hidden'>
+      {!embedded && (
+        <CardHeader className='border-b'>
+          <div className='flex items-start gap-3'>
+            <span className='flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary'>
+              <Link2 className='size-4' />
+            </span>
+            <div className='grid gap-1'>
+              <CardTitle>{t('publicShare.managementTitle')}</CardTitle>
+              <CardDescription>
+                {t('publicShare.managementDescription')}
+              </CardDescription>
+            </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className='grid gap-5 p-5'>
-        {interactive ? (
+        </CardHeader>
+      )}
+      <CardContent
+        className={
+          embedded
+            ? 'grid min-w-0 gap-5 p-0'
+            : 'grid min-w-0 gap-5 p-4 @min-[32rem]/share:p-5'
+        }
+      >
+        {interactive && selectionCanShare ? (
           <form
-            className='grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end'
+            className='grid min-w-0 gap-4'
             onSubmit={(event) => {
               event.preventDefault()
               if (
                 createLockedRef.current ||
+                !interactive ||
+                !selectionCanShare ||
                 passwordValidationError !== undefined
               )
                 return
               const form = new FormData(event.currentTarget)
+              const branchId = controlledSelection
+                ? selectedBranchId
+                : String(form.get('branch_id') ?? '')
+              if (
+                !branchId ||
+                !shareableBranches.some((branch) => branch.id === branchId)
+              )
+                return
+              const payload: CreateDocumentSharePayload = {
+                branch_id: branchId,
+                expiry_preset: String(
+                  form.get('expiry_preset') ?? '3_months'
+                ) as DocumentShareExpiryPreset,
+                password: sharePassword,
+                ...(controlledSelection && selectedVersionId
+                  ? { version_scope: 3, version_id: selectedVersionId }
+                  : {
+                      version_scope:
+                        Number(form.get('version_scope')) === 2 ? 2 : 1,
+                    }),
+              }
               createLockedRef.current = true
               createMutation.mutate({
                 targetProjectId: projectId,
                 targetDocumentId: documentId,
-                payload: {
-                  branch_id: String(form.get('branch_id') ?? ''),
-                  version_scope:
-                    Number(form.get('version_scope')) === 2 ? 2 : 1,
-                  expiry_preset: String(
-                    form.get('expiry_preset') ?? '3_months'
-                  ) as DocumentShareExpiryPreset,
-                  password: sharePassword,
-                },
+                payload,
               })
             }}
           >
-            <ShareField label={t('publicShare.branch')} htmlFor='share-branch'>
-              <OptionsSelect
-                id='share-branch'
-                name='branch_id'
-                required
-                options={[
-                  { value: '', label: '—' },
-                  ...shareableBranches.map((branch) => ({
-                    value: branch.id,
-                    label: branch.name,
-                  })),
-                ]}
-              />
-            </ShareField>
-            <ShareField label={t('publicShare.scope')} htmlFor='share-scope'>
-              <OptionsSelect
-                id='share-scope'
-                name='version_scope'
-                options={[
-                  { value: '1', label: t('publicShare.latest') },
-                  { value: '2', label: t('publicShare.allVersions') },
-                ]}
-              />
-            </ShareField>
-            <ShareField label={t('publicShare.expiry')} htmlFor='share-expiry'>
-              <OptionsSelect
-                id='share-expiry'
-                name='expiry_preset'
-                defaultValue='3_months'
-                options={DOCUMENT_SHARE_EXPIRY_PRESETS.map((preset) => ({
-                  value: preset,
-                  label: preset.replace(/_/g, ' '),
-                }))}
-              />
-            </ShareField>
-            <ShareField
-              label={t('publicShare.passwordOptional')}
-              htmlFor='share-password-admin'
+            {controlledSelection && (
+              <div className='grid min-w-0 gap-3 border-b pb-4'>
+                <h3 className='text-sm font-medium'>
+                  {t('publicShare.contextTitle')}
+                </h3>
+                <dl className='grid min-w-0 gap-3 @min-[32rem]/share:grid-cols-2'>
+                  <div className='grid min-w-0 gap-1'>
+                    <dt className='text-xs text-muted-foreground'>
+                      {t('publicShare.branch')}
+                    </dt>
+                    <dd className='text-sm font-medium [overflow-wrap:anywhere]'>
+                      {selectedBranch?.name}
+                    </dd>
+                  </div>
+                  <div className='grid min-w-0 gap-1'>
+                    <dt className='text-xs text-muted-foreground'>
+                      {t('publicShare.version')}
+                    </dt>
+                    <dd className='text-sm font-medium [overflow-wrap:anywhere]'>
+                      {selectedVersionName ||
+                        compactIdentifier(selectedVersionId ?? '')}
+                    </dd>
+                  </div>
+                </dl>
+                <p className='text-xs text-muted-foreground'>
+                  {t('publicShare.fixedVersion')}
+                </p>
+              </div>
+            )}
+            <div
+              data-share-fields
+              className={`grid min-w-0 items-start gap-4 @min-[32rem]/share:grid-cols-2 ${controlledSelection ? '' : '@min-[64rem]/share:grid-cols-4'}`}
             >
-              <Input
-                id='share-password-admin'
-                name='password'
-                type='password'
-                autoComplete='new-password'
-                value={sharePassword}
-                aria-invalid={
-                  sharePassword.length > 0 &&
-                  passwordValidationError !== undefined
-                }
-                aria-describedby='share-password-admin-hint'
-                onChange={(event) =>
-                  setSharePassword(event.currentTarget.value)
-                }
-              />
-              <p
-                id='share-password-admin-hint'
-                className={
-                  sharePassword.length > 0 &&
-                  passwordValidationError !== undefined
-                    ? 'text-xs text-destructive'
-                    : 'text-xs text-muted-foreground'
-                }
+              {!controlledSelection && (
+                <>
+                  <ShareField
+                    label={t('publicShare.branch')}
+                    htmlFor='share-branch'
+                  >
+                    <OptionsSelect
+                      id='share-branch'
+                      name='branch_id'
+                      required
+                      options={[
+                        { value: '', label: '—' },
+                        ...shareableBranches.map((branch) => ({
+                          value: branch.id,
+                          label: branch.name,
+                        })),
+                      ]}
+                    />
+                  </ShareField>
+                  <ShareField
+                    label={t('publicShare.scope')}
+                    htmlFor='share-scope'
+                  >
+                    <OptionsSelect
+                      id='share-scope'
+                      name='version_scope'
+                      options={[
+                        { value: '1', label: t('publicShare.latest') },
+                        { value: '2', label: t('publicShare.allVersions') },
+                      ]}
+                    />
+                  </ShareField>
+                </>
+              )}
+              <ShareField
+                label={t('publicShare.expiry')}
+                htmlFor='share-expiry'
               >
-                {sharePassword.length > 0 &&
-                passwordValidationError !== undefined
-                  ? t('publicShare.passwordInvalid')
-                  : t('publicShare.passwordHint')}
-              </p>
-            </ShareField>
-            <Button
-              disabled={
-                createMutation.isPending ||
-                shareableBranches.length === 0 ||
-                passwordValidationError !== undefined
-              }
-              type='submit'
-            >
-              {t('publicShare.create')}
-            </Button>
+                <OptionsSelect
+                  id='share-expiry'
+                  name='expiry_preset'
+                  defaultValue='3_months'
+                  options={DOCUMENT_SHARE_EXPIRY_PRESETS.map((preset) => ({
+                    value: preset,
+                    label: t(expiryLabelKeys[preset]),
+                  }))}
+                />
+              </ShareField>
+              <ShareField
+                label={t('publicShare.passwordOptional')}
+                htmlFor='share-password-admin'
+              >
+                <Input
+                  id='share-password-admin'
+                  name='password'
+                  type='password'
+                  autoComplete='new-password'
+                  value={sharePassword}
+                  aria-invalid={
+                    sharePassword.length > 0 &&
+                    passwordValidationError !== undefined
+                  }
+                  aria-describedby='share-password-admin-hint'
+                  onChange={(event) =>
+                    setSharePassword(event.currentTarget.value)
+                  }
+                />
+                <p
+                  id='share-password-admin-hint'
+                  className={
+                    sharePassword.length > 0 &&
+                    passwordValidationError !== undefined
+                      ? 'text-xs text-destructive'
+                      : 'text-xs text-muted-foreground'
+                  }
+                >
+                  {sharePassword.length > 0 &&
+                  passwordValidationError !== undefined
+                    ? t('publicShare.passwordInvalid')
+                    : t('publicShare.passwordHint')}
+                </p>
+              </ShareField>
+            </div>
+            <div className='flex min-w-0 flex-wrap items-center gap-3 border-t pt-4'>
+              <Button
+                disabled={
+                  createMutation.isPending ||
+                  !selectionCanShare ||
+                  shareableBranches.length === 0 ||
+                  passwordValidationError !== undefined
+                }
+                type='submit'
+              >
+                {t('publicShare.create')}
+              </Button>
+            </div>
           </form>
-        ) : (
+        ) : !interactive ? (
           <Alert>
             <ShieldOff />
             <AlertTitle>{t('publicShare.readOnlyTitle')}</AlertTitle>
             <AlertDescription>
               {t('publicShare.readOnlyDescription')}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert>
+            <ShieldOff />
+            <AlertTitle>
+              {t(
+                selectedVersionId === null
+                  ? 'publicShare.draftUnavailableTitle'
+                  : 'publicShare.contextUnavailableTitle'
+              )}
+            </AlertTitle>
+            <AlertDescription>
+              {selectedVersionId === null
+                ? t('publicShare.draftUnavailableDescription')
+                : t('publicShare.contextUnavailable')}
             </AlertDescription>
           </Alert>
         )}
@@ -483,6 +613,20 @@ function DocumentSharePanelContent({
                         <span className='text-sm text-muted-foreground'>
                           {t('publicShare.branchLabel', { branch: branchName })}
                         </span>
+                        {share.version_scope === 3 && share.version_id && (
+                          <span
+                            className='text-sm text-muted-foreground'
+                            title={share.version_id}
+                          >
+                            {t('publicShare.contextVersion', {
+                              version:
+                                share.version_id === selectedVersionId &&
+                                selectedVersionName
+                                  ? selectedVersionName
+                                  : compactIdentifier(share.version_id),
+                            })}
+                          </span>
+                        )}
                         <code
                           className='text-xs text-muted-foreground'
                           title={share.id}
@@ -494,9 +638,11 @@ function DocumentSharePanelContent({
                     <TableCell>
                       <div className='flex flex-wrap items-center justify-center gap-2'>
                         <Badge variant='outline'>
-                          {share.version_scope === 2
-                            ? t('publicShare.allVersions')
-                            : t('publicShare.latest')}
+                          {share.version_scope === 3
+                            ? t('publicShare.fixedVersion')
+                            : share.version_scope === 2
+                              ? t('publicShare.allVersions')
+                              : t('publicShare.latest')}
                         </Badge>
                         <Badge
                           variant={share.status === 1 ? 'secondary' : 'outline'}
@@ -519,7 +665,9 @@ function DocumentSharePanelContent({
                     </TableCell>
                     <TableCell>
                       {share.expires_at
-                        ? new Date(share.expires_at).toLocaleDateString()
+                        ? new Date(share.expires_at).toLocaleDateString(
+                            language
+                          )
                         : '—'}
                     </TableCell>
                     <TableCell>
@@ -617,7 +765,7 @@ function DocumentSharePanelContent({
           )}
         </ConfirmDialog>
       </CardContent>
-    </Card>
+    </ShareContainer>
   )
 }
 
@@ -646,7 +794,7 @@ function ShareField({
   readonly children: ReactNode
 }) {
   return (
-    <div className='grid gap-2'>
+    <div className='grid min-w-0 content-start gap-2'>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>

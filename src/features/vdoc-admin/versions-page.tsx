@@ -63,6 +63,7 @@ import {
   jsonPreview,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
+import { useWorkspaceEmbedding } from './workspace-embedding'
 
 type EndpointGroupMode = 'tag' | 'method'
 
@@ -87,6 +88,7 @@ export function VersionsPage({
   onSearchChange,
 }: VdocPageDeepLinkProps = {}) {
   const { t } = useLanguage()
+  const embedded = useWorkspaceEmbedding()
   const authUser = useAuthStore((state) => state.auth.user)
   const {
     projectsQuery,
@@ -366,7 +368,7 @@ export function VersionsPage({
             : []),
         ]}
       />
-      <ContextSelectorGrid>
+      <ContextSelectorGrid scopeFields={4}>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
@@ -598,11 +600,13 @@ export function VersionsPage({
           </TabsContent>
         )}
       </Tabs>
-      <AIContextPanel
-        target={selectedVersionAITarget}
-        interactive={selectedVersionAIInteractive}
-        canRegenerate={canRegenerateVersionSummary}
-      />
+      {!embedded && (
+        <AIContextPanel
+          target={selectedVersionAITarget}
+          interactive={selectedVersionAIInteractive}
+          canRegenerate={canRegenerateVersionSummary}
+        />
+      )}
     </PageChrome>
   )
 }

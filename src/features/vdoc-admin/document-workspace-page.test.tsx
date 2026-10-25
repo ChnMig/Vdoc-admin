@@ -1,11 +1,19 @@
 import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { selectOption } from '@/test/select-option'
-import { render, within } from '@testing-library/react'
+import { act, cleanup, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
-import type { DocumentDTO, DocumentFolderDTO, ProjectDTO } from '@/lib/vdoc-api'
+import { useVdocContextStore } from '@/stores/vdoc-context-store'
+import type {
+  BranchDTO,
+  DocumentDTO,
+  DocumentFolderDTO,
+  DraftDTO,
+  ProjectDTO,
+  VersionDTO,
+} from '@/lib/vdoc-api'
 import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 import { LanguageProvider } from '@/context/language-provider'
 import { DocumentFileTree } from './document-file-tree'
@@ -18,9 +26,17 @@ const api = vi.hoisted(() => ({
   listDocuments: vi.fn(),
   listDocumentFolders: vi.fn(),
   listProjectMembers: vi.fn(),
+  createDocumentFolder: vi.fn(),
+  listBranches: vi.fn(),
+  listVersions: vi.fn(),
+  listDrafts: vi.fn(),
+  getVersion: vi.fn(),
   getVersionContent: vi.fn(),
   getDraftContent: vi.fn(),
+  getAISummary: vi.fn(),
+  listAIChatSessions: vi.fn(),
 }))
+const panes = vi.hoisted(() => ({ realVersions: false }))
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
   ...api,
@@ -44,11 +60,17 @@ vi.mock('./drafts-page', () => ({
     </section>
   ),
 }))
-vi.mock('./versions-page', () => ({
-  VersionsPage: ({ search }: { search?: VdocRouteSearch }) => (
-    <section>Version pane {search?.version_id}</section>
-  ),
-}))
+vi.mock('./versions-page', async (load) => {
+  const actual = await load<typeof import('./versions-page')>()
+  return {
+    VersionsPage: (props: Parameters<typeof actual.VersionsPage>[0]) =>
+      panes.realVersions ? (
+        <actual.VersionsPage {...props} />
+      ) : (
+        <section>Version pane {props?.search?.version_id}</section>
+      ),
+  }
+})
 vi.mock('./diffs-page', () => ({
   DiffsPage: ({ search }: { search?: VdocRouteSearch }) => (
     <section>Diff pane {search?.diff_id}</section>
@@ -93,6 +115,78 @@ const documents: DocumentDTO[] = [
   { ...document('empty', 'Empty guide'), workflow_state: 'empty' },
 ]
 
+const branch = (documentId: string, id = 'branch-1'): BranchDTO => ({
+  id,
+  document_id: documentId,
+  name: id === 'branch-1' ? 'main' : 'release/2026',
+  kind: 2,
+  is_default: id === 'branch-1',
+  is_protected: false,
+  status: 1,
+  created_by: 'user-1',
+  created_at: '',
+  updated_at: '',
+})
+const draft = (
+  id: string,
+  documentId = 'published',
+  branchId = 'branch-1'
+): DraftDTO => ({
+  id,
+  revision: `${id}-revision`,
+  review_revision: '',
+  project_id: 'project-1',
+  document_id: documentId,
+  branch_id: branchId,
+  version_name: `${id} name`,
+  document_format: 3,
+  source_type: 1,
+  status: 1,
+  created_by: 'user-1',
+  created_at: '',
+  updated_at: '',
+})
+const version = (id: string, branchId = 'branch-1'): VersionDTO => ({
+  id,
+  project_id: 'project-1',
+  document_id: 'published',
+  branch_id: branchId,
+  version_name:
+    id === 'version-1'
+      ? 'v2 latest'
+      : id === 'version-0'
+        ? 'v1 historical'
+        : 'release v3',
+  document_format: 3,
+  source_type: 1,
+  draft_id: `${id}-draft`,
+  status: 1,
+  published_by: 'user-1',
+  published_at: '',
+  created_at: '',
+  updated_at: '',
+})
+const versions = [
+  version('version-1'),
+  version('version-0'),
+  version('version-release', 'branch-2'),
+]
+const drafts = [
+  draft('draft-new'),
+  draft('exact-draft'),
+  draft('draft-release', 'published', 'branch-2'),
+  draft('draft-1', 'draft-only'),
+]
+const clients: QueryClient[] = []
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolveValue) => {
+    resolve = resolveValue
+  })
+  return { promise, resolve }
+}
+
 function renderWorkspace(
   initialSearch: VdocRouteSearch = {
     team_id: 'team-1',
@@ -120,6 +214,7 @@ function renderWorkspace(
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  clients.push(client)
   return {
     ...render(
       <QueryClientProvider client={client}>
@@ -129,12 +224,15 @@ function renderWorkspace(
       </QueryClientProvider>
     ),
     changes,
+    client,
   }
 }
 
 describe('document workspace', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    panes.realVersions = false
+    useVdocContextStore.getState().reset()
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
     useAuthStore.setState({
       auth: {
@@ -161,10 +259,66 @@ describe('document workspace', () => {
       total: id === 'project-1' ? documents.length : 1,
     }))
     api.listDocumentFolders.mockResolvedValue({ items: [], total: 0 })
-    api.getVersionContent.mockResolvedValue({
-      content: 'Published <literal>\r\ntext\n',
-    })
-    api.getDraftContent.mockResolvedValue({ content: 'Private draft\n' })
+    api.getAISummary.mockResolvedValue(null)
+    api.listAIChatSessions.mockResolvedValue({ items: [], total: 0 })
+    api.listBranches.mockImplementation(
+      async (_project: string, documentId: string) => ({
+        items: [branch(documentId), branch(documentId, 'branch-2')],
+        total: 2,
+      })
+    )
+    api.listVersions.mockImplementation(
+      async (_project: string, documentId: string, branchId: string) => {
+        const items = versions.filter(
+          (item) =>
+            item.document_id === documentId && item.branch_id === branchId
+        )
+        return { items, total: items.length }
+      }
+    )
+    api.listDrafts.mockImplementation(
+      async (_project: string, documentId: string, branchId: string) => {
+        const items = drafts.filter(
+          (item) =>
+            item.document_id === documentId && item.branch_id === branchId
+        )
+        return { items, total: items.length }
+      }
+    )
+    api.getVersion.mockImplementation(
+      async (_project: string, _document: string, id: string) => {
+        const found = versions.find((item) => item.id === id)
+        if (!found) throw new Error('Version not found')
+        return found
+      }
+    )
+    api.getVersionContent.mockImplementation(
+      async (_project: string, _document: string, id: string) => ({
+        content:
+          id === 'version-0'
+            ? 'Historical body exact\n'
+            : id === 'version-release'
+              ? 'Release branch body\n'
+              : 'Published <literal>\r\ntext\n',
+      })
+    )
+    api.getDraftContent.mockImplementation(
+      async (_project: string, _document: string, id: string) => {
+        const found = drafts.find((item) => item.id === id)
+        if (!found) throw new Error('Draft not found')
+        return {
+          draft: found,
+          content:
+            id === 'draft-release' ? 'Release draft body\n' : 'Private draft\n',
+        }
+      }
+    )
+  })
+
+  afterEach(() => {
+    cleanup()
+    for (const client of clients) client.clear()
+    clients.length = 0
   })
 
   it('shows file states without per-file detail fetches and reads published content first', async () => {
@@ -200,21 +354,23 @@ describe('document workspace', () => {
     )
   })
 
-  it('opens the latest draft without retaining an unrelated version branch filter', async () => {
+  it('opens a draft in the selected branch without falling back to the document latest draft', async () => {
     const screen = renderWorkspace({
       team_id: 'team-1',
       project_id: 'project-1',
       document_id: 'published',
-      branch_id: 'other-branch',
+      branch_id: 'branch-2',
     })
-    await screen.findByText('Published <literal> text')
+    await screen.findByText('Release branch body')
     await userEvent.click(screen.getByRole('button', { name: 'Edit draft' }))
-    expect(await screen.findByText('Draft pane draft-new')).toBeVisible()
+    expect(await screen.findByText('Draft pane draft-release')).toBeVisible()
     expect(screen.changes).toHaveBeenLastCalledWith(
       {
         workspace_view: 'drafts',
-        branch_id: undefined,
-        draft_id: 'draft-new',
+        content_mode: 'draft',
+        version_id: undefined,
+        branch_id: 'branch-2',
+        draft_id: undefined,
       },
       { replace: false }
     )
@@ -227,16 +383,18 @@ describe('document workspace', () => {
       document_id: 'draft-only',
     })
     expect(await screen.findByText('Private draft')).toBeInTheDocument()
-    expect(screen.getByText('Unpublished draft content')).toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', { name: 'Content state' })
+    ).toHaveTextContent('Draft')
     expect(api.getVersionContent).not.toHaveBeenCalled()
     const tree = screen.getByRole('navigation', { name: 'Files' })
     await userEvent.click(
       within(tree).getByRole('button', { name: /empty.txt/ })
     )
     expect(
-      await screen.findByText(
-        'This document has no content yet. Upload or write its first draft.'
-      )
+      await screen.findByText('This branch has no published version yet.', {
+        selector: 'p',
+      })
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit draft' })).toBeEnabled()
   })
@@ -246,6 +404,7 @@ describe('document workspace', () => {
       team_id: 'team-1',
       project_id: 'project-1',
       document_id: 'published',
+      content_mode: 'published',
       branch_id: 'branch-1',
       draft_id: 'draft-1',
       version_id: 'version-1',
@@ -263,6 +422,7 @@ describe('document workspace', () => {
     expect(screen.changes).toHaveBeenLastCalledWith(
       {
         team_id: 'team-2',
+        content_mode: undefined,
         project_id: 'project-2',
         folder_id: undefined,
         workspace_view: 'content',
@@ -297,6 +457,366 @@ describe('document workspace', () => {
     expect(api.getVersionContent).not.toHaveBeenCalled()
   })
 
+  it('reads the exact historical revision selected at the top and restores it from the URL', async () => {
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      version_id: 'version-0',
+      content_mode: 'published',
+    })
+    expect(await screen.findByText('Historical body exact')).toBeVisible()
+    expect(screen.getByRole('combobox', { name: 'Version' })).toHaveTextContent(
+      'v1 historical'
+    )
+    expect(api.getVersionContent).toHaveBeenCalledWith(
+      'project-1',
+      'published',
+      'version-0',
+      'raw',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Version' }),
+      'version-1'
+    )
+    expect(await screen.findByText('Published <literal> text')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Restore URL' }))
+    expect(await screen.findByText('Historical body exact')).toBeVisible()
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps a branch without versions empty instead of reading another branch latest version', async () => {
+    api.listVersions.mockImplementation(
+      async (_project: string, _document: string, branchId: string) => ({
+        items:
+          branchId === 'branch-1'
+            ? versions.filter((item) => item.branch_id === branchId)
+            : [],
+        total: branchId === 'branch-1' ? 2 : 0,
+      })
+    )
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+    })
+    await screen.findByText('Published <literal> text')
+    const priorContentCalls = api.getVersionContent.mock.calls.length
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Branch' }),
+      'branch-2'
+    )
+    expect(
+      await screen.findByText('This branch has no published version yet.', {
+        selector: 'p',
+      })
+    ).toBeVisible()
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    expect(api.getVersionContent).toHaveBeenCalledTimes(priorContentCalls)
+    expect(screen.getByRole('combobox', { name: 'Branch' })).toHaveTextContent(
+      'release/2026'
+    )
+    expect(screen.getByRole('combobox', { name: 'Version' })).toBeDisabled()
+  })
+
+  it('switches published and draft reading contexts within the current branch', async () => {
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-2',
+    })
+    expect(await screen.findByText('Release branch body')).toBeVisible()
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Content state' }),
+      'draft'
+    )
+    expect(await screen.findByText('Release draft body')).toBeVisible()
+    expect(screen.getByRole('combobox', { name: 'Draft' })).toHaveTextContent(
+      'draft-release name'
+    )
+    expect(screen.queryByText('Release branch body')).not.toBeInTheDocument()
+    expect(screen.queryByText('Private draft')).not.toBeInTheDocument()
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Content state' }),
+      'published'
+    )
+    expect(await screen.findByText('Release branch body')).toBeVisible()
+    expect(screen.queryByText('Release draft body')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Branch' })).toHaveTextContent(
+      'release/2026'
+    )
+  })
+
+  it.each([
+    { branch_id: 'missing' },
+    { version_id: 'missing', content_mode: 'published' as const },
+    {
+      branch_id: 'branch-1',
+      version_id: 'version-release',
+      content_mode: 'published' as const,
+    },
+  ])(
+    'does not fetch other content for an invalid reading route: %j',
+    async (readingSearch) => {
+      const screen = renderWorkspace({
+        team_id: 'team-1',
+        project_id: 'project-1',
+        document_id: 'published',
+        ...readingSearch,
+      })
+      expect(await screen.findByRole('alert', { name: '' })).toBeInTheDocument()
+      await screen.findAllByText(
+        'The selected branch or revision is unavailable. Choose another branch or revision.'
+      )
+      expect(api.getVersionContent).not.toHaveBeenCalled()
+      expect(
+        screen.queryByText('Published <literal> text')
+      ).not.toBeInTheDocument()
+      expect(screen.queryByText('Release branch body')).not.toBeInTheDocument()
+    }
+  )
+
+  it('hides the previous body while a newly selected branch revision is loading', async () => {
+    const delayed = deferred<{ content: string }>()
+    const originalContent = api.getVersionContent.getMockImplementation()!
+    api.getVersionContent.mockImplementation((...args) =>
+      args[2] === 'version-release' ? delayed.promise : originalContent(...args)
+    )
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+    })
+    await screen.findByText('Published <literal> text')
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Branch' }),
+      'branch-2'
+    )
+    await waitFor(() =>
+      expect(api.getVersionContent).toHaveBeenCalledWith(
+        'project-1',
+        'published',
+        'version-release',
+        'raw',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Loading backend data...'
+    )
+    await act(async () => delayed.resolve({ content: 'Loaded release body\n' }))
+    expect(await screen.findByText('Loaded release body')).toBeVisible()
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps an invalid version URL unavailable in real document tools, AI, and sharing', async () => {
+    panes.realVersions = true
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-1',
+      version_id: 'missing-version',
+      content_mode: 'published',
+      workspace_view: 'versions',
+    })
+    await screen.findAllByText(
+      'The selected branch or revision is unavailable. Choose another branch or revision.'
+    )
+    // VersionsPage normally selects its first version when no preferred ID is
+    // supplied. The workspace must not discard an invalid requested ID and
+    // allow that normalization to replace the URL or fetch another body.
+    expect(screen.changes).not.toHaveBeenCalled()
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('tab', { name: 'Document AI' }))
+    await screen.findAllByText(
+      'The selected branch or revision is unavailable. Choose another branch or revision.'
+    )
+    expect(api.getAISummary).not.toHaveBeenCalled()
+    expect(api.listAIChatSessions).not.toHaveBeenCalled()
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+    expect(screen.changes.mock.calls).toEqual([
+      [{ workspace_view: 'ai' }, { replace: false }],
+    ])
+    expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Create share link' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not mount real tools or normalize to latest while an exact version lookup is pending', async () => {
+    panes.realVersions = true
+    const pending = deferred<VersionDTO>()
+    api.getVersion.mockReturnValueOnce(pending.promise)
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-1',
+      version_id: 'version-0',
+      content_mode: 'published',
+      workspace_view: 'versions',
+    })
+    await waitFor(() =>
+      expect(api.getVersion).toHaveBeenCalledWith(
+        'project-1',
+        'published',
+        'version-0',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+    expect(screen.changes).not.toHaveBeenCalled()
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
+    await act(async () => pending.resolve(version('version-0')))
+    expect(await screen.findByText('Historical body exact')).toBeVisible()
+    expect(
+      api.getVersionContent.mock.calls.every((call) => call[2] === 'version-0')
+    ).toBe(true)
+    expect(screen.changes).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText('Published <literal> text')
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Share' })).toBeEnabled()
+  })
+
+  it('retains the selected document body when its folder is collapsed', async () => {
+    const folder: DocumentFolderDTO = {
+      id: 'guides',
+      project_id: 'project-1',
+      parent_id: null,
+      name: 'Guides',
+      path: 'guides',
+      created_by: 'user-1',
+      created_at: '',
+      updated_at: '',
+    }
+    api.listDocumentFolders.mockResolvedValue({ items: [folder], total: 1 })
+    api.listDocuments.mockResolvedValue({
+      items: documents.map((item) =>
+        item.id === 'published' ? { ...item, folder_id: folder.id } : item
+      ),
+      total: documents.length,
+    })
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+    })
+    await screen.findByText('Published <literal> text')
+    const tree = screen.getByRole('navigation', { name: 'Files' })
+    expect(
+      within(tree).getByRole('button', { name: /published.txt/ })
+    ).toBeVisible()
+    await userEvent.click(
+      within(tree).getByRole('button', { name: 'Collapse Guides' })
+    )
+    expect(
+      within(tree).queryByRole('button', { name: /published.txt/ })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Published guide' })
+    ).toBeVisible()
+    expect(screen.getByText('Published <literal> text')).toBeVisible()
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      { folder_id: 'guides' },
+      { replace: false }
+    )
+  })
+
+  it('creates a folder at the explicitly selected project root while keeping the document open', async () => {
+    const existing: DocumentFolderDTO = {
+      id: 'guides',
+      project_id: 'project-1',
+      parent_id: null,
+      name: 'Guides',
+      path: 'guides',
+      created_by: 'user-1',
+      created_at: '',
+      updated_at: '',
+    }
+    const created: DocumentFolderDTO = {
+      ...existing,
+      id: 'root-child',
+      name: 'Release notes',
+      path: 'Release notes',
+    }
+    let folders = [existing]
+    api.listDocumentFolders.mockImplementation(async () => ({
+      items: folders,
+      total: folders.length,
+    }))
+    api.createDocumentFolder.mockImplementation(async () => {
+      folders = [...folders, created]
+      return created
+    })
+    api.listDocuments.mockResolvedValue({
+      items: documents.map((item) =>
+        item.id === 'published' ? { ...item, folder_id: existing.id } : item
+      ),
+      total: documents.length,
+    })
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+    })
+    await screen.findByText('Published <literal> text')
+    const tree = screen.getByRole('navigation', { name: 'Files' })
+    await userEvent.click(
+      within(tree).getByRole('button', { name: 'Project root' })
+    )
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      { folder_id: 'root' },
+      { replace: false }
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Published guide' })
+    ).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    const dialog = within(
+      await screen.findByRole('dialog', { name: 'New folder' })
+    )
+    expect(dialog.getByText('Project root')).toBeVisible()
+    await userEvent.type(dialog.getByLabelText('Folder name'), 'Release notes')
+    await userEvent.click(dialog.getByRole('button', { name: 'Create folder' }))
+    await waitFor(() =>
+      expect(api.createDocumentFolder).toHaveBeenCalledWith('project-1', {
+        parent_id: null,
+        name: 'Release notes',
+      })
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      { folder_id: 'root-child' },
+      { replace: false }
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Published guide' })
+    ).toBeVisible()
+    expect(screen.getByText('Published <literal> text')).toBeVisible()
+  })
+
   it('opens legacy pane deep links, retains working text between tabs, and restores URL controlled selection', async () => {
     const screen = renderWorkspace(
       {
@@ -314,18 +834,21 @@ describe('document workspace', () => {
       screen.getByLabelText('Working draft text'),
       'Unsaved edits'
     )
-    await userEvent.click(screen.getByRole('tab', { name: 'Versions' }))
-    expect(await screen.findByText('Version pane')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Document tools' }))
+    expect(await screen.findByText('Version pane')).toBeVisible()
+    await userEvent.click(screen.getByRole('tab', { name: 'Diffs' }))
+    expect(await screen.findByText('Diff pane')).toBeVisible()
     expect(
       screen.queryByRole('textbox', { name: 'Working draft text' })
     ).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'Drafts' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Document' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit draft' }))
     expect(screen.getByLabelText('Working draft text')).toHaveValue(
       'Unsaved edits'
     )
     await userEvent.click(screen.getByRole('button', { name: 'Restore URL' }))
     expect(await screen.findByText('Draft pane exact-draft')).toBeVisible()
-    expect(screen.getByRole('tab', { name: 'Drafts' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Document' })).toHaveAttribute(
       'data-state',
       'active'
     )

@@ -48,6 +48,55 @@ describe('document share management API', () => {
     expect(requests[2]?.data).toBeUndefined()
     expect(requests[3]?.data).toBeUndefined()
   })
+
+  it('sends and preserves the fixed published-version identity', async () => {
+    const requests: InternalAxiosRequestConfig[] = []
+    const fixedShare = {
+      id: 'share-fixed',
+      project_id: 'project-1',
+      document_id: 'document-1',
+      branch_id: 'branch-1',
+      version_scope: 3,
+      version_id: 'version-older',
+      status: 1,
+      password_protected: false,
+      created_by: 'user-1',
+      created_at: '2026-07-20T00:00:00Z',
+      updated_at: '2026-07-20T00:00:00Z',
+    }
+    vdocApi.defaults.adapter = async (config) => {
+      requests.push(config)
+      return {
+        data: {
+          code: 200,
+          status: 'OK',
+          timestamp: 1,
+          detail: { share: fixedShare, secret: 'redacted' },
+        },
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config,
+      } satisfies AxiosResponse<VdocEnvelope<unknown>>
+    }
+
+    const result = await createDocumentShare('project-1', 'document-1', {
+      branch_id: 'branch-1',
+      version_scope: 3,
+      version_id: 'version-older',
+      expiry_preset: 'permanent',
+    })
+
+    expect(requests[0]?.data).toBe(
+      JSON.stringify({
+        branch_id: 'branch-1',
+        version_scope: 3,
+        version_id: 'version-older',
+        expiry_preset: 'permanent',
+      })
+    )
+    expect(result.share).toEqual(fixedShare)
+  })
 })
 
 function shareAdapter(requests: InternalAxiosRequestConfig[]): AxiosAdapter {

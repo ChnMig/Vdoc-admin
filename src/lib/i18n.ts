@@ -85,6 +85,24 @@ const en = {
     hide: 'Hide password',
   },
   publicShare: {
+    fixedOnly: 'This link only grants access to this published version.',
+    contextTitle: 'Sharing this version',
+    contextVersion: 'Version: {version}',
+    draftUnavailableTitle: 'Publish before sharing',
+    draftUnavailableDescription:
+      'Drafts are private. Publish this version before creating a public link.',
+    contextUnavailableTitle: 'This version cannot be shared',
+    contextUnavailable:
+      'The selected published version or branch is unavailable. Select a published version and try again.',
+    fixedVersion: 'This published version',
+    expiryPresets: {
+      oneMonth: '1 month',
+      threeMonths: '3 months',
+      sixMonths: '6 months',
+      oneYear: '1 year',
+      permanent: 'Never expires',
+    },
+
     textLabel: 'Plain text',
     title: 'Shared document',
     security:
@@ -203,6 +221,33 @@ const en = {
   },
   admin: {
     workspace: {
+      readingContext: 'Reading context',
+      contentState: 'Content state',
+      manageBranches: 'Manage branches',
+      tools: 'Document tools',
+      ai: 'Document AI',
+      readDocument: 'Document',
+      backToContent: 'Back to preview',
+      editingDraft: 'Editing and review',
+      currentBranch: 'Current branch',
+      useBranch: 'Use branch',
+      branchManagementDescription:
+        'Create and manage branches for this document. New branches start without a version.',
+      branchNameHint:
+        'Use a name that fits your workflow, such as main, release/2026, or a feature name.',
+      readerUnavailable:
+        'The selected branch or revision is unavailable. Choose another branch or revision.',
+      noPublishedContent: 'This branch has no published version yet.',
+      noDraftContent: 'This branch has no draft yet.',
+      emptyRevision: 'This revision has no content.',
+      aiContext: 'Document AI',
+      aiContextDescription:
+        'Summary and chat use the document revision selected above.',
+      aiNoContext: 'Select a published version or draft to use document AI.',
+      shareContextDescription:
+        'Create a public link for the version you are viewing.',
+      chooseRevision: 'Select a revision',
+
       title: 'Documents',
       description:
         'Choose a team and project, then work with files in one place.',
@@ -1535,6 +1580,23 @@ const zhCN = {
     hide: '隐藏密码',
   },
   publicShare: {
+    fixedOnly: '此链接仅可访问指定的已发布版本。',
+    contextTitle: '分享当前版本',
+    contextVersion: '版本：{version}',
+    draftUnavailableTitle: '发布后才能分享',
+    draftUnavailableDescription:
+      '草稿仅供内部查看，请先发布当前版本再创建公开链接。',
+    contextUnavailableTitle: '当前版本无法分享',
+    contextUnavailable: '当前正式版本或分支不可用，请选择已发布版本后重试。',
+    fixedVersion: '当前已发布版本',
+    expiryPresets: {
+      oneMonth: '1 个月',
+      threeMonths: '3 个月',
+      sixMonths: '6 个月',
+      oneYear: '1 年',
+      permanent: '永久有效',
+    },
+
     textLabel: '纯文本',
     title: '共享文档',
     security: '此能力链接仅可读取已发布内容，分享密钥不会存入浏览器存储。',
@@ -1642,6 +1704,29 @@ const zhCN = {
   },
   admin: {
     workspace: {
+      readingContext: '当前文档内容',
+      contentState: '内容状态',
+      manageBranches: '管理分支',
+      tools: '文档工具',
+      ai: '文档 AI',
+      readDocument: '文档',
+      backToContent: '返回内容预览',
+      editingDraft: '草稿编辑与审核',
+      currentBranch: '当前分支',
+      useBranch: '切换到此分支',
+      branchManagementDescription: '创建和管理此文档的分支。新分支尚无版本。',
+      branchNameHint:
+        '按工作流自定义名称，例如 main、release/2026 或功能名称。',
+      readerUnavailable: '当前分支或版本不可用，请选择其他分支或版本。',
+      noPublishedContent: '此分支暂无正式版本。',
+      noDraftContent: '此分支暂无草稿。',
+      emptyRevision: '此版本内容为空。',
+      aiContext: '文档 AI',
+      aiContextDescription: '摘要与聊天基于上方选定的当前文档版本。',
+      aiNoContext: '选择正式版本或草稿后，即可使用文档 AI。',
+      shareContextDescription: '为当前正在查看的正式版本创建公开链接。',
+      chooseRevision: '选择版本',
+
       title: '文档工作区',
       description:
         '按团队和项目浏览文件，在同一处查看内容、编辑草稿和管理发布。',

@@ -26,7 +26,7 @@ const publicShareMetadataSchema = z
   .object({
     document_name: z.string(),
     document_type: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-    version_scope: z.union([z.literal(1), z.literal(2)]),
+    version_scope: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     expires_at: z.string().datetime({ offset: true }).optional(),
     current_version: publicVersionSchema,
   })

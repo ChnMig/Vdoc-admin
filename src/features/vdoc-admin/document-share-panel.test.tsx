@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BranchDTO, VersionDTO } from '@/lib/vdoc-api'
 import { LanguageProvider } from '@/context/language-provider'
 import { DocumentSharePanel } from './document-share-panel'
@@ -91,6 +91,11 @@ function panel(
     branches?: readonly BranchDTO[]
     versions?: readonly VersionDTO[]
     interactive?: boolean
+    canManage?: boolean
+    selectedBranchId?: string
+    selectedVersionId?: string | null
+    selectedVersionName?: string
+    embedded?: boolean
   } = {}
 ) {
   return (
@@ -103,8 +108,12 @@ function panel(
       publishedBranchIds={(options.versions ?? [version])
         .filter((item) => item.status === 1)
         .map((item) => item.branch_id)}
-      canManage
+      canManage={options.canManage ?? true}
       interactive={options.interactive ?? true}
+      selectedBranchId={options.selectedBranchId}
+      selectedVersionId={options.selectedVersionId}
+      selectedVersionName={options.selectedVersionName}
+      embedded={options.embedded}
     />
   )
 }
@@ -112,6 +121,7 @@ function panel(
 describe('DocumentSharePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    document.cookie = 'vdoc-admin-language=en; Path=/'
     shareApiMocks.listDocumentShares.mockResolvedValue({ items: [], total: 0 })
     shareApiMocks.createDocumentShare.mockResolvedValue({
       share: activeShare,
@@ -121,6 +131,10 @@ describe('DocumentSharePanel', () => {
       ...activeShare,
       status: 2,
     })
+  })
+
+  afterEach(() => {
+    document.cookie = 'vdoc-admin-language=; Max-Age=0; Path=/'
   })
 
   it('shows loading before an empty share list has been confirmed', async () => {
@@ -268,6 +282,302 @@ describe('DocumentSharePanel', () => {
       })
       await creation.promise
     })
+  })
+
+  it('shares exactly the selected published version without independent branch or scope controls', async () => {
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(
+      wrap(
+        panel('project-1', 'document-1', {
+          selectedBranchId: branch.id,
+          selectedVersionId: version.id,
+          selectedVersionName: version.version_name,
+        })
+      )
+    )
+
+    expect(screen.getByText('main')).toBeInTheDocument()
+    expect(screen.getByText('1.0.0')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Published branch')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Version access')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('combobox')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+
+    await waitFor(() =>
+      expect(shareApiMocks.createDocumentShare).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        {
+          branch_id: branch.id,
+          version_scope: 3,
+          version_id: version.id,
+          expiry_preset: '3_months',
+          password: '',
+        }
+      )
+    )
+  })
+
+  it('embeds the current-version form and link list without a duplicate card header', async () => {
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(
+      wrap(
+        panel('project-1', 'document-1', {
+          embedded: true,
+          selectedBranchId: branch.id,
+          selectedVersionId: version.id,
+          selectedVersionName: version.version_name,
+        })
+      )
+    )
+
+    expect(screen.queryByText('Public sharing')).not.toBeInTheDocument()
+    expect(
+      screen.container.querySelector('[data-slot="card"]')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.container.querySelector('[data-slot="card-content"]')
+    ).toHaveClass('p-0')
+    expect(screen.getByText('Sharing this version')).toBeInTheDocument()
+    expect(screen.getByLabelText('Expiry')).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'No public links have been created for this document.'
+      )
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+    expect(await screen.findByText(/vdoc_share_/)).toBeInTheDocument()
+  })
+
+  it('retains the all-published-versions mode for the standalone management page', async () => {
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+    await selectOption(
+      screen.getByLabelText('Published branch'),
+      branch.id,
+      user
+    )
+    await selectOption(screen.getByLabelText('Version access'), '2', user)
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+
+    await waitFor(() =>
+      expect(shareApiMocks.createDocumentShare).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        {
+          branch_id: branch.id,
+          version_scope: 2,
+          expiry_preset: '3_months',
+          password: '',
+        }
+      )
+    )
+  })
+
+  it.each([
+    [
+      'en',
+      'Expiry',
+      ['1 month', '3 months', '6 months', '1 year', 'Never expires'],
+      'Create share link',
+    ],
+    [
+      'zh-CN',
+      '有效期',
+      ['1 个月', '3 个月', '6 个月', '1 年', '永久有效'],
+      '创建分享链接',
+    ],
+  ] as const)(
+    'localizes every expiry label in %s while preserving API values',
+    async (language, expiryLabel, labels, createLabel) => {
+      document.cookie = `vdoc-admin-language=${language}; Path=/`
+      const user = userEvent.setup()
+      const { wrap } = createHarness()
+      const screen = render(
+        wrap(
+          panel('project-1', 'document-1', {
+            selectedBranchId: branch.id,
+            selectedVersionId: version.id,
+          })
+        )
+      )
+      await user.click(screen.getByLabelText(expiryLabel))
+      const options = screen.getAllByRole('option')
+      expect(options.map((option) => option.textContent?.trim())).toEqual(
+        labels
+      )
+      expect(
+        options.map((option) => option.getAttribute('data-value'))
+      ).toEqual(['1_month', '3_months', '6_months', '1_year', 'permanent'])
+      await user.click(options[4])
+      await user.click(screen.getByRole('button', { name: createLabel }))
+
+      await waitFor(() =>
+        expect(shareApiMocks.createDocumentShare).toHaveBeenCalledWith(
+          'project-1',
+          'document-1',
+          expect.objectContaining({ expiry_preset: 'permanent' })
+        )
+      )
+    }
+  )
+
+  it.each([
+    ['a draft', null, branch.id, [branch]],
+    ['an unavailable version', '', branch.id, [branch]],
+    ['a missing branch', version.id, 'missing-branch', [branch]],
+    ['an archived branch', version.id, branch.id, [{ ...branch, status: 2 }]],
+    [
+      'an unpublished branch',
+      version.id,
+      'branch-unpublished',
+      [{ ...branch, id: 'branch-unpublished' }],
+    ],
+  ] as const)(
+    'does not create a public link for %s even when another publication exists',
+    async (_label, selectedVersionId, selectedBranchId, branches) => {
+      const { wrap } = createHarness()
+      const screen = render(
+        wrap(
+          panel('project-1', 'document-1', {
+            selectedVersionId,
+            selectedBranchId,
+            branches,
+          })
+        )
+      )
+
+      expect(
+        screen.queryByRole('button', { name: 'Create share link' })
+      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+      expect(shareApiMocks.createDocumentShare).not.toHaveBeenCalled()
+      expect(
+        await screen.findByText(
+          'No public links have been created for this document.'
+        )
+      ).toBeInTheDocument()
+    }
+  )
+
+  it('clears the link and password when selecting another version in the same document', async () => {
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const selected = (id: string) =>
+      panel('project-1', 'document-1', {
+        selectedVersionId: id,
+        selectedBranchId: branch.id,
+      })
+    const screen = render(wrap(selected(version.id)))
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+    expect(await screen.findByText(/vdoc_share_/)).toBeInTheDocument()
+    await user.type(
+      screen.getByLabelText('Optional password (12–72 bytes)'),
+      'another-password'
+    )
+
+    screen.rerender(wrap(selected('version-2')))
+
+    expect(screen.queryByText(/vdoc_share_/)).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Optional password (12–72 bytes)')
+    ).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+    await waitFor(() =>
+      expect(shareApiMocks.createDocumentShare).toHaveBeenLastCalledWith(
+        'project-1',
+        'document-1',
+        {
+          branch_id: branch.id,
+          version_scope: 3,
+          version_id: 'version-2',
+          expiry_preset: '3_months',
+          password: '',
+        }
+      )
+    )
+  })
+
+  it('does not show a late capability link after the selected version changes', async () => {
+    const creation = deferred<{ share: typeof activeShare; secret: string }>()
+    shareApiMocks.createDocumentShare.mockReturnValueOnce(creation.promise)
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const selected = (id: string) =>
+      panel('project-1', 'document-1', {
+        selectedVersionId: id,
+        selectedBranchId: branch.id,
+      })
+    const screen = render(wrap(selected(version.id)))
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+    await waitFor(() =>
+      expect(shareApiMocks.createDocumentShare).toHaveBeenCalledOnce()
+    )
+    screen.rerender(wrap(selected('version-2')))
+    await act(async () => {
+      creation.resolve({
+        share: activeShare,
+        secret: `vdoc_share_${'b'.repeat(48)}`,
+      })
+      await creation.promise
+    })
+
+    expect(screen.queryByText(/vdoc_share_/)).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Create share link' })
+    ).toBeEnabled()
+  })
+
+  it('clears the capability and password when management permission is revoked', async () => {
+    const user = userEvent.setup()
+    const { wrap } = createHarness()
+    const screen = render(wrap(panel()))
+    await selectOption(
+      screen.getByLabelText('Published branch'),
+      branch.id,
+      user
+    )
+    await user.click(screen.getByRole('button', { name: 'Create share link' }))
+    expect(await screen.findByText(/vdoc_share_/)).toBeInTheDocument()
+    await user.type(
+      screen.getByLabelText('Optional password (12–72 bytes)'),
+      'another-password'
+    )
+    screen.rerender(
+      wrap(panel('project-1', 'document-1', { canManage: false }))
+    )
+    expect(screen.container).toBeEmptyDOMElement()
+    screen.rerender(wrap(panel()))
+
+    expect(screen.queryByText(/vdoc_share_/)).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText('Optional password (12–72 bytes)')
+    ).toHaveValue('')
+  })
+
+  it('identifies fixed versions in the existing public-link list', async () => {
+    shareApiMocks.listDocumentShares.mockResolvedValue({
+      items: [{ ...activeShare, version_scope: 3, version_id: version.id }],
+      total: 1,
+    })
+    const { wrap } = createHarness()
+    const screen = render(
+      wrap(
+        panel('project-1', 'document-1', {
+          selectedVersionId: version.id,
+          selectedBranchId: branch.id,
+          selectedVersionName: version.version_name,
+        })
+      )
+    )
+
+    expect(await screen.findByText('Version: 1.0.0')).toHaveAttribute(
+      'title',
+      version.id
+    )
   })
 
   it('offers only active branches that have a published version', async () => {

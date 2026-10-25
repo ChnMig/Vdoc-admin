@@ -539,7 +539,9 @@ function PublicDocumentShareSession({
                   <CardDescription>
                     {metadata.version_scope === 1
                       ? t('publicShare.latestOnly')
-                      : t('publicShare.history')}
+                      : metadata.version_scope === 2
+                        ? t('publicShare.history')
+                        : t('publicShare.fixedOnly')}
                     {metadata.expires_at
                       ? ` · ${t('publicShare.expires', {
                           date: new Date(metadata.expires_at).toLocaleString(),

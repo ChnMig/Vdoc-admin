@@ -1,0 +1,104 @@
+import { Bot } from 'lucide-react'
+import type { AISummaryTarget, DocumentDTO } from '@/lib/vdoc-api'
+import { useLanguage } from '@/context/language-provider'
+import { Badge } from '@/components/ui/badge'
+import { AIContextPanel } from './ai-panels'
+import type { DocumentReadingSelection } from './document-workspace-content'
+
+export function DocumentWorkspaceAI({
+  projectId,
+  document,
+  selection,
+  interactive,
+  canRegenerate,
+}: {
+  projectId: string
+  document: DocumentDTO
+  selection: DocumentReadingSelection
+  interactive: boolean
+  canRegenerate: boolean
+}) {
+  const { t } = useLanguage()
+  const revision =
+    selection.mode === 'published' ? selection.version : selection.draft
+  const invalid = Boolean(
+    selection.invalid ||
+    (revision &&
+      (revision.project_id !== projectId ||
+        revision.document_id !== document.id ||
+        !selection.branchId ||
+        revision.branch_id !== selection.branchId))
+  )
+  const target: AISummaryTarget | undefined =
+    !selection.pending && !invalid && revision?.id
+      ? {
+          projectId,
+          documentId: document.id,
+          ownerType: selection.mode === 'published' ? 'version' : 'draft',
+          ownerId: revision.id,
+        }
+      : undefined
+
+  return (
+    <section
+      aria-label={t('admin.workspace.aiContext')}
+      className='grid min-w-0 gap-4'
+    >
+      <div className='flex flex-wrap items-start justify-between gap-3 border-b pb-4'>
+        <div className='grid gap-1.5'>
+          <h2 className='flex items-center gap-2 text-sm font-semibold'>
+            <Bot aria-hidden className='size-4 text-muted-foreground' />
+            {t('admin.workspace.aiContext')}
+          </h2>
+          <p className='text-sm text-muted-foreground'>
+            {t('admin.workspace.aiContextDescription')}
+          </p>
+        </div>
+        {target && (
+          <div className='flex min-w-0 items-center gap-2 text-xs'>
+            <Badge variant='secondary'>
+              {selection.mode === 'published'
+                ? t('admin.workspace.published')
+                : t('admin.workspace.draft')}
+            </Badge>
+            <span
+              className='max-w-56 truncate font-medium'
+              title={revision?.version_name || target.ownerId}
+            >
+              {revision?.version_name || target.ownerId}
+            </span>
+          </div>
+        )}
+      </div>
+      {selection.pending ? (
+        <p role='status' className='py-8 text-sm text-muted-foreground'>
+          {t('admin.common.loading')}
+        </p>
+      ) : !target ? (
+        <p
+          role='status'
+          className='py-8 text-sm leading-6 text-muted-foreground'
+        >
+          {t(
+            invalid
+              ? 'admin.workspace.readerUnavailable'
+              : 'admin.workspace.aiNoContext'
+          )}
+        </p>
+      ) : (
+        <AIContextPanel
+          key={JSON.stringify([
+            projectId,
+            document.id,
+            selection.branchId,
+            target.ownerType,
+            target.ownerId,
+          ])}
+          target={target}
+          interactive={interactive}
+          canRegenerate={canRegenerate}
+        />
+      )}
+    </section>
+  )
+}

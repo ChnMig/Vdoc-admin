@@ -381,59 +381,61 @@ export function DocumentsPage({
           ))}
         </dl>
       )}
-      <BranchesTable
-        key={`${authSessionVersion}:${projectId}:${documentId}`}
-        actions={
-          canMutateDocument && (
-            <FormDialog
-              title={t('admin.sections.createBranch')}
-              submitLabel={t('admin.common.create')}
-              pending={createBranchMutation.isPending}
-              submissionScope={JSON.stringify([
-                authSessionVersion,
-                authUser?.id,
-                projectId,
-                documentId,
-              ])}
-              onSubmit={(formData) =>
-                createBranchMutation.mutateAsync({
-                  name: fieldValue(formData, 'name'),
-                  description: fieldValue(formData, 'description'),
-                })
-              }
-            >
-              <div className='grid gap-4'>
-                <TextField
-                  label={t('admin.fields.name')}
-                  name='name'
-                  required
-                />
-                <TextField
-                  label={t('admin.fields.description')}
-                  name='description'
-                />
-              </div>
-            </FormDialog>
-          )
-        }
-        branches={branchesQuery.data?.items ?? []}
-        pending={
-          updateBranchMutation.isPending || archiveBranchMutation.isPending
-        }
-        onUpdate={(branch) =>
-          updateBranchMutation.mutateAsync({
-            id: branch.id,
-            payload: {
-              name: branch.name,
-              description: branch.description ?? '',
-              is_default: branch.is_default,
-              is_protected: branch.is_protected,
-            },
-          })
-        }
-        onArchive={(id) => archiveBranchMutation.mutateAsync(id)}
-        readOnly={!canMutateDocument}
-      />
+      {!workspaceSettings && (
+        <BranchesTable
+          key={`${authSessionVersion}:${projectId}:${documentId}`}
+          actions={
+            canMutateDocument && (
+              <FormDialog
+                title={t('admin.sections.createBranch')}
+                submitLabel={t('admin.common.create')}
+                pending={createBranchMutation.isPending}
+                submissionScope={JSON.stringify([
+                  authSessionVersion,
+                  authUser?.id,
+                  projectId,
+                  documentId,
+                ])}
+                onSubmit={(formData) =>
+                  createBranchMutation.mutateAsync({
+                    name: fieldValue(formData, 'name'),
+                    description: fieldValue(formData, 'description'),
+                  })
+                }
+              >
+                <div className='grid gap-4'>
+                  <TextField
+                    label={t('admin.fields.name')}
+                    name='name'
+                    required
+                  />
+                  <TextField
+                    label={t('admin.fields.description')}
+                    name='description'
+                  />
+                </div>
+              </FormDialog>
+            )
+          }
+          branches={branchesQuery.data?.items ?? []}
+          pending={
+            updateBranchMutation.isPending || archiveBranchMutation.isPending
+          }
+          onUpdate={(branch) =>
+            updateBranchMutation.mutateAsync({
+              id: branch.id,
+              payload: {
+                name: branch.name,
+                description: branch.description ?? '',
+                is_default: branch.is_default,
+                is_protected: branch.is_protected,
+              },
+            })
+          }
+          onArchive={(id) => archiveBranchMutation.mutateAsync(id)}
+          readOnly={!canMutateDocument}
+        />
+      )}
       {!workspaceSettings && (
         <DocumentSharePanel
           key={`${projectId}:${documentId}`}

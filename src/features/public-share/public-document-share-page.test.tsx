@@ -505,6 +505,234 @@ describe('PublicDocumentSharePage', () => {
     })
   })
 
+  describe('fixed-version public shares', () => {
+    const fixedMetadata = {
+      document_name: 'Fixed release policy',
+      document_type: 2,
+      version_scope: 3,
+      current_version: {
+        id: versionId,
+        version_name: 'v1-fixed',
+        published_at: '2026-01-01T00:00:00Z',
+      },
+    }
+
+    beforeEach(() => {
+      publicShareApiMocks.getPublicShareMetadata.mockReset()
+      publicShareApiMocks.getPublicShareMetadata.mockResolvedValue(
+        fixedMetadata
+      )
+      publicShareApiMocks.getPublicShareContent.mockResolvedValue({
+        version_id: versionId,
+        content: 'Fixed release content',
+      })
+    })
+
+    it('opens and downloads only the fixed publication without offering latest or historical access', async () => {
+      const download = {
+        blob: new Blob(['Fixed original bytes']),
+        filename: 'release-policy.md',
+        mimeType: 'text/markdown',
+      }
+      publicShareApiMocks.downloadPublicShareVersion.mockResolvedValue(download)
+      const user = userEvent.setup()
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+
+      expect(
+        await screen.findByText('Fixed release content')
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'This link only grants access to this published version.'
+        )
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('v1-fixed', { selector: '[data-slot="badge"]' })
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText('Version')).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(
+          'This link always follows the latest published version.'
+        )
+      ).not.toBeInTheDocument()
+      expect(screen.queryByText('Published history')).not.toBeInTheDocument()
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+      expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledWith(
+        expect.objectContaining({ shareId, secret, versionId })
+      )
+
+      await user.click(
+        screen.getByRole('button', { name: 'Download original' })
+      )
+
+      expect(
+        publicShareApiMocks.downloadPublicShareVersion
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ shareId, secret, versionId })
+      )
+      await waitFor(() =>
+        expect(
+          publicShareApiMocks.savePublicShareDownload
+        ).toHaveBeenCalledWith(download)
+      )
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+    })
+
+    it('keeps the fixed publication and download bound to an in-memory password proof', async () => {
+      publicShareApiMocks.getPublicShareMetadata.mockReset()
+      publicShareApiMocks.getPublicShareMetadata
+        .mockRejectedValueOnce(
+          new PublicShareRequestError(401, 'PASSWORD_REQUIRED')
+        )
+        .mockResolvedValue(fixedMetadata)
+      publicShareApiMocks.downloadPublicShareVersion.mockResolvedValue({
+        blob: new Blob(['Fixed protected original']),
+        filename: 'release-policy.md',
+        mimeType: 'text/markdown',
+      })
+      const user = userEvent.setup()
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+      await screen.findByLabelText('Share password')
+      await user.type(screen.getByLabelText('Share password'), '密码密码')
+      await user.click(screen.getByRole('button', { name: 'Unlock document' }))
+
+      expect(
+        await screen.findByText('Fixed release content')
+      ).toBeInTheDocument()
+      expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledWith(
+        expect.objectContaining({ versionId, unlockProof: 'proof-1' })
+      )
+      await user.click(
+        screen.getByRole('button', { name: 'Download original' })
+      )
+      expect(
+        publicShareApiMocks.downloadPublicShareVersion
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ versionId, unlockProof: 'proof-1' })
+      )
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+    })
+
+    it('does not move a missing fixed publication to a newer version', async () => {
+      publicShareApiMocks.getPublicShareMetadata
+        .mockResolvedValueOnce(fixedMetadata)
+        .mockResolvedValue({
+          ...fixedMetadata,
+          current_version: {
+            ...fixedMetadata.current_version,
+            id: 'd'.repeat(32),
+            version_name: 'v2-newer',
+          },
+        })
+      publicShareApiMocks.getPublicShareContent.mockRejectedValue(
+        new PublicShareRequestError(404, 'NOT_FOUND')
+      )
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+
+      expect(
+        await screen.findByText(
+          'Check your connection and try again. The link and password have not been stored.'
+        )
+      ).toBeInTheDocument()
+      expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(
+        1
+      )
+      expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledTimes(1)
+      expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledWith(
+        expect.objectContaining({ versionId })
+      )
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole('button', { name: 'Download original' })
+      ).not.toBeInTheDocument()
+    })
+
+    it('does not display content returned for a different publication', async () => {
+      publicShareApiMocks.getPublicShareContent.mockResolvedValue({
+        version_id: 'd'.repeat(32),
+        content: 'Unauthorized other version',
+      })
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+
+      expect(
+        await screen.findByText(
+          'Check your connection and try again. The link and password have not been stored.'
+        )
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('Unauthorized other version')
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Download original' })
+      ).not.toBeInTheDocument()
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+    })
+
+    it('keeps a revoked fixed share unavailable without requesting content or history', async () => {
+      publicShareApiMocks.getPublicShareMetadata.mockRejectedValue(
+        new PublicShareRequestError(404, 'NOT_FOUND')
+      )
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+
+      expect(
+        await screen.findByText('This link is invalid, expired, or revoked.')
+      ).toBeInTheDocument()
+      expect(publicShareApiMocks.getPublicShareContent).not.toHaveBeenCalled()
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole('button', { name: 'Download original' })
+      ).not.toBeInTheDocument()
+    })
+
+    it('does not try a different version after a fixed-version download is denied', async () => {
+      publicShareApiMocks.downloadPublicShareVersion.mockRejectedValue(
+        new PublicShareRequestError(404, 'NOT_FOUND')
+      )
+      const user = userEvent.setup()
+      const screen = render(
+        <LanguageProvider>
+          <PublicDocumentSharePage shareId={shareId} secret={secret} />
+        </LanguageProvider>
+      )
+      await screen.findByText('Fixed release content')
+      await user.click(
+        screen.getByRole('button', { name: 'Download original' })
+      )
+
+      expect(
+        await screen.findByText('The original file could not be downloaded.')
+      ).toBeInTheDocument()
+      expect(
+        publicShareApiMocks.downloadPublicShareVersion
+      ).toHaveBeenCalledTimes(1)
+      expect(
+        publicShareApiMocks.downloadPublicShareVersion
+      ).toHaveBeenCalledWith(expect.objectContaining({ versionId }))
+      expect(publicShareApiMocks.savePublicShareDownload).not.toHaveBeenCalled()
+      expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
+    })
+  })
+
   describe('latest-only publication recovery', () => {
     const newerVersionId = 'd'.repeat(32)
     const currentVersion = {

@@ -42,6 +42,7 @@ import {
   UsersPage,
   VersionsPage,
 } from './pages'
+import { WorkspaceEmbedding } from './workspace-embedding'
 
 const apiMocks = vi.hoisted(() => ({
   approveDraft: vi.fn(),
@@ -1871,6 +1872,31 @@ describe('VersionsPage', () => {
     mockAIQueries('version', 'version-1')
   })
 
+  it('uses the document workspace context without duplicate selectors or AI panels when embedded', async () => {
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <VersionsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            branch_id: branchFixture.id,
+            version_id: markdownVersionFixture.id,
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Markdown Guide' })
+    ).toBeVisible()
+    for (const label of ['Project', 'Document', 'Branch', 'Version'])
+      expect(screen.queryByRole('combobox', { name: label })).toBeNull()
+    expect(screen.queryByText('AI summary for version')).toBeNull()
+    expect(apiMocks.getAISummary).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('tab', { name: 'Versions' }))
+    expect(screen.getByText('v1')).toBeVisible()
+  })
+
   it('renders TXT literally with stable content and never requests API endpoints', async () => {
     const content =
       '# Literal title\n[raw link](https://example.test)\n<script>alert(1)</script>\n  indented\ttext\n'
@@ -2770,6 +2796,40 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     apiMocks.getDiffSummary.mockResolvedValue(diffFixture.summary)
   })
 
+  it('retains embedded comparison and history while leaving AI to the document workspace', async () => {
+    mockAIQueries('diff', diffFixture.id)
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            from_version_id: fromVersionFixture.id,
+            to_version_id: markdownVersionFixture.id,
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+    )
+    expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Document' })).toBeNull()
+    expect(screen.getByLabelText('From version')).toHaveValue(
+      fromVersionFixture.id
+    )
+    expect(screen.getByLabelText('To version')).toHaveValue(
+      markdownVersionFixture.id
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Compare' }))
+    await waitFor(() => expect(apiMocks.compareDiff).toHaveBeenCalled())
+    expect(
+      screen.getByRole('tab', { name: 'Stored diff history' })
+    ).toBeVisible()
+    expect(screen.queryByText('AI summary for diff')).toBeNull()
+    expect(apiMocks.getAISummary).not.toHaveBeenCalled()
+  })
+
   it('uses line comparison summaries and literal unified diffs for TXT', async () => {
     apiMocks.listDocuments.mockResolvedValue({
       items: [{ ...markdownDocumentFixture, document_type: 3 }],
@@ -3377,6 +3437,45 @@ describe('DraftsPage lifecycle boundaries', () => {
     )
     apiMocks.listVersions.mockResolvedValue({ items: [], total: 0 })
     apiMocks.updateDraft.mockResolvedValue({ ...draftFixture, status: 1 })
+  })
+
+  it('preserves embedded draft edits across history without duplicate context or AI', async () => {
+    apiMocks.listDrafts.mockResolvedValue({
+      items: [{ ...draftFixture, status: 1 }],
+      total: 1,
+    })
+    const user = userEvent.setup()
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DraftsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            branch_id: branchFixture.id,
+            draft_id: draftFixture.id,
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Content')).toHaveValue(
+        '# Loaded raw content'
+      )
+    )
+    for (const label of ['Project', 'Document', 'Branch', 'Draft'])
+      expect(screen.queryByRole('combobox', { name: label })).toBeNull()
+    expect(screen.queryByRole('tab', { name: /^AI$/ })).toBeNull()
+    await user.clear(screen.getByLabelText('Content'))
+    await user.type(
+      screen.getByLabelText('Content'),
+      'Unsaved embedded changes'
+    )
+    await user.click(screen.getByRole('tab', { name: 'Draft history' }))
+    await user.click(screen.getByRole('tab', { name: 'Workspace' }))
+    expect(screen.getByLabelText('Content')).toHaveValue(
+      'Unsaved embedded changes'
+    )
+    expect(apiMocks.getAISummary).not.toHaveBeenCalled()
   })
 
   it.each([

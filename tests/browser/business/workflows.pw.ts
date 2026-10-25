@@ -192,12 +192,34 @@ async function openWorkspaceFile(
   await expect(
     tree.getByRole('button', { name: /closure\.md/ })
   ).toHaveAttribute('aria-current', 'page')
-  if (view !== 'content') {
-    const tabName = { drafts: 'Drafts', versions: 'Versions', diffs: 'Diffs' }[
-      view
-    ]
-    await page.getByRole('tab', { name: tabName, exact: true }).click()
-  }
+  if (view === 'drafts') {
+    await selectOption(
+      page.getByLabel('Content state', { exact: true }),
+      'draft'
+    )
+    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
+  } else if (view !== 'content') await openWorkspaceTool(page, view)
+}
+
+async function openWorkspaceTool(page: Page, view: 'versions' | 'diffs') {
+  await page.getByRole('tab', { name: 'Document tools', exact: true }).click()
+  const tabs = page.getByRole('tablist').filter({
+    has: page.getByRole('tab', { name: 'Diffs', exact: true }),
+  })
+  await tabs
+    .getByRole('tab', {
+      name: view === 'diffs' ? 'Diffs' : 'Versions',
+      exact: true,
+    })
+    .click()
+}
+
+async function selectWorkspaceDraft(page: Page, draftId: string) {
+  const select = page.getByLabel('Draft', { exact: true })
+  const currentId = await select.getAttribute('value')
+  await selectOption(select, draftId)
+  if (currentId !== draftId)
+    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
 }
 
 async function installAdminApi(
@@ -303,16 +325,24 @@ async function installAdminApi(
     }
     if (
       method === 'GET' &&
-      path ===
-        `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${submittedDraftId}/content/raw`
+      (path ===
+        `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${submittedDraftId}/content/raw` ||
+        path ===
+          `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${editableDraftId}/content/raw`)
     ) {
+      const draft = path.includes(submittedDraftId)
+        ? submittedDraft
+        : editableDraft
       await fulfillEnvelope(route, {
         owner_type: 'draft',
-        owner_id: submittedDraftId,
+        owner_id: draft.id,
         kind: 'raw',
         content_kind: 'markdown',
-        draft: submittedDraft,
-        content: '# Submitted handbook',
+        draft,
+        content:
+          draft.id === submittedDraftId
+            ? '# Submitted handbook'
+            : '# Editable handbook',
         hash: 'draft-hash',
       })
       return
@@ -459,22 +489,20 @@ for (const width of [1280, 390]) {
       new Set(paths.filter((path) => path.includes('/content/'))).size
     ).toBe(1)
     expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
-    await page.getByRole('tab', { name: 'Share', exact: true }).click()
+    await page.getByRole('button', { name: 'Share', exact: true }).click()
     await expect
       .poll(
         () => finishedPaths.filter((path) => path.endsWith('/overview')).length
       )
       .toBe(1)
-    await page.getByRole('tab', { name: 'Content', exact: true }).click()
-    await page.getByRole('tab', { name: 'Share', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+    await page.getByRole('button', { name: 'Share', exact: true }).click()
     expect(
       finishedPaths.filter((path) => path.endsWith('/overview'))
     ).toHaveLength(1)
-    expect(
-      paths.some(
-        (path) => path.endsWith('/versions') || path.endsWith('/endpoints')
-      )
-    ).toBe(false)
+    expect(paths.some((path) => path.endsWith('/endpoints'))).toBe(false)
+    expect(paths.filter((path) => path.endsWith('/versions'))).toHaveLength(1)
   })
 }
 
@@ -614,7 +642,7 @@ test('a comparison completed after document navigation stays in its original his
   const otherFile = tree.getByRole('button', { name: /other\.md/ })
   await otherFile.click()
   await expect(otherFile).toHaveAttribute('aria-current', 'page')
-  await page.getByRole('tab', { name: 'Diffs', exact: true }).click()
+  await openWorkspaceTool(page, 'diffs')
   await expect(
     page.getByLabel('From version', { exact: true })
   ).toHaveAttribute('value', '')
@@ -632,7 +660,7 @@ test('a comparison completed after document navigation stays in its original his
     page.getByText('Linked entity is unavailable', { exact: true })
   ).toHaveCount(0)
   await tree.getByRole('button', { name: /closure\.md/ }).click()
-  await page.getByRole('tab', { name: 'Diffs', exact: true }).click()
+  await openWorkspaceTool(page, 'diffs')
   await page
     .getByRole('tab', { name: 'Stored diff history', exact: true })
     .click()
@@ -675,8 +703,7 @@ for (const viewport of [
       }
     )
     await openWorkspaceFile(page, 'drafts')
-    const draftSelect = page.getByLabel('Draft', { exact: true })
-    await selectOption(draftSelect, editableDraftId)
+    await selectWorkspaceDraft(page, editableDraftId)
     const content = page.getByRole('textbox', { name: 'Content', exact: true })
     await expect(content).toHaveValue('# Original draft')
     await content.fill('# Local edits to retain')
@@ -684,8 +711,8 @@ for (const viewport of [
     const refetch = async (nextContent: string) => {
       serverContent = nextContent
       await page.clock.fastForward(11_000)
-      await selectOption(draftSelect, '')
-      await selectOption(draftSelect, editableDraftId)
+      await selectWorkspaceDraft(page, submittedDraftId)
+      await selectWorkspaceDraft(page, editableDraftId)
       await expect(
         page.getByText('This draft changed on the server')
       ).toBeVisible()
@@ -780,10 +807,7 @@ for (const width of [1280, 390]) {
       await fulfillEnvelope(route, current)
     })
     await openWorkspaceFile(page, 'drafts')
-    await selectOption(
-      page.getByLabel('Draft', { exact: true }),
-      editableDraftId
-    )
+    await selectWorkspaceDraft(page, editableDraftId)
     const content = page.getByRole('textbox', { name: 'Content', exact: true })
     await expect(content).toHaveValue('# Original draft')
     await page
@@ -841,7 +865,7 @@ test('draft review confirms and approves the selected submitted draft', async ({
   await openWorkspaceFile(page, 'drafts')
   const draftSelect = page.getByLabel('Draft', { exact: true })
   await expect(draftSelect).toBeVisible()
-  await selectOption(draftSelect, submittedDraftId)
+  await selectWorkspaceDraft(page, submittedDraftId)
 
   const reviewNote = page.getByLabel('Review note', { exact: true })
   await expect(reviewNote).toBeEnabled()
@@ -915,10 +939,7 @@ for (const width of [1280, 390]) {
       await fulfillEnvelope(route, latestVersion)
     })
     await openWorkspaceFile(page, 'drafts')
-    await selectOption(
-      page.getByLabel('Draft', { exact: true }),
-      submittedDraftId
-    )
+    await selectWorkspaceDraft(page, submittedDraftId)
     const note = page.getByLabel('Review note', { exact: true })
     await expect(note).toBeEnabled()
     await note.fill('Preserve this review note')
@@ -984,11 +1005,14 @@ test('versions route renders reviewed Markdown and keeps relative links inert', 
   ).toBeVisible()
 
   await selectOption(versionSelect, previousVersionId)
+  const historicalReader = page
+    .getByRole('tabpanel', { name: 'Document', exact: true })
+    .locator('article')
   await expect(
-    markdown.getByRole('heading', { name: 'Previous Notes' })
+    historicalReader.getByRole('heading', { name: 'Previous Notes' })
   ).toBeVisible()
   await expect(
-    markdown.getByRole('heading', { name: 'Release Notes' })
+    historicalReader.getByRole('heading', { name: 'Release Notes' })
   ).toHaveCount(0)
 })
 

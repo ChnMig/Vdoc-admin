@@ -187,7 +187,7 @@ function AIContextPanelContent({
   )
 
   return (
-    <Card className='overflow-hidden'>
+    <Card className='@container/ai overflow-hidden'>
       <CardHeader className='border-b pb-5'>
         <div className='flex flex-wrap items-start justify-between gap-3'>
           <div className='grid gap-2'>
@@ -209,7 +209,7 @@ function AIContextPanelContent({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className='grid gap-5 p-5 lg:grid-cols-2'>
+      <CardContent className='grid gap-5 p-5 @min-[42rem]/ai:grid-cols-2'>
         <section className='grid content-start gap-3'>
           {!interactive && target && (
             <Alert>

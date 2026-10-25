@@ -1,14 +1,6 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, FolderTree, Settings2 } from 'lucide-react'
+import { FileText, FolderTree } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { cn } from '@/lib/utils'
@@ -28,9 +20,7 @@ import type {
 } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -42,14 +32,12 @@ import {
   DocumentFormFields,
   documentPayloadFromFormData,
 } from './document-form-fields'
-import { DocumentWorkspaceContent } from './document-workspace-content'
+import { DocumentWorkspaceDetail } from './document-workspace-detail'
 import {
   documentSelection,
-  documentWorkflowState,
   emptyDocumentSelection,
   type WorkspaceView,
 } from './document-workspace-model'
-import { DocumentWorkspaceShare } from './document-workspace-share'
 import {
   FormDialog,
   LoadingErrorState,
@@ -63,22 +51,6 @@ import {
   activeProjectRole,
   fieldValue,
 } from './page-utils'
-import { WorkspaceEmbedding } from './workspace-embedding'
-
-const DraftsPage = lazy(() =>
-  import('./drafts-page').then((module) => ({ default: module.DraftsPage }))
-)
-const VersionsPage = lazy(() =>
-  import('./versions-page').then((module) => ({ default: module.VersionsPage }))
-)
-const DiffsPage = lazy(() =>
-  import('./diffs-page').then((module) => ({ default: module.DiffsPage }))
-)
-const DocumentsPage = lazy(() =>
-  import('./documents-page').then((module) => ({
-    default: module.DocumentsPage,
-  }))
-)
 
 export type DocumentWorkspacePageProps = VdocPageDeepLinkProps & {
   defaultView?: WorkspaceView
@@ -167,9 +139,10 @@ export function DocumentWorkspacePage({
     document?.status === ACTIVE_STATUS
   )
   const folders = foldersQuery.data?.items ?? []
-  const folderId = document
-    ? (document.folder_id ?? '')
-    : (routeSearch.folder_id ?? '')
+  const folderId =
+    routeSearch.folder_id === 'root'
+      ? ''
+      : (routeSearch.folder_id ?? document?.folder_id ?? '')
   const folder = folders.find((item) => item.id === folderId)
   const mutationScope = `${effectiveScope}:${folderId}:${document?.id ?? ''}`
   useLayoutEffect(() => {
@@ -187,18 +160,6 @@ export function DocumentWorkspacePage({
     (foldersQuery.isSuccess && folderId && !folder)
   )
   const view = routeSearch.workspace_view ?? defaultView
-  useEffect(() => {
-    if (
-      !document ||
-      !routeSearch.folder_id ||
-      routeSearch.folder_id === (document.folder_id ?? '')
-    )
-      return
-    normalizeSearchRef.current(
-      { folder_id: document.folder_id ?? undefined },
-      true
-    )
-  }, [document, routeSearch.folder_id])
   const setStoredProject = useVdocContextStore((state) => state.setProjectId)
   const setStoredDocument = useVdocContextStore((state) => state.setDocumentId)
   useEffect(() => {
@@ -216,13 +177,6 @@ export function DocumentWorkspacePage({
       folder_id: undefined,
       workspace_view: 'content',
     })
-  const selectView = (nextView: WorkspaceView) =>
-    changeSearch({ workspace_view: nextView })
-  const embeddedSearch = {
-    ...routeSearch,
-    project_id: projectId,
-    document_id: document?.id,
-  }
   const createMutation = useMutation({
     mutationFn: async (request: {
       projectId: string
@@ -268,19 +222,9 @@ export function DocumentWorkspacePage({
         queryKey: ['document-folders', request.projectId],
       })
       if (currentScope.current === request.owner)
-        changeSearch({
-          ...emptyDocumentSelection,
-          folder_id: result.id,
-          workspace_view: 'content',
-        })
+        changeSearch({ folder_id: result.id })
     },
   })
-  const editDraft = () =>
-    changeSearch({
-      workspace_view: 'drafts',
-      branch_id: undefined,
-      draft_id: document?.latest_draft_id ?? undefined,
-    })
   return (
     <>
       <Header>
@@ -439,11 +383,7 @@ export function DocumentWorkspacePage({
                       changeSearch(documentSelection(selected))
                     }
                     onFolderSelect={(selected) =>
-                      changeSearch({
-                        ...emptyDocumentSelection,
-                        folder_id: selected || undefined,
-                        workspace_view: 'content',
-                      })
+                      changeSearch({ folder_id: selected || 'root' })
                     }
                   />
                 )}
@@ -451,145 +391,19 @@ export function DocumentWorkspacePage({
             )}
             <div className='min-w-0 rounded-lg border bg-card p-4 sm:p-5'>
               {document ? (
-                <>
-                  <div className='mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3'>
-                    <div className='min-w-0'>
-                      <h2 className='text-lg font-semibold break-words'>
-                        {document.name}
-                      </h2>
-                      <p
-                        className='mt-1 line-clamp-2 text-xs leading-5 break-all text-muted-foreground'
-                        title={document.relative_path ?? document.file_name}
-                      >
-                        {document.relative_path ?? document.file_name}
-                      </p>
-                    </div>
-                    <div className='flex items-center gap-2'>
-                      <Badge variant='secondary'>
-                        {t(
-                          `admin.workspace.${documentWorkflowState(document)}`
-                        )}
-                      </Badge>
-                      {document.has_draft &&
-                        documentWorkflowState(document) === 'published' && (
-                          <Badge variant='outline'>
-                            {t('admin.workspace.hasDraft')}
-                          </Badge>
-                        )}
-                    </div>
-                  </div>
-                  <Tabs
-                    value={view}
-                    onValueChange={(value) =>
-                      selectView(value as WorkspaceView)
-                    }
-                    className='min-w-0 gap-5'
-                  >
-                    <TabsList className='grid h-auto max-w-full grid-cols-3 sm:flex sm:w-fit sm:flex-wrap sm:justify-start'>
-                      {(
-                        [
-                          'content',
-                          'drafts',
-                          'versions',
-                          'diffs',
-                          'share',
-                        ] as const
-                      ).map((tab) => (
-                        <TabsTrigger value={tab} key={tab}>
-                          {t(`admin.workspace.${tab}`)}
-                        </TabsTrigger>
-                      ))}
-                      {canManage && (
-                        <TabsTrigger
-                          value='manage'
-                          aria-label={t('admin.workspace.manage')}
-                        >
-                          <Settings2 aria-hidden />
-                          <span className='sr-only'>
-                            {t('admin.workspace.manage')}
-                          </span>
-                        </TabsTrigger>
-                      )}
-                    </TabsList>
-                    <WorkspaceEmbedding key={`${projectId}:${document.id}`}>
-                      <Suspense
-                        fallback={
-                          <p
-                            role='status'
-                            className='text-sm text-muted-foreground'
-                          >
-                            {t('admin.common.loading')}
-                          </p>
-                        }
-                      >
-                        <RetainedPane
-                          value='content'
-                          active={view === 'content'}
-                        >
-                          <DocumentWorkspaceContent
-                            key={`${projectId}:${document.id}`}
-                            projectId={projectId}
-                            document={document}
-                            canWrite={canWrite}
-                            onEditDraft={editDraft}
-                          />
-                        </RetainedPane>
-                        <RetainedPane value='drafts' active={view === 'drafts'}>
-                          <DraftsPage
-                            search={embeddedSearch}
-                            onSearchChange={(patch) =>
-                              changeSearch(patch, true)
-                            }
-                          />
-                        </RetainedPane>
-                        <RetainedPane
-                          value='versions'
-                          active={view === 'versions'}
-                        >
-                          <VersionsPage
-                            search={embeddedSearch}
-                            onSearchChange={(patch) =>
-                              changeSearch(patch, true)
-                            }
-                          />
-                        </RetainedPane>
-                        <RetainedPane value='diffs' active={view === 'diffs'}>
-                          <DiffsPage
-                            search={embeddedSearch}
-                            onSearchChange={(patch) =>
-                              changeSearch(patch, true)
-                            }
-                          />
-                        </RetainedPane>
-                        <RetainedPane value='share' active={view === 'share'}>
-                          <DocumentWorkspaceShare
-                            key={`${projectId}:${document.id}`}
-                            projectId={projectId}
-                            document={document}
-                            canManage={canManage}
-                            interactive={Boolean(
-                              canMutate && document.status === ACTIVE_STATUS
-                            )}
-                          />
-                        </RetainedPane>
-                        {canManage && (
-                          <RetainedPane
-                            value='manage'
-                            active={view === 'manage'}
-                          >
-                            <DocumentsPage
-                              search={embeddedSearch}
-                              onSearchChange={(patch) =>
-                                changeSearch(patch, true)
-                              }
-                              workspaceSettings
-                            />
-                          </RetainedPane>
-                        )}
-                      </Suspense>
-                    </WorkspaceEmbedding>
-                  </Tabs>
-                </>
+                <DocumentWorkspaceDetail
+                  key={`${effectiveScope}:${document.id}`}
+                  projectId={projectId}
+                  document={document}
+                  search={{ ...routeSearch, workspace_view: view }}
+                  canManage={canManage}
+                  canWrite={canWrite}
+                  interactive={Boolean(
+                    project?.status === ACTIVE_STATUS &&
+                    document.status === ACTIVE_STATUS
+                  )}
+                  onSearchChange={changeSearch}
+                />
               ) : (
                 <div className='grid min-h-72 place-content-center justify-items-center gap-3 px-5 py-12 text-center'>
                   <FileText
@@ -609,24 +423,5 @@ export function DocumentWorkspacePage({
         )}
       </Main>
     </>
-  )
-}
-
-function RetainedPane({
-  value,
-  active,
-  children,
-}: {
-  value: WorkspaceView
-  active: boolean
-  children: ReactNode
-}) {
-  const [visited, setVisited] = useState(active)
-  if (active && !visited) setVisited(true)
-  if (!active && !visited) return null
-  return (
-    <TabsContent value={value} forceMount hidden={!active} className='min-w-0'>
-      {children}
-    </TabsContent>
   )
 }

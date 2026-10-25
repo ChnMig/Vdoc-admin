@@ -5,7 +5,7 @@ import {
   vdocApi,
 } from './vdoc-api'
 
-type DocumentShareVersionScope = 1 | 2
+type DocumentShareVersionScope = 1 | 2 | 3
 
 export const DOCUMENT_SHARE_EXPIRY_PRESETS = [
   '1_month',
@@ -23,6 +23,7 @@ export type DocumentShareDTO = {
   readonly document_id: string
   readonly branch_id: string
   readonly version_scope: number
+  readonly version_id?: string
   readonly status: number
   readonly password_protected: boolean
   readonly expires_at?: string
@@ -35,10 +36,15 @@ export type DocumentShareDTO = {
 
 export type CreateDocumentSharePayload = {
   readonly branch_id: string
-  readonly version_scope: DocumentShareVersionScope
   readonly expiry_preset: DocumentShareExpiryPreset
   readonly password?: string
-}
+} & (
+  | {
+      readonly version_scope: Exclude<DocumentShareVersionScope, 3>
+      readonly version_id?: never
+    }
+  | { readonly version_scope: 3; readonly version_id: string }
+)
 
 export type DocumentShareSecretDTO = {
   readonly share: DocumentShareDTO

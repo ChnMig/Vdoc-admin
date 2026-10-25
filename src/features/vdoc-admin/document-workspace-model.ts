@@ -4,6 +4,7 @@ import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 export type WorkspaceView = NonNullable<VdocRouteSearch['workspace_view']>
 
 export const emptyDocumentSelection = {
+  content_mode: undefined,
   document_id: undefined,
   branch_id: undefined,
   draft_id: undefined,
