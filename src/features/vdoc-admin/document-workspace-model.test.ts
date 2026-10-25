@@ -91,7 +91,10 @@ describe('document workspace tree model', () => {
   })
 
   it('clears every subordinate selection when opening a different file', () => {
-    expect(documentSelection(document('new', 'folder', 'new.txt'))).toEqual({
+    expect(
+      documentSelection(document('new', 'folder', 'new.txt'))
+    ).toStrictEqual({
+      content_mode: undefined,
       document_id: 'new',
       folder_id: 'folder',
       workspace_view: 'content',
@@ -101,6 +104,8 @@ describe('document workspace tree model', () => {
       endpoint_id: undefined,
       from_version_id: undefined,
       to_version_id: undefined,
+      from_branch_id: undefined,
+      to_branch_id: undefined,
       diff_id: undefined,
     })
   })

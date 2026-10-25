@@ -108,6 +108,108 @@
   animation: slideUp 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.app-page-transition {
+  animation: workspace-content-in var(--motion-duration-route)
+    var(--motion-ease-standard);
+}
+
+.ui-pane-transition[data-state='active'],
+.document-pane-transition[data-pane-active='true'],
+.workspace-pane-enter {
+  animation: workspace-content-in var(--motion-duration-fast)
+    var(--motion-ease-standard);
+}
+
+.ui-pane-transition[data-state='inactive'],
+.document-pane-transition[data-pane-active='false'] {
+  animation: none;
+}
+
+.workspace-tree-chevron {
+  transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.document-workspace-layout {
+  transition: grid-template-columns var(--motion-duration-panel)
+    var(--motion-ease-standard);
+}
+
+.document-assistant-panel {
+  position: fixed;
+  inset-block: 0;
+  inset-inline: auto 0;
+  margin: 0;
+  width: min(100vw, 26rem);
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  transform: translateX(1.5rem);
+  transition:
+    opacity var(--motion-duration-panel) var(--motion-ease-standard),
+    transform var(--motion-duration-panel) var(--motion-ease-standard),
+    display var(--motion-duration-panel) allow-discrete,
+    overlay var(--motion-duration-panel) allow-discrete;
+}
+
+.document-assistant-panel[open] {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.document-assistant-panel::backdrop {
+  background: oklch(0.12 0.02 258 / 40%);
+  opacity: 0;
+  transition:
+    opacity var(--motion-duration-panel) var(--motion-ease-standard),
+    display var(--motion-duration-panel) allow-discrete,
+    overlay var(--motion-duration-panel) allow-discrete;
+}
+
+.document-assistant-panel[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .document-assistant-panel[open] {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+
+  .document-assistant-panel[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .document-assistant-panel {
+    position: static;
+    inset: auto;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    transform: none;
+  }
+
+  @starting-style {
+    .document-assistant-panel[open] {
+      transform: none;
+    }
+  }
+}
+
+@keyframes workspace-content-in {
+  from {
+    opacity: 0.92;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -121,6 +223,23 @@
   .CollapsibleContent[data-state='open'],
   .CollapsibleContent[data-state='closed'] {
     animation: none;
+  }
+
+  .document-workspace-layout,
+  .document-assistant-panel,
+  .document-assistant-panel::backdrop {
+    transition: none;
+  }
+
+  .document-assistant-panel {
+    transform: none;
+  }
+
+  .app-page-transition,
+  .ui-pane-transition[data-state='active'],
+  .document-pane-transition[data-pane-active='true'],
+  .workspace-pane-enter {
+    animation: workspace-content-in 80ms linear !important;
   }
 }
 

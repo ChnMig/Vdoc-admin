@@ -1,7 +1,5 @@
-import { GitBranch } from 'lucide-react'
 import type { BranchDTO, DraftListDTO, VersionDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
-import { Button } from '@/components/ui/button'
 import { OptionsSelect } from '@/components/options-select'
 import type { DocumentReadingSelection } from './document-workspace-content'
 
@@ -10,21 +8,17 @@ export function DocumentWorkspaceToolbar({
   branches,
   versions,
   drafts,
-  canManage,
   onBranchChange,
   onModeChange,
   onRevisionChange,
-  onManageBranches,
 }: {
   selection: DocumentReadingSelection
   branches: readonly BranchDTO[]
   versions: readonly VersionDTO[]
   drafts: readonly DraftListDTO[]
-  canManage: boolean
   onBranchChange: (id: string) => void
   onModeChange: (mode: 'published' | 'draft') => void
   onRevisionChange: (id: string) => void
-  onManageBranches: () => void
 }) {
   const { t } = useLanguage()
   return (
@@ -46,18 +40,6 @@ export function DocumentWorkspaceToolbar({
               label: `${branch.name}${branch.status === 1 ? '' : ` · ${t('admin.statuses.archived')}`}`,
             }))}
           />
-          {canManage && (
-            <Button
-              variant='ghost'
-              size='icon'
-              className='hidden size-7 shrink-0 sm:inline-flex'
-              aria-label={t('admin.workspace.manageBranches')}
-              title={t('admin.workspace.manageBranches')}
-              onClick={onManageBranches}
-            >
-              <GitBranch aria-hidden className='size-3.5' />
-            </Button>
-          )}
         </div>
         <OptionsSelect
           fallbackToFirstOption={false}

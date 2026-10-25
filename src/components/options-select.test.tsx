@@ -12,6 +12,24 @@ const options = [
 ]
 
 describe('OptionsSelect', () => {
+  it('keeps the popup inside its native dialog and Escape closes only the popup', async () => {
+    const user = userEvent.setup()
+    render(
+      <dialog open aria-label='Assistant'>
+        <OptionsSelect aria-label='Session' options={options} />
+      </dialog>
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Assistant' })
+    const trigger = screen.getByRole('combobox', { name: 'Session' })
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    const popup = await screen.findByRole('listbox')
+    expect(dialog).toContainElement(popup)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(dialog).toHaveAttribute('open')
+    expect(trigger).toHaveFocus()
+  })
+
   it('submits the selected value, supports clearing, and resets to its default', async () => {
     const user = userEvent.setup()
     render(

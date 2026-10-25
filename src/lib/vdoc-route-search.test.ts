@@ -12,6 +12,8 @@ describe('vdocRouteSearchSchema', () => {
         workspace_view: 'diffs',
         from_version_id: 'v0',
         to_version_id: 'v1',
+        from_branch_id: ' main ',
+        to_branch_id: 'feature',
       })
     ).toEqual({
       team_id: 'team-1',
@@ -21,6 +23,8 @@ describe('vdocRouteSearchSchema', () => {
       workspace_view: 'diffs',
       from_version_id: 'v0',
       to_version_id: 'v1',
+      from_branch_id: 'main',
+      to_branch_id: 'feature',
     })
     expect(
       vdocRouteSearchSchema.parse({ workspace_view: 'unknown' }).workspace_view

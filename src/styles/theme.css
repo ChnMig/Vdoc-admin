@@ -1,5 +1,9 @@
 :root {
   --radius: 0.5rem;
+  --motion-duration-fast: 150ms;
+  --motion-duration-panel: 220ms;
+  --motion-duration-route: 160ms;
+  --motion-ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
   --background: oklch(0.973 0.004 255.8);
   --foreground: oklch(0.155 0.035 258.6);
   --card: oklch(0.995 0.002 255.8);

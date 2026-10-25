@@ -8,18 +8,24 @@ function Reader({
   content,
   contextKey = 'document-1:version-1',
   controlledScroll = false,
+  externalAriaHidden = false,
   onNavigate,
 }: {
   content?: ReactNode
   contextKey?: string
   controlledScroll?: boolean
+  externalAriaHidden?: boolean
   onNavigate?: () => void
 }) {
   const contentRootRef = useRef<HTMLDivElement>(null)
   const scrollRootRef = useRef<HTMLDivElement>(null)
   return (
     <LanguageProvider>
-      <div data-testid='reader-scroll' ref={scrollRootRef}>
+      <div
+        data-testid='reader-scroll'
+        ref={scrollRootRef}
+        aria-hidden={externalAriaHidden || undefined}
+      >
         <h1>Page title outside the content</h1>
         <div ref={contentRootRef}>
           <section data-document-content>{content}</section>
@@ -124,6 +130,49 @@ describe('DocumentWorkspaceOutline', () => {
     ).toBeVisible()
     expect(
       screen.queryByRole('link', { name: 'Visible heading' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('collects the same reader inside modal-isolated ancestors while excluding hidden source content', async () => {
+    const screen = render(<Reader externalAriaHidden />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    screen.rerender(
+      <Reader
+        externalAriaHidden
+        content={
+          <>
+            <h2>Section available in the outline dialog</h2>
+            <div hidden>
+              <h2>Unselected hidden source</h2>
+            </div>
+            <div aria-hidden='true'>
+              <h2>Internal aria hidden source</h2>
+            </div>
+            <div data-state='inactive'>
+              <h2>Inactive revision content</h2>
+            </div>
+          </>
+        }
+      />
+    )
+    expect(
+      await screen.findByRole('link', {
+        name: 'Section available in the outline dialog',
+      })
+    ).toBeVisible()
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    expect(screen.getByTestId('reader-scroll')).toHaveAttribute(
+      'aria-hidden',
+      'true'
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Unselected hidden source' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Internal aria hidden source' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Inactive revision content' })
     ).not.toBeInTheDocument()
   })
 

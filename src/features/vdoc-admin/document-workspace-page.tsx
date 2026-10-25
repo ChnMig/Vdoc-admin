@@ -343,7 +343,12 @@ export function DocumentWorkspacePage({
             documentId={document?.id}
             folderId={folderId}
             onDocumentSelect={(selected) => {
-              changeSearch(documentSelection(selected))
+              if (selected.id === document?.id) {
+                if (view !== 'content')
+                  changeSearch({ workspace_view: 'content' })
+              } else {
+                changeSearch(documentSelection(selected))
+              }
               setMobileFilesOpen(false)
             }}
             onFolderSelect={(selected) =>

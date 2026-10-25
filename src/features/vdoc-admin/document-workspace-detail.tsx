@@ -1,9 +1,11 @@
 import {
   lazy,
   Suspense,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type CSSProperties,
 } from 'react'
@@ -11,7 +13,6 @@ import {
   BookOpen,
   Bot,
   Clock3,
-  GitBranch,
   GitCompareArrows,
   Link2,
   ListTree,
@@ -99,21 +100,66 @@ export function DocumentWorkspaceDetail({
   const { t } = useLanguage()
   const { selection, branches, branch, versions, drafts, queryStates } =
     useDocumentReadingSelection(projectId, document, search)
-  const view = search.workspace_view ?? 'content'
-  const section =
-    view === 'versions' || view === 'diffs'
-      ? 'tools'
-      : view === 'manage'
-        ? 'manage'
-        : view === 'ai'
-          ? 'ai'
-          : 'content'
+  const requestedView = search.workspace_view ?? 'content'
+  const view = requestedView === 'ai' ? 'content' : requestedView
+  const [assistantOpen, setAssistantOpen] = useState(requestedView === 'ai')
+  const [assistantVisited, setAssistantVisited] = useState(assistantOpen)
+  if (assistantOpen && !assistantVisited) setAssistantVisited(true)
+  const [previousRequestedView, setPreviousRequestedView] =
+    useState(requestedView)
+  if (requestedView !== previousRequestedView) {
+    setPreviousRequestedView(requestedView)
+    if (requestedView === 'ai') setAssistantOpen(true)
+  }
+  const wideLayout = useWideDocumentLayout()
   const [shareOpen, setShareOpen] = useState(false)
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  const externalModalOpen = useExternalDocumentModal()
+  const assistantPresented =
+    assistantOpen &&
+    (wideLayout ||
+      !(
+        externalModalOpen ||
+        shareOpen ||
+        requestedView === 'share' ||
+        outlineOpen
+      ))
+  const assistantRef = useRef<HTMLDialogElement>(null)
+  const assistantTriggerRef = useRef<HTMLButtonElement>(null)
+  const restoreAssistantFocus = useRef(false)
+  const assistantTitleId = useId()
+  useLayoutEffect(() => {
+    const panel = assistantRef.current
+    if (!panel) return
+    if (!assistantPresented || (!wideLayout && hasExternalDocumentModal())) {
+      if (panel.open) panel.close()
+      if (restoreAssistantFocus.current) {
+        assistantTriggerRef.current?.focus({ preventScroll: true })
+        restoreAssistantFocus.current = false
+      }
+      return
+    }
+    const focused = panel.contains(globalThis.document.activeElement)
+      ? (globalThis.document.activeElement as HTMLElement)
+      : null
+    // Changing modal presentation retains the same dialog and AI subtree.
+    if (panel.open) panel.close()
+    if (wideLayout) panel.show()
+    else panel.showModal()
+    focused?.focus({ preventScroll: true })
+  }, [assistantPresented, wideLayout])
   const shareTriggerRef = useRef<HTMLButtonElement>(null)
   const [settingsTab, setSettingsTab] = useState('document')
-  const [outlineOpen, setOutlineOpen] = useState(false)
   const contentRootRef = useRef<HTMLDivElement>(null)
-  const scrollRootRef = useRef<HTMLElement>(null)
+  const scrollRootRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
+  const restoreReadingFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (view === 'content' && restoreReadingFocus.current) {
+      mainRef.current?.focus({ preventScroll: true })
+      restoreReadingFocus.current = false
+    }
+  }, [view])
   const readingSelectionReady = !selection.pending && !selection.invalid
   const embeddingOwner = JSON.stringify([
     projectId,
@@ -156,7 +202,7 @@ export function DocumentWorkspaceDetail({
   const changeEmbedded =
     (pane: string) => (patch: Partial<VdocRouteSearch>) => {
       if (
-        !readingSelectionReady ||
+        (!readingSelectionReady && pane !== 'versions' && pane !== 'diffs') ||
         activeEmbedding.current !== embeddingOwner ||
         view !== pane
       )
@@ -180,9 +226,6 @@ export function DocumentWorkspaceDetail({
       version_id: undefined,
       draft_id: undefined,
       endpoint_id: undefined,
-      from_version_id: undefined,
-      to_version_id: undefined,
-      diff_id: undefined,
       content_mode: selection.mode,
       workspace_view: 'content',
     })
@@ -218,10 +261,23 @@ export function DocumentWorkspaceDetail({
         ]
       : []),
   ]
-  const goToContent = () => onSearchChange({ workspace_view: 'content' })
-  const openBranches = () => {
-    setSettingsTab('branches')
-    onSearchChange({ workspace_view: 'manage' })
+  const goToContent = () => {
+    restoreReadingFocus.current = true
+    onSearchChange({ workspace_view: 'content' })
+  }
+  const closeAssistant = () => {
+    restoreAssistantFocus.current = true
+    setAssistantOpen(false)
+    if (requestedView === 'ai')
+      onSearchChange({ workspace_view: 'content' }, true)
+  }
+  const activateTool = (value: 'versions' | 'diffs' | 'ai' | 'manage') => {
+    if (value === 'ai') {
+      if (assistantOpen) closeAssistant()
+      else setAssistantOpen(true)
+      return
+    }
+    onSearchChange({ workspace_view: value })
   }
   const loading = (
     <p role='status' className='py-6 text-sm text-muted-foreground'>
@@ -318,7 +374,6 @@ export function DocumentWorkspaceDetail({
           branches={branches}
           versions={versions}
           drafts={drafts}
-          canManage={canManage}
           onBranchChange={changeBranch}
           onModeChange={(mode) =>
             onSearchChange({
@@ -340,7 +395,6 @@ export function DocumentWorkspaceDetail({
               endpoint_id: undefined,
             })
           }
-          onManageBranches={openBranches}
         />
         <nav
           className='flex w-full min-w-0 items-center gap-1 overflow-x-auto xl:hidden'
@@ -349,10 +403,18 @@ export function DocumentWorkspaceDetail({
           {toolItems.map(({ value, label, icon: Icon }) => (
             <Button
               key={value}
-              variant={view === value ? 'secondary' : 'ghost'}
+              variant={
+                (value === 'ai' ? assistantOpen : view === value)
+                  ? 'secondary'
+                  : 'ghost'
+              }
               size='sm'
               className='h-8 gap-1.5 text-xs'
-              onClick={() => onSearchChange({ workspace_view: value })}
+              onClick={() => activateTool(value)}
+              aria-pressed={value === 'ai' ? assistantOpen : view === value}
+              ref={
+                value === 'ai' && !wideLayout ? assistantTriggerRef : undefined
+              }
             >
               <Icon aria-hidden className='size-3.5' />
               {label}
@@ -362,263 +424,297 @@ export function DocumentWorkspaceDetail({
       </div>
       <WorkspaceEmbedding>
         <div
-          className='grid min-h-0 min-w-0 flex-1 xl:grid-cols-[minmax(0,1fr)_var(--document-aside-width)]'
+          className='document-workspace-layout grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_var(--document-aside-width)_3rem]'
+          data-ai-open={assistantOpen || undefined}
           style={
             {
-              '--document-aside-width': view === 'ai' ? '23rem' : '15rem',
+              '--document-aside-width': assistantOpen
+                ? '23rem'
+                : isReading
+                  ? '15rem'
+                  : '0rem',
             } as CSSProperties
           }
         >
           <main
             id='content'
+            ref={mainRef}
             tabIndex={-1}
-            ref={scrollRootRef}
-            className={cn(
-              'min-h-0 min-w-0 overflow-y-auto overscroll-contain focus:outline-none',
-              view === 'ai' && 'hidden xl:block'
-            )}
+            className='relative flex min-h-0 min-w-0 flex-col focus:outline-none'
           >
             <div
-              className={cn(
-                'mx-auto min-w-0 px-5 py-8 sm:px-10 sm:py-10',
-                isReading || view === 'ai' ? 'max-w-[52rem]' : 'max-w-[82rem]'
-              )}
+              hidden={!isReading}
+              ref={scrollRootRef}
+              data-document-reading-pane
+              data-pane-active={isReading || undefined}
+              className='document-pane-transition min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain'
             >
-              {queryStates.map((state, index) => (
-                <LoadingErrorState
-                  key={index}
-                  state={{
-                    isLoading: false,
-                    isError: state.isError,
-                    error: state.error,
-                  }}
-                />
-              ))}
-              {!isReading && view !== 'ai' && (
-                <div className='mb-6 flex flex-wrap items-center justify-between gap-3 border-b pb-4'>
-                  <h1 className='text-lg font-semibold'>
-                    {t(
-                      view === 'drafts'
-                        ? 'admin.workspace.editingDraft'
-                        : view === 'manage'
-                          ? 'admin.workspace.manage'
-                          : view === 'diffs'
-                            ? 'admin.workspace.diffs'
-                            : 'admin.workspace.versions'
-                    )}
-                  </h1>
-                  <Button variant='ghost' size='sm' onClick={goToContent}>
-                    <BookOpen aria-hidden />
-                    {t('admin.workspace.backToContent')}
-                  </Button>
-                </div>
-              )}
-              <div hidden={!isReading && view !== 'ai'} ref={contentRootRef}>
-                <div className='mb-7'>
-                  <h1 className='text-[1.75rem] leading-snug font-semibold tracking-[-0.025em] break-words sm:text-[2.125rem]'>
-                    {document.name}
-                  </h1>
-                  <p className='mt-3 text-xs leading-5 break-all text-muted-foreground'>
-                    {document.relative_path ?? document.file_name}
-                  </p>
-                </div>
-                <DocumentWorkspaceContent
-                  projectId={projectId}
-                  document={document}
-                  selection={selection}
-                  canWrite={canWrite && branch?.status === 1}
-                  onEditDraft={editDraft}
-                  presentation='page'
-                />
-              </div>
-              <Suspense fallback={loading}>
-                <RetainedBody active={view === 'drafts'}>
-                  <DraftsPage
-                    search={contextSearch}
-                    onSearchChange={changeEmbedded('drafts')}
+              <div className='mx-auto max-w-[52rem] min-w-0 px-5 py-8 sm:px-10 sm:py-10'>
+                {queryStates.map((state, index) => (
+                  <LoadingErrorState
+                    key={index}
+                    state={{
+                      isLoading: false,
+                      isError: state.isError,
+                      error: state.error,
+                    }}
                   />
-                </RetainedBody>
-                <RetainedBody active={section === 'tools'}>
-                  <ReadingTargetGuard
-                    pending={selection.pending}
-                    invalid={selection.invalid}
-                  >
-                    <Tabs
-                      value={view === 'diffs' ? 'diffs' : 'versions'}
-                      onValueChange={(value) =>
-                        onSearchChange({
-                          workspace_view: value as 'versions' | 'diffs',
-                        })
-                      }
-                      className='min-w-0 gap-5'
-                    >
-                      <TabsList className='w-fit'>
-                        <TabsTrigger value='versions'>
-                          {t('admin.workspace.versions')}
-                        </TabsTrigger>
-                        <TabsTrigger value='diffs'>
-                          {t('admin.workspace.diffs')}
-                        </TabsTrigger>
-                      </TabsList>
-                      <RetainedSection
-                        value='versions'
-                        active={view === 'versions'}
-                      >
-                        <VersionsPage
-                          search={contextSearch}
-                          onSearchChange={changeEmbedded('versions')}
-                        />
-                      </RetainedSection>
-                      <RetainedSection value='diffs' active={view === 'diffs'}>
-                        <DiffsPage
-                          search={contextSearch}
-                          onSearchChange={changeEmbedded('diffs')}
-                        />
-                      </RetainedSection>
-                    </Tabs>
-                  </ReadingTargetGuard>
-                </RetainedBody>
-                {canManage && (
-                  <RetainedBody active={section === 'manage'}>
-                    <Tabs
-                      value={settingsTab}
-                      onValueChange={setSettingsTab}
-                      className='min-w-0 gap-5'
-                    >
-                      <TabsList className='w-fit'>
-                        <TabsTrigger value='document'>
-                          {t('admin.workspace.manage')}
-                        </TabsTrigger>
-                        <TabsTrigger value='branches'>
-                          {t('admin.workspace.manageBranches')}
-                        </TabsTrigger>
-                      </TabsList>
-                      <RetainedSection
-                        value='document'
-                        active={settingsTab === 'document'}
-                      >
-                        <DocumentsPage
-                          search={contextSearch}
-                          onSearchChange={changeEmbedded('manage')}
-                          workspaceSettings
-                        />
-                      </RetainedSection>
-                      <RetainedSection
-                        value='branches'
-                        active={settingsTab === 'branches'}
-                      >
-                        <DocumentWorkspaceBranches
-                          projectId={projectId}
-                          document={document}
-                          canManage={canManage}
-                          interactive={interactive}
-                          selectedBranchId={selection.branchId}
-                          onBranchSelect={changeBranch}
-                        />
-                      </RetainedSection>
-                    </Tabs>
-                  </RetainedBody>
-                )}
-              </Suspense>
-            </div>
-          </main>
-          <aside
-            className={cn(
-              'min-h-0 min-w-0 flex-col border-s bg-card',
-              view === 'ai' ? 'flex' : 'hidden xl:flex'
-            )}
-            aria-label={t('admin.workspace.documentSidebar')}
-          >
-            <nav
-              className='hidden shrink-0 items-center justify-between gap-1 border-b px-3 py-3 xl:flex'
-              aria-label={t('admin.workspace.tools')}
-            >
-              <Button
-                variant={isReading ? 'secondary' : 'ghost'}
-                size='icon'
-                className='size-8'
-                title={t('admin.workspace.outline')}
-                aria-label={t('admin.workspace.outline')}
-                onClick={goToContent}
-              >
-                <ListTree aria-hidden className='size-4' />
-              </Button>
-              {toolItems.map(({ value, label, icon: Icon }) => (
-                <Button
-                  key={value}
-                  variant={view === value ? 'secondary' : 'ghost'}
-                  size='icon'
-                  className='size-8'
-                  title={label}
-                  aria-label={label}
-                  onClick={() => onSearchChange({ workspace_view: value })}
-                >
-                  <Icon aria-hidden className='size-4' />
-                </Button>
-              ))}
-            </nav>
-            <div className='min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5'>
-              <div hidden={view === 'ai'}>
-                {isReading ? (
-                  !outlineOpen && outline
-                ) : (
-                  <div className='grid gap-2'>
-                    <p className='mb-2 text-xs font-medium text-muted-foreground'>
-                      {t('admin.workspace.tools')}
+                ))}
+                <div ref={contentRootRef}>
+                  <div className='mb-7'>
+                    <h1 className='text-[1.75rem] leading-snug font-semibold tracking-[-0.025em] break-words sm:text-[2.125rem]'>
+                      {document.name}
+                    </h1>
+                    <p className='mt-3 text-xs leading-5 break-all text-muted-foreground'>
+                      {document.relative_path ?? document.file_name}
                     </p>
-                    {toolItems.map(({ value, label, icon: Icon }) => (
-                      <Button
-                        key={value}
-                        variant={view === value ? 'secondary' : 'ghost'}
-                        className='justify-start'
-                        onClick={() =>
-                          onSearchChange({ workspace_view: value })
-                        }
-                      >
-                        <Icon aria-hidden />
-                        {label}
-                      </Button>
-                    ))}
-                    {canManage && (
-                      <Button
-                        variant='ghost'
-                        className='justify-start'
-                        onClick={openBranches}
-                      >
-                        <GitBranch aria-hidden />
-                        {t('admin.workspace.manageBranches')}
-                      </Button>
-                    )}
                   </div>
-                )}
-              </div>
-              <Suspense fallback={loading}>
-                <RetainedBody active={view === 'ai'}>
-                  <div className='mb-5 flex items-center justify-between gap-2'>
-                    <h2 className='text-sm font-semibold'>
-                      {t('admin.workspace.ai')}
-                    </h2>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='size-7'
-                      aria-label={t('admin.workspace.backToContent')}
-                      onClick={goToContent}
-                    >
-                      <X aria-hidden className='size-4' />
-                    </Button>
-                  </div>
-                  <DocumentWorkspaceAI
+                  <DocumentWorkspaceContent
                     projectId={projectId}
                     document={document}
                     selection={selection}
-                    interactive={interactive && branch?.status === 1}
-                    canRegenerate={canWrite && branch?.status === 1}
+                    canWrite={canWrite && branch?.status === 1}
+                    onEditDraft={editDraft}
+                    presentation='page'
                   />
-                </RetainedBody>
-              </Suspense>
+                </div>
+              </div>
             </div>
-          </aside>
+            <RetainedPane
+              active={view === 'drafts'}
+              title={t('admin.workspace.editingDraft')}
+              onClose={goToContent}
+            >
+              <DraftsPage
+                search={contextSearch}
+                onSearchChange={changeEmbedded('drafts')}
+              />
+            </RetainedPane>
+            <RetainedPane
+              active={view === 'versions'}
+              title={t('admin.workspace.versions')}
+              onClose={goToContent}
+            >
+              <VersionsPage
+                presentation='history'
+                search={contextSearch}
+                onSearchChange={changeEmbedded('versions')}
+              />
+            </RetainedPane>
+            <RetainedPane
+              active={view === 'diffs'}
+              title={t('admin.workspace.diffs')}
+              onClose={goToContent}
+            >
+              <DiffsPage
+                search={contextSearch}
+                onSearchChange={changeEmbedded('diffs')}
+              />
+            </RetainedPane>
+            {canManage && (
+              <RetainedPane
+                active={view === 'manage'}
+                title={t('admin.workspace.manage')}
+                onClose={goToContent}
+              >
+                <Tabs
+                  value={settingsTab}
+                  onValueChange={setSettingsTab}
+                  className='min-w-0 gap-5'
+                >
+                  <TabsList className='w-fit'>
+                    <TabsTrigger value='document'>
+                      {t('admin.workspace.documentDetails')}
+                    </TabsTrigger>
+                    <TabsTrigger value='branches'>
+                      {t('admin.sections.branches')}
+                    </TabsTrigger>
+                  </TabsList>
+                  <RetainedSection
+                    value='document'
+                    active={settingsTab === 'document'}
+                  >
+                    <Suspense fallback={<ToolSkeleton />}>
+                      <DocumentsPage
+                        search={contextSearch}
+                        onSearchChange={changeEmbedded('manage')}
+                        workspaceSettings
+                      />
+                    </Suspense>
+                  </RetainedSection>
+                  <RetainedSection
+                    value='branches'
+                    active={settingsTab === 'branches'}
+                  >
+                    <Suspense fallback={<ToolSkeleton />}>
+                      <DocumentWorkspaceBranches
+                        projectId={projectId}
+                        document={document}
+                        canManage={canManage}
+                        interactive={interactive}
+                        selectedBranchId={selection.branchId}
+                        onBranchSelect={changeBranch}
+                      />
+                    </Suspense>
+                  </RetainedSection>
+                </Tabs>
+              </RetainedPane>
+            )}
+          </main>
+          <div className='document-assistant-dock contents min-h-0 min-w-0 xl:block xl:border-s'>
+            <aside
+              hidden={assistantOpen || !isReading}
+              className={cn(
+                'h-full min-h-0 min-w-0 flex-col bg-card',
+                assistantOpen || !isReading ? 'hidden' : 'hidden xl:flex'
+              )}
+              aria-label={t('admin.workspace.outline')}
+            >
+              <div className='border-b px-5 py-4 text-xs font-medium text-muted-foreground'>
+                {t('admin.workspace.outline')}
+              </div>
+              <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5'>
+                {!outlineOpen && outline}
+              </div>
+            </aside>
+            <dialog
+              ref={assistantRef}
+              inert={!assistantPresented}
+              className='document-assistant-panel bg-card text-foreground'
+              aria-labelledby={assistantTitleId}
+              aria-modal={assistantPresented && !wideLayout ? true : undefined}
+              onKeyDown={(event) => {
+                if (
+                  !wideLayout &&
+                  event.key === 'Tab' &&
+                  !event.defaultPrevented
+                ) {
+                  const focusable = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLElement>(
+                      'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                    )
+                  ).filter(
+                    (element) =>
+                      !element.matches(':disabled') &&
+                      !element.closest(
+                        '[hidden], [inert], [aria-hidden="true"]'
+                      ) &&
+                      element.getClientRects().length > 0
+                  )
+                  const first = focusable[0]
+                  const last = focusable[focusable.length - 1]
+                  const active = globalThis.document.activeElement
+                  if (
+                    event.shiftKey &&
+                    (active === first || active === event.currentTarget)
+                  ) {
+                    event.preventDefault()
+                    last?.focus()
+                  } else if (!event.shiftKey && active === last) {
+                    event.preventDefault()
+                    first?.focus()
+                  }
+                }
+                if (
+                  wideLayout &&
+                  event.key === 'Escape' &&
+                  !event.defaultPrevented
+                ) {
+                  event.preventDefault()
+                  closeAssistant()
+                }
+              }}
+              onCancel={(event) => {
+                event.preventDefault()
+                closeAssistant()
+              }}
+              onClick={(event) => {
+                if (wideLayout || event.target !== event.currentTarget) return
+                const bounds = event.currentTarget.getBoundingClientRect()
+                if (
+                  event.clientX < bounds.left ||
+                  event.clientX > bounds.right ||
+                  event.clientY < bounds.top ||
+                  event.clientY > bounds.bottom
+                )
+                  closeAssistant()
+              }}
+            >
+              <div className='flex h-full min-h-0 min-w-0 flex-col'>
+                <div className='flex shrink-0 items-center justify-between gap-2 border-b px-5 py-3'>
+                  <h2
+                    id={assistantTitleId}
+                    className='flex items-center gap-2 text-sm font-semibold'
+                  >
+                    <Bot aria-hidden className='size-4 text-primary' />
+                    {t('admin.workspace.ai')}
+                  </h2>
+                  <Button
+                    variant='ghost'
+                    size='icon'
+                    className='size-8'
+                    aria-label={t('admin.workspace.closeAssistant')}
+                    onClick={closeAssistant}
+                  >
+                    <X aria-hidden className='size-4' />
+                  </Button>
+                </div>
+                <div className='min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-5'>
+                  {assistantVisited && (
+                    <Suspense fallback={<ToolSkeleton />}>
+                      <DocumentWorkspaceAI
+                        projectId={projectId}
+                        document={document}
+                        selection={selection}
+                        interactive={interactive && branch?.status === 1}
+                        canRegenerate={canWrite && branch?.status === 1}
+                      />
+                    </Suspense>
+                  )}
+                </div>
+              </div>
+            </dialog>
+          </div>
+          <nav
+            className='hidden min-h-0 flex-col items-center gap-2 border-s bg-card px-1 py-4 xl:flex'
+            aria-label={t('admin.workspace.tools')}
+          >
+            <Button
+              variant={isReading && !assistantOpen ? 'secondary' : 'ghost'}
+              size='icon'
+              className='size-9'
+              title={t('admin.workspace.outline')}
+              aria-label={t('admin.workspace.outline')}
+              aria-pressed={isReading && !assistantOpen}
+              onClick={() => {
+                setAssistantOpen(false)
+                goToContent()
+              }}
+            >
+              <ListTree aria-hidden className='size-4' />
+            </Button>
+            {toolItems.map(({ value, label, icon: Icon }) => (
+              <Button
+                key={value}
+                variant={
+                  (value === 'ai' ? assistantOpen : view === value)
+                    ? 'secondary'
+                    : 'ghost'
+                }
+                size='icon'
+                className='size-9'
+                title={label}
+                aria-label={label}
+                aria-pressed={value === 'ai' ? assistantOpen : view === value}
+                ref={
+                  value === 'ai' && wideLayout ? assistantTriggerRef : undefined
+                }
+                onClick={() => activateTool(value)}
+              >
+                <Icon aria-hidden className='size-4' />
+              </Button>
+            ))}
+          </nav>
         </div>
       </WorkspaceEmbedding>
       <Dialog open={outlineOpen} onOpenChange={setOutlineOpen}>
@@ -689,40 +785,98 @@ export function DocumentWorkspaceDetail({
   )
 }
 
-function ReadingTargetGuard({
-  pending,
-  invalid,
-  children,
-}: {
-  pending?: boolean
-  invalid?: boolean
-  children: ReactNode
-}) {
-  const { t } = useLanguage()
-  return pending || invalid ? (
-    <p role='status' className='py-5 text-sm text-muted-foreground'>
-      {t(
-        pending ? 'admin.common.loading' : 'admin.workspace.readerUnavailable'
-      )}
-    </p>
-  ) : (
-    children
-  )
-}
-function RetainedBody({
+function RetainedPane({
   active,
+  title,
+  onClose,
   children,
 }: {
   active: boolean
+  title: string
+  onClose: () => void
   children: ReactNode
 }) {
+  const { t } = useLanguage()
   const [visited, setVisited] = useState(active)
   if (active && !visited) setVisited(true)
   if (!active && !visited) return null
   return (
-    <div hidden={!active} className='min-w-0'>
-      {children}
+    <section
+      hidden={!active}
+      aria-label={title}
+      data-document-tool-pane
+      data-pane-active={active || undefined}
+      className='document-pane-transition min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain'
+    >
+      <div className='mx-auto max-w-[82rem] min-w-0 px-5 py-6 sm:px-10 sm:py-8'>
+        <div className='mb-6 flex flex-wrap items-center justify-between gap-3 border-b pb-4'>
+          <h1 className='text-lg font-semibold'>{title}</h1>
+          <Button variant='ghost' size='sm' onClick={onClose}>
+            <BookOpen aria-hidden />
+            {t('admin.workspace.backToContent')}
+          </Button>
+        </div>
+        <Suspense fallback={<ToolSkeleton />}>{children}</Suspense>
+      </div>
+    </section>
+  )
+}
+function ToolSkeleton() {
+  const { t } = useLanguage()
+  return (
+    <div
+      role='status'
+      aria-label={t('admin.common.loading')}
+      className='grid gap-4 py-3'
+    >
+      <span className='sr-only'>{t('admin.common.loading')}</span>
+      <div aria-hidden className='h-9 w-52 rounded-md bg-muted' />
+      <div aria-hidden className='h-28 rounded-md bg-muted/70' />
     </div>
+  )
+}
+// All shared Radix dialogs, confirmations and sheets yield the mobile top layer.
+// Observe their owned state, not aria-hidden/inert side effects from focus scopes.
+const externalDocumentModalSelector = [
+  '[role="dialog"][data-state="open"][data-slot="dialog-content"]',
+  '[role="alertdialog"][data-state="open"][data-slot="alert-dialog-content"]',
+  '[role="dialog"][data-state="open"][data-slot="sheet-content"]',
+].join(',')
+function hasExternalDocumentModal() {
+  return Array.from(
+    globalThis.document.querySelectorAll<HTMLElement>(
+      externalDocumentModalSelector
+    )
+  ).some((modal) => !modal.closest('dialog.document-assistant-panel, [hidden]'))
+}
+function subscribeExternalDocumentModals(callback: () => void) {
+  const observer = new MutationObserver(callback)
+  observer.observe(globalThis.document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['data-state', 'data-slot', 'role', 'hidden'],
+  })
+  return () => observer.disconnect()
+}
+function useExternalDocumentModal() {
+  return useSyncExternalStore(
+    subscribeExternalDocumentModals,
+    hasExternalDocumentModal,
+    () => false
+  )
+}
+const wideDocumentQuery = '(min-width: 1280px)'
+function subscribeWideDocumentLayout(callback: () => void) {
+  const media = window.matchMedia(wideDocumentQuery)
+  media.addEventListener('change', callback)
+  return () => media.removeEventListener('change', callback)
+}
+function useWideDocumentLayout() {
+  return useSyncExternalStore(
+    subscribeWideDocumentLayout,
+    () => window.matchMedia(wideDocumentQuery).matches,
+    () => false
   )
 }
 function RetainedSection({

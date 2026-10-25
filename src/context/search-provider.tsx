@@ -35,6 +35,7 @@ export function SearchProvider({
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
+        if (document.querySelector('dialog[open][aria-modal="true"]')) return
         setOpen((open) => !open)
       }
     }

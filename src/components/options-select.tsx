@@ -49,6 +49,10 @@ export function OptionsSelect({
   const initialValue = defaultValue ?? options[0]?.value ?? ''
   const [localValue, setLocalValue] = useState(initialValue)
   const [invalidSelection, setInvalidSelection] = useState(false)
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
+    null
+  )
+  const [open, setOpen] = useState(false)
   const errorId = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const requestedValue = value ?? localValue
@@ -100,6 +104,15 @@ export function OptionsSelect({
         value={selectedValue}
         disabled={disabled}
         required={required}
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            // A native modal makes body portals inert; keep its popup in the
+            // same top-layer dialog, including when the dock changes size.
+            setPortalContainer(triggerRef.current?.closest('dialog') ?? null)
+          }
+          setOpen(nextOpen)
+        }}
         onValueChange={(nextValue) => {
           if (value === undefined) setLocalValue(nextValue)
           setInvalidSelection(false)
@@ -131,7 +144,17 @@ export function OptionsSelect({
             {options.find((option) => option.value === selectedValue)?.label}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className='w-(--radix-select-trigger-width) max-w-[calc(100vw-2rem)]'>
+        <SelectContent
+          container={portalContainer}
+          className='w-(--radix-select-trigger-width) max-w-[calc(100vw-2rem)]'
+          onEscapeKeyDown={(event) => {
+            if (!portalContainer) return
+            // Close this popup before Escape can cancel the native dialog.
+            event.preventDefault()
+            event.stopPropagation()
+            setOpen(false)
+          }}
+        >
           {options.map((option) => (
             <SelectItem
               key={option.value}

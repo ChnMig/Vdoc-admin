@@ -53,6 +53,7 @@ import {
   formatDate,
   isTextDocumentType,
   isTextDocumentFormat,
+  entityOptionLabel,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
 import { useVersionChoices } from './use-version-choices'
@@ -89,6 +90,8 @@ export function DiffsPage({
       draft_id: undefined,
       version_id: undefined,
       endpoint_id: undefined,
+      from_branch_id: undefined,
+      to_branch_id: undefined,
       from_version_id: undefined,
       to_version_id: undefined,
       diff_id: undefined,
@@ -111,6 +114,8 @@ export function DiffsPage({
         draft_id: undefined,
         version_id: undefined,
         endpoint_id: undefined,
+        from_branch_id: undefined,
+        to_branch_id: undefined,
         from_version_id: undefined,
         to_version_id: undefined,
         diff_id: undefined,
@@ -127,6 +132,14 @@ export function DiffsPage({
     enabled: projectId.length > 0 && !authUser?.is_super_admin,
   })
   const [diff, setDiff] = useState<DiffListDTO | null>(null)
+  const [fromBranchId, setFromBranchId] = useRouteControlledString(
+    search?.from_branch_id,
+    onSearchChange !== undefined
+  )
+  const [toBranchId, setToBranchId] = useRouteControlledString(
+    search?.to_branch_id,
+    onSearchChange !== undefined
+  )
   const [fromVersionId, setFromVersionId] = useRouteControlledString(
     search?.from_version_id,
     onSearchChange !== undefined
@@ -197,25 +210,75 @@ export function DiffsPage({
     requestedDiff?.to_version_id,
   ])
   const { versionsQuery, versionOptions } = choices
-  const validVersionIds = useMemo(
-    () => new Set(versionOptions.map((option) => option.value)),
-    [versionOptions]
+  const branchOptions =
+    branchesQuery.data?.items.map((branch) => ({
+      value: branch.id,
+      label: entityOptionLabel(branch.name, branch.status, t),
+    })) ?? []
+  const defaultBranchId =
+    branchesQuery.data?.items.find((branch) => branch.is_default)?.id ??
+    branchesQuery.data?.items[0]?.id ??
+    ''
+  const inferredFromBranchId = choices.versions.find(
+    (version) =>
+      version.id === (requestedDiff?.from_version_id ?? fromVersionId)
+  )?.branch_id
+  const inferredToBranchId = choices.versions.find(
+    (version) => version.id === (requestedDiff?.to_version_id ?? toVersionId)
+  )?.branch_id
+  const selectedFromBranchId =
+    (requestedDiff ? inferredFromBranchId : fromBranchId) ||
+    inferredFromBranchId ||
+    defaultBranchId
+  const selectedToBranchId =
+    (requestedDiff ? inferredToBranchId : toBranchId) ||
+    inferredToBranchId ||
+    defaultBranchId
+  const validFromBranch = branchOptions.some(
+    (branch) => branch.value === selectedFromBranchId
+  )
+  const validToBranch = branchOptions.some(
+    (branch) => branch.value === selectedToBranchId
+  )
+  const fromChoices = useVersionChoices(
+    projectId,
+    documentId,
+    [fromVersionId, requestedDiff?.from_version_id],
+    selectedFromBranchId,
+    validFromBranch
+  )
+  const toChoices = useVersionChoices(
+    projectId,
+    documentId,
+    [toVersionId, requestedDiff?.to_version_id],
+    selectedToBranchId,
+    validToBranch
+  )
+  const validFromVersionIds = new Set(
+    fromChoices.versionOptions.map((option) => option.value)
+  )
+  const validToVersionIds = new Set(
+    toChoices.versionOptions.map((option) => option.value)
   )
   const versionLabelById = useMemo(
     () => new Map(versionOptions.map((option) => [option.value, option.label])),
     [versionOptions]
   )
-  const requestedFromVersionId = validVersionIds.has(fromVersionId)
+  const requestedFromVersionId = validFromVersionIds.has(fromVersionId)
     ? fromVersionId
     : ''
-  const requestedToVersionId = validVersionIds.has(toVersionId)
+  const requestedToVersionId = validToVersionIds.has(toVersionId)
     ? toVersionId
     : ''
   const selectedFromVersionId = requestedDiff?.from_version_id
-    ? requestedDiff.from_version_id
+    ? validFromVersionIds.has(requestedDiff.from_version_id)
+      ? requestedDiff.from_version_id
+      : ''
     : requestedFromVersionId
   const selectedToVersionId = requestedDiff?.to_version_id
-    ? requestedDiff.to_version_id
+    ? validToVersionIds.has(requestedDiff.to_version_id)
+      ? requestedDiff.to_version_id
+      : ''
     : requestedToVersionId
   const workspaceContext = JSON.stringify([
     projectId,
@@ -226,14 +289,33 @@ export function DiffsPage({
   ])
   const activeWorkspaceView =
     workspaceView.context === workspaceContext ? workspaceView.value : 'result'
-  const persistedDiff =
-    selectedFromVersionId && selectedToVersionId
-      ? diffHistoryQuery.data?.items.find(
-          (item) =>
-            item.from_version_id === selectedFromVersionId &&
-            item.to_version_id === selectedToVersionId
-        )
-      : undefined
+  const comparisonHistoryQuery = useQuery({
+    queryKey: [
+      'diffs',
+      projectId,
+      documentId,
+      'exact-pair',
+      selectedFromVersionId,
+      selectedToVersionId,
+    ],
+    queryFn: ({ signal }) =>
+      listDiffs(
+        projectId,
+        documentId,
+        selectedFromVersionId,
+        selectedToVersionId,
+        { signal, page: { page_size: 50, offset: 0, search: '' } }
+      ),
+    enabled: Boolean(
+      projectId && documentId && selectedFromVersionId && selectedToVersionId
+    ),
+  })
+  const persistedDiff = comparisonHistoryQuery.data?.items.find(
+    (item) =>
+      item.document_id === documentId &&
+      item.from_version_id === selectedFromVersionId &&
+      item.to_version_id === selectedToVersionId
+  )
   useEffect(() => {
     if (!requestedDiff) return
     const requestedFromVersionId = requestedDiff.from_version_id ?? ''
@@ -258,6 +340,33 @@ export function DiffsPage({
       onSearchChange?.({ diff_id: persistedDiff.id })
     }
   }, [onSearchChange, persistedDiff, search?.diff_id])
+  useEffect(() => {
+    if (!requestedDiff) return
+    const patch: {
+      from_branch_id?: string
+      to_branch_id?: string
+    } = {}
+    if (
+      search?.from_branch_id &&
+      inferredFromBranchId &&
+      search.from_branch_id !== inferredFromBranchId
+    )
+      patch.from_branch_id = inferredFromBranchId
+    if (
+      search?.to_branch_id &&
+      inferredToBranchId &&
+      search.to_branch_id !== inferredToBranchId
+    )
+      patch.to_branch_id = inferredToBranchId
+    if (Object.keys(patch).length) onSearchChange?.(patch, { replace: true })
+  }, [
+    inferredFromBranchId,
+    inferredToBranchId,
+    onSearchChange,
+    requestedDiff,
+    search?.from_branch_id,
+    search?.to_branch_id,
+  ])
   const activeDiffCandidate =
     search?.diff_id !== undefined
       ? (requestedDiff ?? null)
@@ -280,14 +389,30 @@ export function DiffsPage({
   const invalidFromVersionDeepLink = Boolean(
     versionsQuery.data &&
     !choices.isResolving &&
+    !fromChoices.isResolving &&
+    fromChoices.versionsQuery.isSuccess &&
     search?.from_version_id &&
-    !validVersionIds.has(search.from_version_id)
+    !validFromVersionIds.has(search.from_version_id)
   )
   const invalidToVersionDeepLink = Boolean(
     versionsQuery.data &&
     !choices.isResolving &&
+    !toChoices.isResolving &&
+    toChoices.versionsQuery.isSuccess &&
     search?.to_version_id &&
-    !validVersionIds.has(search.to_version_id)
+    !validToVersionIds.has(search.to_version_id)
+  )
+  const invalidFromBranchDeepLink = Boolean(
+    !requestedDiff &&
+    branchesQuery.isSuccess &&
+    search?.from_branch_id &&
+    !validFromBranch
+  )
+  const invalidToBranchDeepLink = Boolean(
+    !requestedDiff &&
+    branchesQuery.isSuccess &&
+    search?.to_branch_id &&
+    !validToBranch
   )
   const invalidDiffDeepLink = Boolean(
     search?.diff_id && requestedDiffQuery.isError
@@ -331,6 +456,8 @@ export function DiffsPage({
       actorId: authUser?.id,
       projectId,
       documentId,
+      fromBranchId: selectedFromBranchId,
+      toBranchId: selectedToBranchId,
       fromVersionId: selectedFromVersionId,
       toVersionId: selectedToVersionId,
       diffId: search?.diff_id,
@@ -339,6 +466,8 @@ export function DiffsPage({
       authUser?.id,
       projectId,
       documentId,
+      selectedFromBranchId,
+      selectedToBranchId,
       selectedFromVersionId,
       selectedToVersionId,
       search?.diff_id,
@@ -378,6 +507,10 @@ export function DiffsPage({
     },
   })
   const comparisonIsCurrent = diffMutation.variables === comparisonTarget
+  const clearComparison = () => {
+    activeComparisonTarget.current = null
+    setDiff(null)
+  }
   const summary = activeDiff?.summary
   const searchText = diffSearch.trim().toLowerCase()
   const visibleItems = (activeDiff?.items ?? []).filter((item) => {
@@ -415,6 +548,16 @@ export function DiffsPage({
             : []),
           ...(!invalidProjectDeepLink &&
           !invalidDocumentDeepLink &&
+          invalidFromBranchDeepLink
+            ? [`${t('admin.diff.fromBranch')}: ${search?.from_branch_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
+          invalidToBranchDeepLink
+            ? [`${t('admin.diff.toBranch')}: ${search?.to_branch_id}`]
+            : []),
+          ...(!invalidProjectDeepLink &&
+          !invalidDocumentDeepLink &&
           invalidFromVersionDeepLink
             ? [`${t('admin.fields.fromVersion')}: ${search?.from_version_id}`]
             : []),
@@ -430,12 +573,15 @@ export function DiffsPage({
             : []),
         ]}
       />
+      {branchesQuery.isError && <LoadingErrorState state={branchesQuery} />}
       <ContextSelectorGrid>
         <NativeSelect
           label={t('admin.fields.project')}
           value={projectId}
           onChange={(value) => {
-            setDiff(null)
+            clearComparison()
+            setFromBranchId('')
+            setToBranchId('')
             setFromVersionId('')
             setToVersionId('')
             setProjectId(value)
@@ -447,7 +593,9 @@ export function DiffsPage({
           label={t('admin.fields.document')}
           value={documentId}
           onChange={(value) => {
-            setDiff(null)
+            clearComparison()
+            setFromBranchId('')
+            setToBranchId('')
             setFromVersionId('')
             setToVersionId('')
             setDocumentId(value)
@@ -455,35 +603,93 @@ export function DiffsPage({
           placeholder={t('admin.placeholders.selectDocument')}
           options={documentOptions}
         />
-        <NativeSelect
-          label={t('admin.fields.fromVersion')}
-          value={selectedFromVersionId}
-          onChange={(value) => {
-            setDiff(null)
-            setFromVersionId(value)
-            onSearchChange?.({
-              from_version_id: value || undefined,
-              diff_id: undefined,
-            })
-          }}
-          placeholder={t('admin.placeholders.selectVersion')}
-          options={versionOptions}
-        />
-        <NativeSelect
-          label={t('admin.fields.toVersion')}
-          value={selectedToVersionId}
-          onChange={(value) => {
-            setDiff(null)
-            setToVersionId(value)
-            onSearchChange?.({
-              to_version_id: value || undefined,
-              diff_id: undefined,
-            })
-          }}
-          placeholder={t('admin.placeholders.selectVersion')}
-          options={versionOptions}
-        />
       </ContextSelectorGrid>
+      <section
+        aria-label={t('admin.diff.comparisonContext')}
+        className='grid min-w-0 gap-5 border-b pb-5'
+      >
+        <p className='text-sm text-muted-foreground'>
+          {t('admin.diff.branchCompareHint')}
+        </p>
+        <div className='grid min-w-0 gap-5 md:grid-cols-2'>
+          <fieldset className='grid min-w-0 content-start gap-4'>
+            <legend className='mb-3 text-sm font-semibold'>
+              {t('admin.diff.source')}
+            </legend>
+            <NativeSelect
+              label={t('admin.diff.fromBranch')}
+              value={selectedFromBranchId}
+              onChange={(value) => {
+                clearComparison()
+                setFromBranchId(value)
+                setFromVersionId('')
+                onSearchChange?.({
+                  from_branch_id: value || undefined,
+                  from_version_id: undefined,
+                  diff_id: undefined,
+                })
+              }}
+              placeholder={t('admin.placeholders.selectBranch')}
+              options={branchOptions}
+              disabled={branchesQuery.isLoading}
+            />
+            <NativeSelect
+              label={t('admin.fields.fromVersion')}
+              value={selectedFromVersionId}
+              onChange={(value) => {
+                clearComparison()
+                setFromVersionId(value)
+                onSearchChange?.({
+                  from_version_id: value || undefined,
+                  diff_id: undefined,
+                })
+              }}
+              placeholder={t('admin.placeholders.selectVersion')}
+              options={fromChoices.versionOptions}
+              disabled={!validFromBranch || fromChoices.versionsQuery.isLoading}
+            />
+            <LoadingErrorState state={fromChoices.versionsQuery} />
+          </fieldset>
+          <fieldset className='grid min-w-0 content-start gap-4'>
+            <legend className='mb-3 text-sm font-semibold'>
+              {t('admin.diff.target')}
+            </legend>
+            <NativeSelect
+              label={t('admin.diff.toBranch')}
+              value={selectedToBranchId}
+              onChange={(value) => {
+                clearComparison()
+                setToBranchId(value)
+                setToVersionId('')
+                onSearchChange?.({
+                  to_branch_id: value || undefined,
+                  to_version_id: undefined,
+                  diff_id: undefined,
+                })
+              }}
+              placeholder={t('admin.placeholders.selectBranch')}
+              options={branchOptions}
+              disabled={branchesQuery.isLoading}
+            />
+            <NativeSelect
+              label={t('admin.fields.toVersion')}
+              value={selectedToVersionId}
+              onChange={(value) => {
+                clearComparison()
+                setToVersionId(value)
+                onSearchChange?.({
+                  to_version_id: value || undefined,
+                  diff_id: undefined,
+                })
+              }}
+              placeholder={t('admin.placeholders.selectVersion')}
+              options={toChoices.versionOptions}
+              disabled={!validToBranch || toChoices.versionsQuery.isLoading}
+            />
+            <LoadingErrorState state={toChoices.versionsQuery} />
+          </fieldset>
+        </div>
+      </section>
       <Collapsible className='grid min-w-0 gap-3'>
         <div className='flex flex-wrap items-center justify-between gap-3'>
           <Button
@@ -493,13 +699,16 @@ export function DiffsPage({
               !selectedToVersionId ||
               selectedFromVersionId === selectedToVersionId ||
               !activeDocumentContext ||
-              Boolean(persistedDiff) ||
+              !validFromBranch ||
+              !validToBranch ||
+              comparisonHistoryQuery.isLoading ||
+              Boolean(activeDiffCandidate) ||
               (comparisonIsCurrent && diffMutation.isPending)
             }
             onClick={() => diffMutation.mutate(comparisonTarget)}
           >
             <GitCompareArrows className='size-4' />
-            {persistedDiff
+            {activeDiffCandidate
               ? t('admin.diff.existingLoaded')
               : t('admin.common.compare')}
           </Button>
@@ -515,29 +724,47 @@ export function DiffsPage({
           {t('admin.diff.compareHint')}
         </p>
         <CollapsibleContent className='grid min-w-0 gap-3 rounded-lg border bg-card p-4'>
-          <div className='grid max-w-md gap-2'>
-            <Label htmlFor='diff-version-search'>
-              {t('admin.pagination.searchVersions')}
-            </Label>
-            <Input
-              id='diff-version-search'
-              value={choices.search}
-              onChange={(event) => choices.setSearch(event.target.value)}
-              placeholder={t('admin.fields.versionName')}
-            />
+          <div className='grid min-w-0 gap-5 md:grid-cols-2'>
+            {[
+              {
+                choices: fromChoices,
+                id: 'source',
+                label: t('admin.diff.searchSourceVersions'),
+                paginationLabel: t('admin.diff.sourceVersionPagination'),
+              },
+              {
+                choices: toChoices,
+                id: 'target',
+                label: t('admin.diff.searchTargetVersions'),
+                paginationLabel: t('admin.diff.targetVersionPagination'),
+              },
+            ].map(({ choices: side, id, label, paginationLabel }) => (
+              <div key={id} className='grid min-w-0 content-start gap-3'>
+                <div className='grid gap-2'>
+                  <Label htmlFor={`diff-${id}-version-search`}>{label}</Label>
+                  <Input
+                    id={`diff-${id}-version-search`}
+                    value={side.search}
+                    onChange={(event) => side.setSearch(event.target.value)}
+                    placeholder={t('admin.fields.versionName')}
+                  />
+                </div>
+                <QueryPagination
+                  label={paginationLabel}
+                  offset={side.offset}
+                  count={side.versionsQuery.data?.items.length ?? 0}
+                  total={side.versionsQuery.data?.total}
+                  hasMore={
+                    side.offset + (side.versionsQuery.data?.items.length ?? 0) <
+                    (side.versionsQuery.data?.total ?? 0)
+                  }
+                  busy={side.versionsQuery.isFetching}
+                  onPrevious={() => side.setOffset(side.offset - 50)}
+                  onNext={() => side.setOffset(side.offset + 50)}
+                />
+              </div>
+            ))}
           </div>
-          <QueryPagination
-            offset={choices.offset}
-            count={versionsQuery.data?.items.length ?? 0}
-            total={versionsQuery.data?.total}
-            hasMore={
-              choices.offset + (versionsQuery.data?.items.length ?? 0) <
-              (versionsQuery.data?.total ?? 0)
-            }
-            busy={versionsQuery.isFetching}
-            onPrevious={() => choices.setOffset(choices.offset - 50)}
-            onNext={() => choices.setOffset(choices.offset + 50)}
-          />
         </CollapsibleContent>
       </Collapsible>
       {comparisonIsCurrent && diffMutation.isError && (
@@ -664,52 +891,80 @@ export function DiffsPage({
             </div>
             {diffHistoryQuery.data?.items.length ? (
               <div className='grid divide-y rounded-md border'>
-                {diffHistoryQuery.data.items.map((item) => {
-                  const fromVersionLabel =
-                    versionLabelById.get(item.from_version_id ?? '') ??
-                    item.from_version_id ??
-                    '-'
-                  const toVersionLabel =
-                    versionLabelById.get(item.to_version_id ?? '') ??
-                    item.to_version_id ??
-                    '-'
-                  return (
-                    <button
-                      key={item.id}
-                      type='button'
-                      className='grid min-w-0 gap-1 border-b p-3 text-start transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-                      onClick={() => {
-                        setFromVersionId(item.from_version_id ?? '')
-                        setToVersionId(item.to_version_id ?? '')
-                        setDiff(item)
-                        setWorkspaceView({
-                          context: workspaceContext,
-                          value: 'result',
-                        })
-                        resultTabTriggerRef.current?.focus()
-                        onSearchChange?.({
-                          from_version_id: item.from_version_id || undefined,
-                          to_version_id: item.to_version_id || undefined,
-                          diff_id: item.id,
-                        })
-                      }}
-                    >
-                      <span className='text-sm font-medium break-words'>
-                        {fromVersionLabel} → {toVersionLabel}
-                      </span>
-                      <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
-                        {t('admin.diff.historyIdentifiers', {
-                          from: item.from_version_id ?? '-',
-                          to: item.to_version_id ?? '-',
-                          diff: item.id,
-                        })}
-                      </span>
-                      <span className='text-xs text-muted-foreground'>
-                        {formatDate(item.created_at)}
-                      </span>
-                    </button>
-                  )
-                })}
+                {diffHistoryQuery.data.items
+                  .filter((item) => item.document_id === documentId)
+                  .map((item) => {
+                    const fromVersionLabel =
+                      versionLabelById.get(item.from_version_id ?? '') ??
+                      item.from_version_id ??
+                      '-'
+                    const toVersionLabel =
+                      versionLabelById.get(item.to_version_id ?? '') ??
+                      item.to_version_id ??
+                      '-'
+                    const fromBranch = branchesQuery.data?.items.find(
+                      (branch) =>
+                        branch.id ===
+                        choices.versions.find(
+                          (version) => version.id === item.from_version_id
+                        )?.branch_id
+                    )
+                    const toBranch = branchesQuery.data?.items.find(
+                      (branch) =>
+                        branch.id ===
+                        choices.versions.find(
+                          (version) => version.id === item.to_version_id
+                        )?.branch_id
+                    )
+                    return (
+                      <button
+                        key={item.id}
+                        type='button'
+                        className='grid min-w-0 gap-1 border-b p-3 text-start transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+                        onClick={() => {
+                          activeComparisonTarget.current = null
+                          setFromBranchId('')
+                          setToBranchId('')
+                          setFromVersionId(item.from_version_id ?? '')
+                          setToVersionId(item.to_version_id ?? '')
+                          setDiff(item)
+                          setWorkspaceView({
+                            context: workspaceContext,
+                            value: 'result',
+                          })
+                          resultTabTriggerRef.current?.focus()
+                          onSearchChange?.({
+                            from_branch_id: undefined,
+                            to_branch_id: undefined,
+                            from_version_id: item.from_version_id || undefined,
+                            to_version_id: item.to_version_id || undefined,
+                            diff_id: item.id,
+                          })
+                        }}
+                      >
+                        <span className='text-sm font-medium break-words'>
+                          {fromVersionLabel} → {toVersionLabel}
+                        </span>
+                        {fromBranch &&
+                          toBranch &&
+                          fromBranch.id !== toBranch.id && (
+                            <span className='text-xs text-muted-foreground'>
+                              {fromBranch.name} → {toBranch.name}
+                            </span>
+                          )}
+                        <span className='font-mono text-[0.68rem] leading-5 break-all text-muted-foreground'>
+                          {t('admin.diff.historyIdentifiers', {
+                            from: item.from_version_id ?? '-',
+                            to: item.to_version_id ?? '-',
+                            diff: item.id,
+                          })}
+                        </span>
+                        <span className='text-xs text-muted-foreground'>
+                          {formatDate(item.created_at)}
+                        </span>
+                      </button>
+                    )
+                  })}
               </div>
             ) : (
               <EmptyState preset='diffs' />

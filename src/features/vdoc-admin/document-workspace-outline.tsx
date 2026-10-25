@@ -60,13 +60,18 @@ function DocumentOutline({
         root.querySelectorAll<HTMLElement>(
           '[data-document-content] h1, [data-document-content] h2, [data-document-content] h3, [data-document-content] h4'
         )
-      ).filter(
-        (heading) =>
+      ).filter((heading) => {
+        const hiddenAncestor = heading.closest(
+          '[hidden], [aria-hidden="true"], [data-state="inactive"]'
+        )
+        // Modal isolation may hide the reader's ancestors from assistive
+        // technology. Only hidden source content inside this reader is absent
+        // from its outline; the dialog still navigates the same rendered text.
+        return (
           heading.textContent?.trim() &&
-          !heading.closest(
-            '[hidden], [aria-hidden="true"], [data-state="inactive"]'
-          )
-      )
+          (!hiddenAncestor || !root.contains(hiddenAncestor))
+        )
+      })
       const idCounts = new Map<string, number>()
       for (const node of root.ownerDocument.querySelectorAll('[id]')) {
         idCounts.set(node.id, (idCounts.get(node.id) ?? 0) + 1)

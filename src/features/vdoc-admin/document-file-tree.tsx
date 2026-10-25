@@ -1,6 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import {
-  ChevronDown,
   ChevronRight,
   Folder,
   FolderOpen,
@@ -194,7 +193,9 @@ export function DocumentFileTree({
             'mb-1 grid min-h-9 w-full grid-cols-[0.875rem_1rem_minmax(0,1fr)] items-center gap-2 rounded-md px-2 text-start text-sm hover:bg-muted/70 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
             !folderId && !documentId && 'bg-primary/8 font-medium text-primary'
           )}
-          onClick={() => onFolderSelect('')}
+          onClick={() => {
+            if (folderId) onFolderSelect('')
+          }}
         >
           <span aria-hidden className='size-3.5' />
           <FolderRoot
@@ -206,7 +207,10 @@ export function DocumentFileTree({
         <ul className='min-w-0 space-y-0.5'>
           {rows.map((row) =>
             row.kind === 'folder' ? (
-              <li key={`folder:${row.folder.id}`} className='min-w-0'>
+              <li
+                key={`folder:${row.folder.id}`}
+                className='workspace-pane-enter min-w-0'
+              >
                 <button
                   type='button'
                   aria-label={t(
@@ -221,7 +225,8 @@ export function DocumentFileTree({
                       row.folder.id,
                       !folderIsExpanded(row.folder.id)
                     )
-                    onFolderSelect(row.folder.id)
+                    if (folderId !== row.folder.id)
+                      onFolderSelect(row.folder.id)
                   }}
                   onKeyDown={(event) => {
                     if (
@@ -253,17 +258,13 @@ export function DocumentFileTree({
                       'bg-primary/8 font-medium text-primary'
                   )}
                 >
-                  {folderIsExpanded(row.folder.id) ? (
-                    <ChevronDown
-                      aria-hidden
-                      className='size-3.5 shrink-0 text-muted-foreground'
-                    />
-                  ) : (
-                    <ChevronRight
-                      aria-hidden
-                      className='size-3.5 shrink-0 text-muted-foreground'
-                    />
-                  )}
+                  <ChevronRight
+                    aria-hidden
+                    className={cn(
+                      'workspace-tree-chevron size-3.5 shrink-0 text-muted-foreground',
+                      folderIsExpanded(row.folder.id) && 'rotate-90'
+                    )}
+                  />
                   {folderIsExpanded(row.folder.id) ? (
                     <FolderOpen
                       aria-hidden
@@ -281,7 +282,10 @@ export function DocumentFileTree({
                 </button>
               </li>
             ) : (
-              <li key={`document:${row.document.id}`} className='min-w-0'>
+              <li
+                key={`document:${row.document.id}`}
+                className='workspace-pane-enter min-w-0'
+              >
                 <button
                   type='button'
                   aria-label={[

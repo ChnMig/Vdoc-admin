@@ -83,6 +83,36 @@ describe('SearchProvider and CommandMenu', () => {
     ).not.toBeInTheDocument()
   })
 
+  it.each(['Control', 'Meta'] as const)(
+    'does not open background search from a native modal with %s + K',
+    async (modifier) => {
+      const screen = render(
+        <SearchProvider>
+          <dialog open aria-modal='true'>
+            <textarea aria-label='Assistant input' />
+          </dialog>
+        </SearchProvider>
+      )
+      fireEvent.keyDown(screen.getByRole('textbox'), {
+        key: 'k',
+        ctrlKey: modifier === 'Control',
+        metaKey: modifier === 'Meta',
+      })
+      expect(
+        screen.queryByPlaceholderText(COMMAND_MENU_PLACEHOLDER)
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it('allows global search while the desktop assistant is modeless', async () => {
+    const screen = render(
+      <SearchProvider>
+        <dialog open aria-label='Assistant' />
+      </SearchProvider>
+    )
+    await openCommandPalette(screen)
+  })
+
   it.each([
     ['Ctrl', 'Control'],
     ['Cmd', 'Meta'],

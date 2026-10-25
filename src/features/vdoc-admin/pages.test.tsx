@@ -110,6 +110,24 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   useNavigate: () => vi.fn(),
+  Link: ({
+    to,
+    search,
+    children,
+    ...props
+  }: React.ComponentProps<'a'> & {
+    to: string
+    search?: Record<string, unknown>
+  }) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(search ?? {}))
+      if (value !== undefined && value !== null) query.set(key, String(value))
+    return (
+      <a {...props} href={`${to}${query.size ? `?${query}` : ''}`}>
+        {children}
+      </a>
+    )
+  },
 }))
 
 vi.mock('@/lib/vdoc-api', async (importOriginal) => {
@@ -1872,6 +1890,45 @@ describe('VersionsPage', () => {
     mockAIQueries('version', 'version-1')
   })
 
+  it('opens all-branch history and recovers an invalid reading branch without fetching repeated content', async () => {
+    const onSearchChange = vi.fn()
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <VersionsPage
+          presentation='history'
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            branch_id: 'missing-reading-branch',
+            version_id: markdownVersionFixture.id,
+          }}
+          onSearchChange={onSearchChange}
+        />
+      </WorkspaceEmbedding>
+    )
+    const version = await screen.findByRole('button', { name: 'v1' })
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
+    expect(apiMocks.getVersionContent).not.toHaveBeenCalled()
+    expect(apiMocks.listEndpoints).not.toHaveBeenCalled()
+    expect(apiMocks.getAISummary).not.toHaveBeenCalled()
+    expect(onSearchChange).not.toHaveBeenCalled()
+    expect(apiMocks.listVersions).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      undefined,
+      expect.any(Object)
+    )
+    await userEvent.click(version)
+    expect(onSearchChange).toHaveBeenCalledExactlyOnceWith({
+      branch_id: branchFixture.id,
+      version_id: markdownVersionFixture.id,
+      endpoint_id: undefined,
+      workspace_view: 'content',
+      content_mode: 'published',
+      draft_id: undefined,
+    })
+  })
+
   it('uses the document workspace context without duplicate selectors or AI panels when embedded', async () => {
     const screen = renderPage(
       <WorkspaceEmbedding>
@@ -2791,6 +2848,14 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       items: [fromVersionFixture, markdownVersionFixture],
       total: 2,
     })
+    apiMocks.getVersion.mockImplementation(async (project, document, id) => {
+      const result = await apiMocks.listVersions(project, document)
+      const version = result.items.find(
+        (version: { id: string }) => version.id === id
+      )
+      if (!version) throw new Error('Version not found')
+      return version
+    })
     apiMocks.listDiffs.mockResolvedValue({ items: [], total: 0 })
     apiMocks.compareDiff.mockResolvedValue(diffFixture)
     apiMocks.getDiffSummary.mockResolvedValue(diffFixture.summary)
@@ -2828,6 +2893,325 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     ).toBeVisible()
     expect(screen.queryByText('AI summary for diff')).toBeNull()
     expect(apiMocks.getAISummary).not.toHaveBeenCalled()
+  })
+
+  it('restores and compares versions from different branches, including an archived branch and a version outside the first page', async () => {
+    const archivedBranch = {
+      ...branchFixture,
+      id: 'branch-legacy',
+      name: 'legacy',
+      is_default: false,
+      status: 2,
+    }
+    const archivedVersion = {
+      ...markdownVersionFixture,
+      id: 'version-legacy',
+      version_name: 'v-legacy',
+      branch_id: archivedBranch.id,
+    }
+    const crossBranchDiff = {
+      ...diffFixture,
+      to_version_id: archivedVersion.id,
+    }
+    apiMocks.listBranches.mockResolvedValue({
+      items: [branchFixture, archivedBranch],
+      total: 2,
+    })
+    apiMocks.listVersions.mockImplementation(
+      async (_project, _document, branch) => ({
+        items:
+          branch === archivedBranch.id
+            ? [archivedVersion]
+            : [fromVersionFixture],
+        total: branch ? 1 : 51,
+      })
+    )
+    apiMocks.getVersion.mockResolvedValue(archivedVersion)
+    apiMocks.listDiffs.mockResolvedValue({
+      items: [
+        {
+          ...crossBranchDiff,
+          id: 'reverse-diff',
+          from_version_id: archivedVersion.id,
+          to_version_id: fromVersionFixture.id,
+        },
+      ],
+      total: 1,
+    })
+    apiMocks.compareDiff.mockResolvedValue(crossBranchDiff)
+    apiMocks.getDiff.mockResolvedValue(crossBranchDiff)
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            from_version_id: fromVersionFixture.id,
+            to_version_id: archivedVersion.id,
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    await waitFor(() => {
+      expect(screen.getByLabelText('From branch')).toHaveValue(branchFixture.id)
+      expect(screen.getByLabelText('To branch')).toHaveValue(archivedBranch.id)
+      expect(screen.getByLabelText('To version')).toHaveValue(
+        archivedVersion.id
+      )
+      expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+    })
+    expect(apiMocks.getVersion).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      archivedVersion.id,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(apiMocks.listVersions).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      archivedBranch.id,
+      expect.objectContaining({
+        page: { page_size: 50, offset: 0, search: '' },
+      })
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Compare' }))
+    expect(apiMocks.compareDiff).toHaveBeenCalledExactlyOnceWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      {
+        from_version_id: fromVersionFixture.id,
+        to_version_id: archivedVersion.id,
+      }
+    )
+  })
+
+  it('changes only the selected side when switching branches and ignores an old comparison response', async () => {
+    const betaBranch = {
+      ...branchFixture,
+      id: 'branch-beta',
+      name: 'beta',
+      is_default: false,
+    }
+    const betaVersion = {
+      ...markdownVersionFixture,
+      id: 'version-beta',
+      branch_id: betaBranch.id,
+    }
+    const oldRequest = createDeferred<typeof diffFixture>()
+    apiMocks.listBranches.mockResolvedValue({
+      items: [branchFixture, betaBranch],
+      total: 2,
+    })
+    apiMocks.listVersions.mockImplementation(
+      async (_project, _document, branch) => ({
+        items:
+          branch === betaBranch.id
+            ? [betaVersion]
+            : branch
+              ? [fromVersionFixture, markdownVersionFixture]
+              : [fromVersionFixture, markdownVersionFixture, betaVersion],
+        total: branch === betaBranch.id ? 1 : 3,
+      })
+    )
+    apiMocks.compareDiff.mockReturnValue(oldRequest.promise)
+    const routeChanges = vi.fn()
+    function Harness() {
+      const [search, setSearch] = useState<VdocRouteSearch>({
+        project_id: projectFixture.id,
+        document_id: markdownDocumentFixture.id,
+        from_branch_id: branchFixture.id,
+        to_branch_id: betaBranch.id,
+        from_version_id: fromVersionFixture.id,
+        to_version_id: betaVersion.id,
+      })
+      return (
+        <WorkspaceEmbedding>
+          <DiffsPage
+            search={search}
+            onSearchChange={(patch) => {
+              routeChanges(patch)
+              setSearch((current) => ({ ...current, ...patch }))
+            }}
+          />
+        </WorkspaceEmbedding>
+      )
+    }
+    const screen = renderPage(<Harness />)
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Compare' })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: 'Compare' }))
+    await selectOption(
+      screen.getByLabelText('To branch'),
+      branchFixture.id,
+      user
+    )
+    expect(routeChanges).toHaveBeenCalledWith({
+      to_branch_id: branchFixture.id,
+      to_version_id: undefined,
+      diff_id: undefined,
+    })
+    expect(screen.getByLabelText('From version')).toHaveValue(
+      fromVersionFixture.id
+    )
+    expect(screen.getByLabelText('From branch')).toHaveValue(branchFixture.id)
+    expect(screen.getByLabelText('To version')).toHaveValue('')
+    await selectOption(
+      screen.getByLabelText('To version'),
+      markdownVersionFixture.id,
+      user
+    )
+    routeChanges.mockClear()
+    await act(async () =>
+      oldRequest.resolve({ ...diffFixture, to_version_id: betaVersion.id })
+    )
+    expect(
+      routeChanges.mock.calls.some(
+        ([patch]) => patch.diff_id === diffFixture.id
+      )
+    ).toBe(false)
+    expect(screen.getByLabelText('To version')).toHaveValue(
+      markdownVersionFixture.id
+    )
+  })
+
+  it('rejects unknown comparison branches and a version belonging to another document', async () => {
+    apiMocks.listVersions.mockResolvedValue({
+      items: [fromVersionFixture],
+      total: 1,
+    })
+    apiMocks.getVersion.mockResolvedValue({
+      ...markdownVersionFixture,
+      id: 'foreign-version',
+      document_id: 'foreign-document',
+    })
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            from_branch_id: branchFixture.id,
+            to_branch_id: 'branch-missing',
+            from_version_id: fromVersionFixture.id,
+            to_version_id: 'foreign-version',
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    expect(await screen.findByText(/To branch: branch-missing/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Compare' })).toBeDisabled()
+    expect(screen.getByLabelText('To version')).toHaveValue('')
+    expect(apiMocks.compareDiff).not.toHaveBeenCalled()
+  })
+
+  it('rejects a foreign-document version even when both comparison branches are valid', async () => {
+    apiMocks.listVersions.mockResolvedValue({
+      items: [fromVersionFixture],
+      total: 1,
+    })
+    apiMocks.getVersion.mockResolvedValue({
+      ...markdownVersionFixture,
+      id: 'foreign-version',
+      document_id: 'foreign-document',
+    })
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            from_branch_id: branchFixture.id,
+            to_branch_id: branchFixture.id,
+            from_version_id: fromVersionFixture.id,
+            to_version_id: 'foreign-version',
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    await waitFor(() =>
+      expect(apiMocks.getVersion).toHaveBeenCalledWith(
+        projectFixture.id,
+        markdownDocumentFixture.id,
+        'foreign-version',
+        expect.any(Object)
+      )
+    )
+    expect(screen.getByLabelText('To branch')).toHaveValue(branchFixture.id)
+    expect(screen.getByLabelText('To version')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Compare' })).toBeDisabled()
+    expect(apiMocks.compareDiff).not.toHaveBeenCalled()
+  })
+
+  it('defaults comparison branches independently of an invalid reading branch', async () => {
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            branch_id: 'missing-reading-branch',
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('From branch')).toHaveValue(branchFixture.id)
+    )
+    expect(screen.getByLabelText('To branch')).toHaveValue(branchFixture.id)
+    expect(screen.queryByText(/missing-reading-branch/)).not.toBeInTheDocument()
+  })
+
+  it('keeps an exact stored comparison loaded when history search hides its row', async () => {
+    apiMocks.listDiffs.mockImplementation(
+      async (_project, _document, _from, _to, options) => ({
+        items: options?.page?.search ? [] : [diffFixture],
+        total: options?.page?.search ? 0 : 1,
+      })
+    )
+    apiMocks.getDiff.mockResolvedValue(diffFixture)
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DiffsPage
+          search={{
+            project_id: projectFixture.id,
+            document_id: markdownDocumentFixture.id,
+            from_version_id: fromVersionFixture.id,
+            to_version_id: markdownVersionFixture.id,
+          }}
+        />
+      </WorkspaceEmbedding>
+    )
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Stored diff loaded' })
+      ).toBeDisabled()
+    )
+    await user.click(screen.getByRole('tab', { name: 'Stored diff history' }))
+    await user.type(
+      screen.getByLabelText('Search history by version'),
+      'not-found'
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /v0 → v1/ })
+      ).not.toBeInTheDocument()
+    )
+    expect(
+      screen.getByRole('button', { name: 'Stored diff loaded' })
+    ).toBeDisabled()
+    expect(apiMocks.compareDiff).not.toHaveBeenCalled()
+    expect(apiMocks.listDiffs).toHaveBeenCalledWith(
+      projectFixture.id,
+      markdownDocumentFixture.id,
+      fromVersionFixture.id,
+      markdownVersionFixture.id,
+      expect.objectContaining({
+        page: { page_size: 50, offset: 0, search: '' },
+      })
+    )
   })
 
   it('uses line comparison summaries and literal unified diffs for TXT', async () => {
@@ -3026,6 +3410,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     const screen = renderDiffsPage()
 
     for (const label of ['From version', 'To version']) {
+      await waitFor(() => expect(screen.getByLabelText(label)).toBeEnabled())
       await user.click(screen.getByLabelText(label))
       expect(
         await screen.findByRole('option', { name: 'v0' })
@@ -3326,22 +3711,27 @@ describe('DraftsPage and DiffsPage AI panels', () => {
         fromVersionFixture.id
       )
     )
-    expect(screen.queryByLabelText('Search versions')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Search source versions')
+    ).not.toBeInTheDocument()
     const searchToggle = screen.getByRole('button', { name: 'Search versions' })
     await user.click(searchToggle)
-    await user.type(screen.getByLabelText('Search versions'), 'v0')
+    await user.type(screen.getByLabelText('Search source versions'), 'v0')
+    expect(screen.getByLabelText('Search target versions')).toHaveValue('')
     await waitFor(() =>
-      expect(listVersions).toHaveBeenLastCalledWith(
+      expect(listVersions).toHaveBeenCalledWith(
         projectFixture.id,
         markdownDocumentFixture.id,
-        undefined,
+        branchFixture.id,
         expect.objectContaining({
           page: { page_size: 50, offset: 0, search: 'v0' },
         })
       )
     )
     await user.click(searchToggle)
-    expect(screen.queryByLabelText('Search versions')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Search source versions')
+    ).not.toBeInTheDocument()
     expect(screen.getByLabelText('From version')).toHaveValue(
       fromVersionFixture.id
     )
@@ -3349,7 +3739,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       markdownVersionFixture.id
     )
     await user.click(searchToggle)
-    expect(screen.getByLabelText('Search versions')).toHaveValue('v0')
+    expect(screen.getByLabelText('Search source versions')).toHaveValue('v0')
   })
 
   it('maps all backend change types and localizes backend diff messages', async () => {
@@ -3386,6 +3776,7 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     const screen = renderDiffsPage()
 
     for (const label of ['源版本', '目标版本']) {
+      await waitFor(() => expect(screen.getByLabelText(label)).toBeEnabled())
       await user.click(screen.getByLabelText(label))
       expect(
         await screen.findByRole('option', { name: 'v0' })

@@ -12,6 +12,8 @@ export const emptyDocumentSelection = {
   endpoint_id: undefined,
   from_version_id: undefined,
   to_version_id: undefined,
+  from_branch_id: undefined,
+  to_branch_id: undefined,
   diff_id: undefined,
 } satisfies Partial<VdocRouteSearch>
 

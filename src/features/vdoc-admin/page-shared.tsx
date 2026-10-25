@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   AlertCircle,
   ArrowRight,
@@ -64,7 +65,6 @@ import {
   type PageKey,
   type PageGuidance,
   pageNextRoute,
-  contextualHref,
   type QueryState,
   type EmptyStatePreset,
   type SelectOption,
@@ -152,16 +152,16 @@ export function PageChrome({
                       variant='outline'
                       className='w-fit max-w-full'
                     >
-                      <a
-                        href={contextualHref(
-                          resolvedGuidance.action.href,
-                          projectId,
-                          documentId
-                        )}
+                      <Link
+                        to={resolvedGuidance.action.href}
+                        search={{
+                          project_id: projectId || undefined,
+                          document_id: documentId || undefined,
+                        }}
                       >
                         {resolvedGuidance.action.label}
                         <ArrowRight aria-hidden />
-                      </a>
+                      </Link>
                     </Button>
                   )}
                 </div>
@@ -192,16 +192,16 @@ export function PageChrome({
                   variant='outline'
                   className='max-w-full shrink-0'
                 >
-                  <a
-                    href={contextualHref(
-                      resolvedGuidance.action.href,
-                      projectId,
-                      documentId
-                    )}
+                  <Link
+                    to={resolvedGuidance.action.href}
+                    search={{
+                      project_id: projectId || undefined,
+                      document_id: documentId || undefined,
+                    }}
                   >
                     {resolvedGuidance.action.label}
                     <ArrowRight aria-hidden />
-                  </a>
+                  </Link>
                 </Button>
               )}
             </aside>

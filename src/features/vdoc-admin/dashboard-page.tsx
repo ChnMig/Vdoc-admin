@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowRight,
   BookOpenText,
@@ -49,7 +50,6 @@ import {
   ACTIVE_STATUS,
   tokenIsActive,
   type PageGuidance,
-  contextualHref,
 } from './page-utils'
 
 type WorkbenchStepKey =
@@ -340,14 +340,20 @@ export function DashboardPage() {
                     size='sm'
                     className='col-start-2 h-auto justify-start p-0 text-sm sm:col-start-3 sm:mt-1'
                   >
-                    <a href={contextualHref(step.href, projectId, documentId)}>
+                    <Link
+                      to={step.href}
+                      search={{
+                        project_id: projectId || undefined,
+                        document_id: documentId || undefined,
+                      }}
+                    >
                       {t(
                         step.done
                           ? 'admin.workbench.inspectStep'
                           : 'admin.workbench.continueStep'
                       )}
                       <ArrowRight />
-                    </a>
+                    </Link>
                   </Button>
                 </li>
               )

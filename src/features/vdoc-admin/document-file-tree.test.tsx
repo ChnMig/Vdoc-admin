@@ -92,10 +92,14 @@ describe('document file tree', () => {
     screen.rerenderTree({ folderId: 'guides' })
     expect(folder).toHaveAttribute('aria-pressed', 'true')
     expect(folder).toHaveAttribute('aria-current', 'location')
+    const chevron = folder.querySelector('svg')
+    expect(chevron).toHaveClass('rotate-90')
     await user.click(folder)
     expect(folder).toHaveAttribute('aria-expanded', 'false')
+    expect(folder.querySelector('svg')).toBe(chevron)
+    expect(chevron).not.toHaveClass('rotate-90')
     expect(screen.queryByRole('button', { name: /intro.txt/ })).toBeNull()
-    expect(screen.onFolderSelect).toHaveBeenCalledTimes(2)
+    expect(screen.onFolderSelect).toHaveBeenCalledOnce()
   })
 
   it('supports native activation, expansion keys, and navigation between visible rows', async () => {
@@ -196,7 +200,7 @@ describe('document file tree', () => {
     expect(folder).toHaveAttribute('data-creation-target', 'true')
 
     await user.click(folder)
-    expect(screen.onFolderSelect).toHaveBeenLastCalledWith('guides')
+    expect(screen.onFolderSelect).not.toHaveBeenCalled()
     expect(screen.onDocumentSelect).not.toHaveBeenCalled()
     expect(folder).toHaveAttribute('aria-expanded', 'false')
     expect(folder).not.toHaveClass('bg-primary/8')
@@ -384,5 +388,21 @@ describe('document file tree', () => {
     await user.click(text)
     expect(screen.onDocumentSelect).toHaveBeenCalledWith(documents[2])
     expect(screen.onFolderSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not navigate again when the root is already the creation destination', async () => {
+    const user = userEvent.setup()
+    const screen = renderTree({ documentId: 'intro' })
+    const navigation = screen.getByRole('navigation', { name: 'Files' })
+    const root = within(navigation).getAllByRole('button')[0]
+
+    await user.click(root)
+    expect(screen.onFolderSelect).not.toHaveBeenCalled()
+    expect(screen.onDocumentSelect).not.toHaveBeenCalled()
+
+    screen.rerenderTree({ folderId: 'guides' })
+    await user.click(root)
+    expect(screen.onFolderSelect).toHaveBeenCalledOnce()
+    expect(screen.onFolderSelect).toHaveBeenLastCalledWith('')
   })
 })

@@ -79,7 +79,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   signIn(alice)
 })
-afterEach(() => useAuthStore.getState().auth.reset())
+afterEach(() => {
+  vi.useRealTimers()
+  useAuthStore.getState().auth.reset()
+})
 
 for (const result of ['success', '401'] as const) {
   it.each([
@@ -144,6 +147,100 @@ it('updates the current session identity', async () => {
   await requireAuthenticatedUser('/projects', new AbortController().signal)
   expect(useAuthStore.getState().auth.user?.name).toBe('Updated Alice')
   expect(useAuthStore.getState().auth.accessToken).toBe('alice-token')
+})
+
+it('reuses a recent successful identity while changing folders and document tools', async () => {
+  vi.mocked(getIdentity).mockResolvedValue(alice)
+  await requireAuthenticatedUser(
+    '/documents?folder_id=one',
+    new AbortController().signal
+  )
+  await requireAuthenticatedUser(
+    '/documents?folder_id=two',
+    new AbortController().signal
+  )
+  await requireAuthenticatedUser(
+    '/documents/doc?workspace_view=versions',
+    new AbortController().signal
+  )
+  expect(getIdentity).toHaveBeenCalledOnce()
+})
+
+it('checks identity again after thirty seconds and immediately honors revocation', async () => {
+  vi.useFakeTimers()
+  vi.mocked(getIdentity)
+    .mockResolvedValueOnce(alice)
+    .mockRejectedValueOnce(unauthorized())
+  await requireAuthenticatedUser('/documents', new AbortController().signal)
+  vi.advanceTimersByTime(30_000)
+  await expect(
+    requireAuthenticatedUser(
+      '/documents?folder_id=two',
+      new AbortController().signal
+    )
+  ).rejects.toSatisfy(isRedirect)
+  expect(getIdentity).toHaveBeenCalledTimes(2)
+  expect(useAuthStore.getState().auth.accessToken).toBe('')
+})
+
+it('does not reuse validation for a new session even when the JWT is identical', async () => {
+  vi.mocked(getIdentity).mockResolvedValue(alice)
+  await requireAuthenticatedUser('/documents', new AbortController().signal)
+  signIn(alice)
+  await requireAuthenticatedUser(
+    '/documents?folder_id=two',
+    new AbortController().signal
+  )
+  expect(getIdentity).toHaveBeenCalledTimes(2)
+})
+
+it.each(['restored token', 'changed identity', 'inactive identity'] as const)(
+  'does not reuse recent validation with a %s',
+  async (reason) => {
+    vi.mocked(getIdentity).mockResolvedValue(alice)
+    await requireAuthenticatedUser('/documents', new AbortController().signal)
+    const user =
+      reason === 'restored token'
+        ? null
+        : reason === 'changed identity'
+          ? bob
+          : { ...alice, status: 0 }
+    useAuthStore.getState().auth.setUser(user)
+    await requireAuthenticatedUser(
+      '/documents?folder_id=two',
+      new AbortController().signal
+    )
+    expect(getIdentity).toHaveBeenCalledTimes(2)
+  }
+)
+
+it('does not extend the validation window after a network failure', async () => {
+  vi.useFakeTimers()
+  const failure = new Error('Network unavailable')
+  vi.mocked(getIdentity)
+    .mockResolvedValueOnce(alice)
+    .mockRejectedValueOnce(failure)
+    .mockResolvedValueOnce(alice)
+  await requireAuthenticatedUser('/documents', new AbortController().signal)
+  vi.advanceTimersByTime(30_000)
+  await expect(
+    requireAuthenticatedUser(
+      '/documents?folder_id=two',
+      new AbortController().signal
+    )
+  ).rejects.toBe(failure)
+  await requireAuthenticatedUser(
+    '/documents?folder_id=three',
+    new AbortController().signal
+  )
+  expect(getIdentity).toHaveBeenCalledTimes(3)
+})
+
+it('ignores an already cancelled navigation without making a request', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  await requireAuthenticatedUser('/documents', controller.signal)
+  expect(getIdentity).not.toHaveBeenCalled()
 })
 
 it.each(['missing token', '401'] as const)(

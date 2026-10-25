@@ -1,9 +1,16 @@
-import { lazy, Suspense, useLayoutEffect, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Ref,
+} from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   Building2,
-  ChevronDown,
   ChevronRight,
   Folder,
   FolderGit2,
@@ -39,6 +46,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
@@ -90,6 +98,8 @@ export type WorkspaceHierarchyPageProps = VdocPageDeepLinkProps & {
 }
 
 type HubPanel = 'browse' | 'teams' | 'people'
+type ProjectPanel = 'documents' | 'members' | 'settings'
+type ProjectPanelNavigation = { browse: () => void }
 type TeamSummary = { id: string; name: string; description?: string }
 type MutationScope = { owner: string; sessionVersion: number }
 
@@ -145,6 +155,29 @@ export function WorkspaceHierarchyPage({
   const projectId = project?.id ?? ''
   const folderId =
     routeSearch.folder_id === 'root' ? '' : (routeSearch.folder_id ?? '')
+  const folderHeadingRef = useRef<HTMLHeadingElement>(null)
+  const projectNavigationRef = useRef<ProjectPanelNavigation>(null)
+  const pendingFolderFocus = useRef<{
+    projectId: string
+    sessionVersion: number
+    folderId: string
+  } | null>(null)
+  useLayoutEffect(() => {
+    const requested = pendingFolderFocus.current
+    if (!requested) return
+    if (
+      requested.projectId !== projectId ||
+      requested.sessionVersion !== sessionVersion
+    ) {
+      pendingFolderFocus.current = null
+      return
+    }
+    if (requested.folderId !== folderId) return
+    pendingFolderFocus.current = null
+    const heading = folderHeadingRef.current
+    if (heading && !heading.closest('[hidden]'))
+      heading.focus({ preventScroll: true })
+  }, [folderId, projectId, sessionVersion])
   const scope = `${sessionVersion}:${teamId}:${projectId}:${folderId}:${panel}`
   const usersQuery = useQuery({
     queryKey: ['users'],
@@ -192,6 +225,7 @@ export function WorkspaceHierarchyPage({
     else setLocalSearch((current) => ({ ...current, ...patch }))
   }
   const selectScope = (nextTeam?: string, nextProject?: string) => {
+    projectNavigationRef.current?.browse()
     setPanel('browse')
     setFileFilter('')
     if (nextTeam) setExpanded((current) => ({ ...current, [nextTeam]: true }))
@@ -204,7 +238,10 @@ export function WorkspaceHierarchyPage({
     })
   }
   const selectFolder = (id: string) => {
+    projectNavigationRef.current?.browse()
     setFileFilter('')
+    if (id === folderId) return
+    pendingFolderFocus.current = { projectId, sessionVersion, folderId: id }
     changeSearch({ folder_id: id || 'root' })
   }
   const openDocument = (document: DocumentDTO) => {
@@ -492,11 +529,13 @@ export function WorkspaceHierarchyPage({
                           })
                         }
                       >
-                        {isExpanded ? (
-                          <ChevronDown aria-hidden className='size-3.5' />
-                        ) : (
-                          <ChevronRight aria-hidden className='size-3.5' />
-                        )}
+                        <ChevronRight
+                          aria-hidden
+                          className={cn(
+                            'workspace-tree-chevron size-3.5',
+                            isExpanded && 'rotate-90'
+                          )}
+                        />
                       </button>
                       <button
                         type='button'
@@ -523,7 +562,7 @@ export function WorkspaceHierarchyPage({
                       </button>
                     </div>
                     {isExpanded && (
-                      <div className='ms-3.5 border-s ps-3'>
+                      <div className='workspace-pane-enter ms-3.5 border-s ps-3'>
                         {children.map((candidate) => (
                           <button
                             key={candidate.id}
@@ -662,11 +701,12 @@ export function WorkspaceHierarchyPage({
             <div className='min-w-0 p-4 sm:p-6'>
               <LoadingErrorState
                 state={{
-                  isLoading: listLoading,
+                  isLoading: false,
                   isError: Boolean(listError),
                   error: listError,
                 }}
               />
+              {listLoading && <ResourceLoadingState />}
               {management ? (
                 <ManagementFallback>
                   <WorkspaceEmbedding>
@@ -730,224 +770,279 @@ export function WorkspaceHierarchyPage({
                         (team ? createProjectAction : createTeamAction)}
                     </div>
                     {project ? (
-                      <Tabs
-                        key={`${sessionVersion}:${project.id}`}
-                        defaultValue='documents'
-                        className='gap-5'
+                      <ProjectWorkspaceTabs
+                        key={`${sessionVersion}:${project.id}:${canManageProject}`}
+                        navigationRef={projectNavigationRef}
                       >
-                        <TabsList className='max-w-full overflow-x-auto'>
-                          <TabsTrigger value='documents'>
-                            <FolderOpen aria-hidden />
-                            {t('admin.hierarchy.documents')}
-                          </TabsTrigger>
-                          <TabsTrigger value='members'>
-                            <Users data-hierarchy-kind='people' aria-hidden />
-                            {t('admin.hierarchy.members')}
-                          </TabsTrigger>
-                          {canManageProject && (
-                            <TabsTrigger value='settings'>
-                              <Settings2 aria-hidden />
-                              {t('admin.hierarchy.projectSettings')}
-                            </TabsTrigger>
-                          )}
-                        </TabsList>
-                        <TabsContent value='documents' className='min-w-0'>
-                          <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
-                            <div className='flex min-w-0 items-center gap-2'>
-                              {folderId && (
-                                <Button
-                                  variant='ghost'
-                                  size='icon'
-                                  aria-label={t('admin.hierarchy.upFolder')}
-                                  onClick={() =>
-                                    selectFolder(folder?.parent_id ?? '')
-                                  }
-                                >
-                                  <ArrowLeft aria-hidden />
-                                </Button>
-                              )}
-                              <span className='truncate text-sm font-medium'>
-                                {folder?.name ??
-                                  t('admin.workspace.rootFolder')}
-                              </span>
-                            </div>
-                            <div className='flex flex-wrap items-center gap-2'>
-                              <Input
-                                aria-label={t('admin.workspace.searchFiles')}
-                                placeholder={t('admin.workspace.searchFiles')}
-                                className='h-8 w-44 text-xs'
-                                value={fileFilter}
-                                onChange={(event) =>
-                                  setFileFilter(event.target.value)
-                                }
-                              />
-                              {canCreateDocument && (
-                                <>
-                                  <FormDialog
-                                    title={t('admin.workspace.createFolder')}
-                                    triggerVariant='outline'
-                                    triggerSize='sm'
-                                    submitLabel={t('admin.common.create')}
-                                    pending={folderMutation.isPending}
-                                    disabled={
-                                      foldersQuery.isLoading ||
-                                      foldersQuery.isError
-                                    }
-                                    submissionScope={scope}
-                                    onSubmit={(formData) =>
-                                      folderMutation.mutateAsync({
-                                        projectId,
-                                        parentId: folderId,
-                                        name: fieldValue(formData, 'name'),
-                                        owner: scope,
-                                        sessionVersion,
-                                      })
-                                    }
-                                  >
-                                    <TextField
-                                      name='name'
-                                      label={t('admin.workspace.folderName')}
-                                      required
-                                    />
-                                  </FormDialog>
-                                  <FormDialog
-                                    title={t('admin.sections.createDocument')}
-                                    triggerSize='sm'
-                                    submitLabel={t('admin.common.create')}
-                                    pending={documentMutation.isPending}
-                                    disabled={
-                                      foldersQuery.isLoading ||
-                                      foldersQuery.isError
-                                    }
-                                    submissionScope={scope}
-                                    onSubmit={(formData) =>
-                                      documentMutation.mutateAsync({
-                                        projectId,
-                                        owner: scope,
-                                        sessionVersion,
-                                        formData,
-                                      })
-                                    }
-                                  >
-                                    <DocumentFormFields
-                                      projectId={projectId}
-                                      initialFolderId={folderId}
-                                    />
-                                  </FormDialog>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <LoadingErrorState
-                            state={{
-                              isLoading:
-                                documentsQuery.isLoading ||
-                                foldersQuery.isLoading,
-                              isError:
-                                documentsQuery.isError || foldersQuery.isError,
-                              error: documentsQuery.error ?? foldersQuery.error,
-                            }}
-                          />
-                          {documentsQuery.isSuccess &&
-                            foldersQuery.isSuccess && (
-                              <div className='divide-y border-y'>
-                                {visibleFolders.map((item) => (
-                                  <ResourceRow
-                                    key={item.id}
-                                    icon={
-                                      <Folder
-                                        data-hierarchy-kind='folder'
-                                        aria-hidden
-                                        className='size-5 text-muted-foreground'
-                                      />
-                                    }
-                                    name={item.name}
-                                    onClick={() => selectFolder(item.id)}
-                                    detail={item.path}
-                                  />
-                                ))}
-                                {visibleDocuments.map((item) => (
-                                  <ResourceRow
-                                    key={item.id}
-                                    icon={
-                                      <DocumentTypeIcon
-                                        documentType={item.document_type}
-                                        data-document-type={item.document_type}
-                                        className='size-5 text-muted-foreground'
-                                      />
-                                    }
-                                    name={item.name}
-                                    detail={
-                                      item.file_name ?? item.relative_path
-                                    }
-                                    onClick={() => openDocument(item)}
-                                    trailing={
-                                      <>
-                                        <Badge
-                                          variant={
-                                            documentWorkflowState(item) ===
-                                            'published'
-                                              ? 'secondary'
-                                              : 'outline'
-                                          }
-                                        >
-                                          {t(
-                                            `admin.workspace.${documentWorkflowState(item)}`
-                                          )}
-                                        </Badge>
-                                        {item.status !== ACTIVE_STATUS && (
-                                          <Badge variant='outline'>
-                                            {t('admin.statuses.archived')}
-                                          </Badge>
-                                        )}
-                                        <span className='hidden w-32 text-end text-xs text-muted-foreground xl:block'>
-                                          {formatDate(
-                                            item.updated_at,
-                                            language
-                                          )}
-                                        </span>
-                                      </>
-                                    }
-                                  />
-                                ))}
-                                {!visibleFolders.length &&
-                                  !visibleDocuments.length && (
-                                    <p className='py-12 text-center text-sm text-muted-foreground'>
-                                      {t(
-                                        normalizedFileFilter
-                                          ? 'search.empty'
-                                          : 'admin.hierarchy.emptyFolder'
-                                      )}
-                                    </p>
-                                  )}
-                              </div>
-                            )}
-                        </TabsContent>
-                        <TabsContent value='members'>
-                          <ManagementFallback>
-                            <WorkspaceEmbedding>
-                              <ProjectsPage
-                                projectId={project.id}
-                                section='members'
-                              />
-                            </WorkspaceEmbedding>
-                          </ManagementFallback>
-                        </TabsContent>
-                        {canManageProject && (
-                          <TabsContent value='settings'>
-                            <ManagementFallback>
-                              <WorkspaceEmbedding>
-                                <ProjectsPage
-                                  projectId={project.id}
-                                  section='settings'
+                        {(activePanel, visitedPanels) => (
+                          <>
+                            <TabsList className='max-w-full overflow-x-auto'>
+                              <TabsTrigger value='documents'>
+                                <FolderOpen aria-hidden />
+                                {t('admin.hierarchy.documents')}
+                              </TabsTrigger>
+                              <TabsTrigger value='members'>
+                                <Users
+                                  data-hierarchy-kind='people'
+                                  aria-hidden
                                 />
-                              </WorkspaceEmbedding>
-                            </ManagementFallback>
-                          </TabsContent>
+                                {t('admin.hierarchy.members')}
+                              </TabsTrigger>
+                              {canManageProject && (
+                                <TabsTrigger value='settings'>
+                                  <Settings2 aria-hidden />
+                                  {t('admin.hierarchy.projectSettings')}
+                                </TabsTrigger>
+                              )}
+                            </TabsList>
+                            <TabsContent
+                              value='documents'
+                              hidden={activePanel !== 'documents'}
+                              forceMount
+                              aria-busy={
+                                documentsQuery.isLoading ||
+                                foldersQuery.isLoading
+                              }
+                              className='workspace-pane-enter min-w-0 data-[state=inactive]:hidden'
+                            >
+                              <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+                                <div className='flex min-w-0 items-center gap-2'>
+                                  {folderId && (
+                                    <Button
+                                      variant='ghost'
+                                      size='icon'
+                                      aria-label={t('admin.hierarchy.upFolder')}
+                                      onClick={() =>
+                                        selectFolder(folder?.parent_id ?? '')
+                                      }
+                                    >
+                                      <ArrowLeft aria-hidden />
+                                    </Button>
+                                  )}
+                                  <h3
+                                    ref={folderHeadingRef}
+                                    tabIndex={-1}
+                                    className='truncate text-sm font-medium outline-none'
+                                  >
+                                    {folder?.name ??
+                                      t('admin.workspace.rootFolder')}
+                                  </h3>
+                                </div>
+                                <div className='flex flex-wrap items-center gap-2'>
+                                  <Input
+                                    aria-label={t(
+                                      'admin.workspace.searchFiles'
+                                    )}
+                                    placeholder={t(
+                                      'admin.workspace.searchFiles'
+                                    )}
+                                    className='h-8 w-44 text-xs'
+                                    value={fileFilter}
+                                    onChange={(event) =>
+                                      setFileFilter(event.target.value)
+                                    }
+                                  />
+                                  {canCreateDocument && (
+                                    <>
+                                      <FormDialog
+                                        title={t(
+                                          'admin.workspace.createFolder'
+                                        )}
+                                        triggerVariant='outline'
+                                        triggerSize='sm'
+                                        submitLabel={t('admin.common.create')}
+                                        pending={folderMutation.isPending}
+                                        disabled={
+                                          foldersQuery.isLoading ||
+                                          foldersQuery.isError
+                                        }
+                                        submissionScope={scope}
+                                        onSubmit={(formData) =>
+                                          folderMutation.mutateAsync({
+                                            projectId,
+                                            parentId: folderId,
+                                            name: fieldValue(formData, 'name'),
+                                            owner: scope,
+                                            sessionVersion,
+                                          })
+                                        }
+                                      >
+                                        <TextField
+                                          name='name'
+                                          label={t(
+                                            'admin.workspace.folderName'
+                                          )}
+                                          required
+                                        />
+                                      </FormDialog>
+                                      <FormDialog
+                                        title={t(
+                                          'admin.sections.createDocument'
+                                        )}
+                                        triggerSize='sm'
+                                        submitLabel={t('admin.common.create')}
+                                        pending={documentMutation.isPending}
+                                        disabled={
+                                          foldersQuery.isLoading ||
+                                          foldersQuery.isError
+                                        }
+                                        submissionScope={scope}
+                                        onSubmit={(formData) =>
+                                          documentMutation.mutateAsync({
+                                            projectId,
+                                            owner: scope,
+                                            sessionVersion,
+                                            formData,
+                                          })
+                                        }
+                                      >
+                                        <DocumentFormFields
+                                          projectId={projectId}
+                                          initialFolderId={folderId}
+                                        />
+                                      </FormDialog>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <LoadingErrorState
+                                state={{
+                                  isLoading: false,
+                                  isError:
+                                    documentsQuery.isError ||
+                                    foldersQuery.isError,
+                                  error:
+                                    documentsQuery.error ?? foldersQuery.error,
+                                }}
+                              />
+                              {(documentsQuery.isLoading ||
+                                foldersQuery.isLoading) && (
+                                <ResourceLoadingState />
+                              )}
+                              {documentsQuery.isSuccess &&
+                                foldersQuery.isSuccess && (
+                                  <div
+                                    key={`${projectId}:${folderId}`}
+                                    className='workspace-pane-enter divide-y border-y'
+                                  >
+                                    {visibleFolders.map((item) => (
+                                      <ResourceRow
+                                        key={item.id}
+                                        icon={
+                                          <Folder
+                                            data-hierarchy-kind='folder'
+                                            aria-hidden
+                                            className='size-5 text-muted-foreground'
+                                          />
+                                        }
+                                        name={item.name}
+                                        onClick={() => selectFolder(item.id)}
+                                        detail={item.path}
+                                      />
+                                    ))}
+                                    {visibleDocuments.map((item) => (
+                                      <ResourceRow
+                                        key={item.id}
+                                        icon={
+                                          <DocumentTypeIcon
+                                            documentType={item.document_type}
+                                            data-document-type={
+                                              item.document_type
+                                            }
+                                            className='size-5 text-muted-foreground'
+                                          />
+                                        }
+                                        name={item.name}
+                                        detail={
+                                          item.file_name ?? item.relative_path
+                                        }
+                                        onClick={() => openDocument(item)}
+                                        trailing={
+                                          <>
+                                            <Badge
+                                              variant={
+                                                documentWorkflowState(item) ===
+                                                'published'
+                                                  ? 'secondary'
+                                                  : 'outline'
+                                              }
+                                            >
+                                              {t(
+                                                `admin.workspace.${documentWorkflowState(item)}`
+                                              )}
+                                            </Badge>
+                                            {item.status !== ACTIVE_STATUS && (
+                                              <Badge variant='outline'>
+                                                {t('admin.statuses.archived')}
+                                              </Badge>
+                                            )}
+                                            <span className='hidden w-32 text-end text-xs text-muted-foreground xl:block'>
+                                              {formatDate(
+                                                item.updated_at,
+                                                language
+                                              )}
+                                            </span>
+                                          </>
+                                        }
+                                      />
+                                    ))}
+                                    {!visibleFolders.length &&
+                                      !visibleDocuments.length && (
+                                        <p className='py-12 text-center text-sm text-muted-foreground'>
+                                          {t(
+                                            normalizedFileFilter
+                                              ? 'search.empty'
+                                              : 'admin.hierarchy.emptyFolder'
+                                          )}
+                                        </p>
+                                      )}
+                                  </div>
+                                )}
+                            </TabsContent>
+                            <TabsContent
+                              value='members'
+                              hidden={activePanel !== 'members'}
+                              forceMount
+                              className='workspace-pane-enter data-[state=inactive]:hidden'
+                            >
+                              {visitedPanels.includes('members') && (
+                                <ManagementFallback>
+                                  <WorkspaceEmbedding>
+                                    <ProjectsPage
+                                      projectId={project.id}
+                                      section='members'
+                                    />
+                                  </WorkspaceEmbedding>
+                                </ManagementFallback>
+                              )}
+                            </TabsContent>
+                            {canManageProject && (
+                              <TabsContent
+                                value='settings'
+                                hidden={activePanel !== 'settings'}
+                                forceMount
+                                className='workspace-pane-enter data-[state=inactive]:hidden'
+                              >
+                                {visitedPanels.includes('settings') && (
+                                  <ManagementFallback>
+                                    <WorkspaceEmbedding>
+                                      <ProjectsPage
+                                        projectId={project.id}
+                                        section='settings'
+                                      />
+                                    </WorkspaceEmbedding>
+                                  </ManagementFallback>
+                                )}
+                              </TabsContent>
+                            )}
+                          </>
                         )}
-                      </Tabs>
+                      </ProjectWorkspaceTabs>
                     ) : (
-                      <div className='divide-y border-y'>
+                      <div
+                        key={teamId || 'workspace'}
+                        className='workspace-pane-enter divide-y border-y'
+                      >
                         {team
                           ? visibleProjects.map((item) => (
                               <ResourceRow
@@ -1019,6 +1114,67 @@ export function WorkspaceHierarchyPage({
         </div>
       </Main>
     </>
+  )
+}
+
+function ProjectWorkspaceTabs({
+  children,
+  navigationRef,
+}: {
+  navigationRef: Ref<ProjectPanelNavigation>
+  children: (
+    activePanel: ProjectPanel,
+    visitedPanels: readonly ProjectPanel[]
+  ) => React.ReactNode
+}) {
+  const [activePanel, setActivePanel] = useState<ProjectPanel>('documents')
+  const [visitedPanels, setVisitedPanels] = useState<ProjectPanel[]>([
+    'documents',
+  ])
+  useImperativeHandle(
+    navigationRef,
+    () => ({ browse: () => setActivePanel('documents') }),
+    []
+  )
+  return (
+    <Tabs
+      value={activePanel}
+      onValueChange={(value) => {
+        const nextPanel = value as ProjectPanel
+        setActivePanel(nextPanel)
+        setVisitedPanels((previous) =>
+          previous.includes(nextPanel) ? previous : [...previous, nextPanel]
+        )
+      }}
+      className='gap-5'
+    >
+      {children(activePanel, visitedPanels)}
+    </Tabs>
+  )
+}
+
+function ResourceLoadingState() {
+  const { t } = useLanguage()
+  return (
+    <div
+      role='status'
+      aria-label={t('admin.common.loading')}
+      className='border-y'
+    >
+      {[0, 1, 2].map((row) => (
+        <div
+          key={row}
+          aria-hidden
+          className='flex min-h-[4.5rem] items-center gap-3 px-3 py-3'
+        >
+          <Skeleton className='size-9 shrink-0 motion-reduce:animate-none' />
+          <div className='grid w-full max-w-md gap-2'>
+            <Skeleton className='h-3.5 w-2/3 motion-reduce:animate-none' />
+            <Skeleton className='h-3 w-1/2 motion-reduce:animate-none' />
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

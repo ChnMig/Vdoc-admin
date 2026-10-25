@@ -233,16 +233,25 @@ function renderWorkspace(
 }
 
 function documentTools(screen: ReturnType<typeof renderWorkspace>) {
-  return within(
-    within(
-      screen.getByRole('complementary', { name: 'Document outline and tools' })
-    ).getByRole('navigation', { name: 'Document tools' })
-  )
+  // Both responsive navigation surfaces render in jsdom, which does not apply
+  // the breakpoint styles. Use the desktop rail, including its outline action.
+  const tools = screen.getAllByRole('navigation', { name: 'Document tools' })
+  return within(tools[tools.length - 1])
 }
 
 describe('document workspace', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    for (const method of ['show', 'showModal', 'close'] as const) {
+      Object.defineProperty(HTMLDialogElement.prototype, method, {
+        configurable: true,
+        writable: true,
+        value: vi.fn(function (this: HTMLDialogElement) {
+          if (method === 'close') this.removeAttribute('open')
+          else this.setAttribute('open', '')
+        }),
+      })
+    }
     panes.realVersions = false
     useVdocContextStore.getState().reset()
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
@@ -364,6 +373,112 @@ describe('document workspace', () => {
       }),
       { replace: false }
     )
+  })
+
+  it('does not navigate or reset a historical version when its selected file is clicked again', async () => {
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-1',
+      version_id: 'version-0',
+      content_mode: 'published',
+      workspace_view: 'content',
+    })
+    const content = await screen.findByText('Historical body exact')
+    const requests = api.getVersionContent.mock.calls.length
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Files' })).getByRole(
+        'button',
+        { name: /published.txt/ }
+      )
+    )
+
+    expect(screen.changes).not.toHaveBeenCalled()
+    expect(screen.getByText('Historical body exact')).toBe(content)
+    expect(screen.getByRole('combobox', { name: 'Version' })).toHaveTextContent(
+      'v1 historical'
+    )
+    expect(api.getVersionContent).toHaveBeenCalledTimes(requests)
+  })
+
+  it('returns to content from the current file without changing its branch or draft', async () => {
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-2',
+      draft_id: 'draft-release',
+      content_mode: 'draft',
+      workspace_view: 'drafts',
+      from_branch_id: 'branch-1',
+      to_branch_id: 'branch-2',
+    })
+    await screen.findByText('Draft pane draft-release')
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Files' })).getByRole(
+        'button',
+        { name: /published.txt/ }
+      )
+    )
+
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      { workspace_view: 'content' },
+      { replace: false }
+    )
+    expect(await screen.findByText('Release draft body')).toBeVisible()
+    expect(screen.getByRole('combobox', { name: 'Branch' })).toHaveTextContent(
+      'release/2026'
+    )
+    expect(screen.getByRole('combobox', { name: 'Draft' })).toHaveTextContent(
+      'draft-release name'
+    )
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+  })
+
+  it('clears reading and cross-branch comparison scope when opening another file', async () => {
+    const screen = renderWorkspace({
+      team_id: 'team-1',
+      project_id: 'project-1',
+      document_id: 'published',
+      branch_id: 'branch-2',
+      version_id: 'version-release',
+      content_mode: 'published',
+      workspace_view: 'content',
+      from_branch_id: 'branch-1',
+      to_branch_id: 'branch-2',
+      from_version_id: 'version-0',
+      to_version_id: 'version-release',
+      diff_id: 'previous-comparison',
+    })
+    await screen.findByText('Release branch body')
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Files' })).getByRole(
+        'button',
+        { name: /draft-only.txt/ }
+      )
+    )
+
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      {
+        content_mode: undefined,
+        document_id: 'draft-only',
+        branch_id: undefined,
+        draft_id: undefined,
+        version_id: undefined,
+        endpoint_id: undefined,
+        from_version_id: undefined,
+        to_version_id: undefined,
+        from_branch_id: undefined,
+        to_branch_id: undefined,
+        diff_id: undefined,
+        folder_id: undefined,
+        workspace_view: 'content',
+      },
+      { replace: false }
+    )
+    expect(await screen.findByText('Private draft')).toBeVisible()
+    expect(screen.queryByText('Release branch body')).not.toBeInTheDocument()
   })
 
   it('opens a draft in the selected branch without falling back to the document latest draft', async () => {
@@ -665,16 +780,14 @@ describe('document workspace', () => {
     expect(api.getAISummary).not.toHaveBeenCalled()
     expect(api.listAIChatSessions).not.toHaveBeenCalled()
     expect(api.getVersionContent).not.toHaveBeenCalled()
-    expect(screen.changes.mock.calls).toEqual([
-      [{ workspace_view: 'ai' }, { replace: false }],
-    ])
+    expect(screen.changes).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Create share link' })
     ).not.toBeInTheDocument()
   })
 
-  it('does not mount real tools or normalize to latest while an exact version lookup is pending', async () => {
+  it('keeps history available without normalizing to latest while an exact version lookup is pending', async () => {
     panes.realVersions = true
     const pending = deferred<VersionDTO>()
     api.getVersion.mockReturnValueOnce(pending.promise)
@@ -698,13 +811,12 @@ describe('document workspace', () => {
     expect(screen.changes).not.toHaveBeenCalled()
     expect(api.getVersionContent).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Share' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'Versions' })).toBeVisible()
     await act(async () => pending.resolve(version('version-0')))
-    const activeVersionPane = within(
-      await screen.findByRole('tabpanel', { name: 'Versions' })
-    )
-    await waitFor(() =>
-      expect(activeVersionPane.getByText('Historical body exact')).toBeVisible()
-    )
+    const historicalBody = await screen.findByText('Historical body exact')
+    // The reader remains mounted behind the history tool and keeps the exact
+    // requested revision ready for a return to preview.
+    expect(historicalBody).not.toBeVisible()
     expect(
       api.getVersionContent.mock.calls.every((call) => call[2] === 'version-0')
     ).toBe(true)
@@ -713,6 +825,14 @@ describe('document workspace', () => {
       screen.queryByText('Published <literal> text')
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Share' })).toBeEnabled()
+    await userEvent.click(
+      documentTools(screen).getByRole('button', { name: 'On this page' })
+    )
+    expect(screen.getByText('Historical body exact')).toBe(historicalBody)
+    expect(historicalBody).toBeVisible()
+    expect(screen.changes.mock.calls).toEqual([
+      [{ workspace_view: 'content' }, { replace: false }],
+    ])
   })
 
   it('retains the selected document body when its folder is collapsed', async () => {
@@ -753,10 +873,7 @@ describe('document workspace', () => {
       screen.getByRole('heading', { name: 'Published guide' })
     ).toBeVisible()
     expect(screen.getByText('Published <literal> text')).toBeVisible()
-    expect(screen.changes).toHaveBeenLastCalledWith(
-      { folder_id: 'guides' },
-      { replace: false }
-    )
+    expect(screen.changes).not.toHaveBeenCalled()
   })
 
   it('creates a folder at the explicitly selected project root while keeping the document open', async () => {

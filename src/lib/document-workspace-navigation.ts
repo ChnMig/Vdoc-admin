@@ -12,6 +12,8 @@ export function clearDocumentContext(search: VdocRouteSearch): VdocRouteSearch {
     endpoint_id: undefined,
     from_version_id: undefined,
     to_version_id: undefined,
+    from_branch_id: undefined,
+    to_branch_id: undefined,
     diff_id: undefined,
     content_mode: undefined,
     workspace_view: undefined,

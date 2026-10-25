@@ -316,6 +316,8 @@ describe('workspace hierarchy', () => {
           endpoint_id: 'old-endpoint',
           from_version_id: 'old-from-version',
           to_version_id: 'old-to-version',
+          from_branch_id: 'old-from-branch',
+          to_branch_id: 'old-to-branch',
           diff_id: 'old-diff',
           folder_id: 'advanced',
           workspace_view: 'ai',
@@ -337,6 +339,8 @@ describe('workspace hierarchy', () => {
         endpoint_id: undefined,
         from_version_id: undefined,
         to_version_id: undefined,
+        from_branch_id: undefined,
+        to_branch_id: undefined,
         diff_id: undefined,
         folder_id: undefined,
         workspace_view: undefined,
@@ -478,6 +482,18 @@ describe('workspace hierarchy', () => {
     expect(
       view.screen.queryByRole('button', { name: /API reference/ })
     ).not.toBeInTheDocument()
+    expect(
+      view.screen.getByRole('heading', { name: 'Research notebook' })
+    ).toBeVisible()
+    const pendingDocuments = view.screen.getByRole('tabpanel', {
+      name: translate('en', 'admin.hierarchy.documents'),
+    })
+    expect(pendingDocuments).toHaveAttribute('aria-busy', 'true')
+    expect(
+      within(pendingDocuments).getByRole('status', {
+        name: translate('en', 'admin.common.loading'),
+      })
+    ).toBeVisible()
     await act(async () =>
       resolveDocuments({
         items: [
@@ -502,6 +518,139 @@ describe('workspace hierarchy', () => {
       'project-a',
       'project-b',
     ])
+  })
+
+  it('keeps the navigation and file controls mounted while browsing folders locally', async () => {
+    const view = setup({
+      search: { team_id: 'team-a', project_id: 'project-a' },
+    })
+    const folderButton = await view.screen.findByRole('button', {
+      name: 'Guides',
+    })
+    const navigation = view
+      .tree()
+      .getByRole('button', {
+        name: 'Product team',
+      })
+      .closest('nav')
+    const fileSearch = view.screen.getByRole('textbox', {
+      name: translate('en', 'admin.workspace.searchFiles'),
+    })
+    await view.user.click(folderButton)
+
+    expect(view.screen.getByRole('heading', { name: 'Guides' })).toHaveFocus()
+    expect(
+      view.screen.getByRole('textbox', {
+        name: translate('en', 'admin.workspace.searchFiles'),
+      })
+    ).toBe(fileSearch)
+    expect(
+      view.tree().getByRole('button', { name: 'Product team' }).closest('nav')
+    ).toBe(navigation)
+    await view.user.click(view.screen.getByRole('button', { name: 'Advanced' }))
+    expect(view.screen.getByRole('heading', { name: 'Advanced' })).toHaveFocus()
+    expect(
+      view.screen.getByRole('button', { name: /Advanced usage/ })
+    ).toBeVisible()
+    expect(api.listDocuments).toHaveBeenCalledOnce()
+    expect(api.listDocumentFolders).toHaveBeenCalledOnce()
+    expect(api.listProjectMembers).toHaveBeenCalledOnce()
+  })
+
+  it('does not push another location when the current folder breadcrumb is activated', async () => {
+    const onSearchChange = vi.fn()
+    const view = setup({
+      search: {
+        team_id: 'team-a',
+        project_id: 'project-a',
+        folder_id: 'guides',
+      },
+      onSearchChange,
+    })
+    await view.user.click(
+      await view.screen.findByRole('button', { name: 'Guides' })
+    )
+
+    expect(onSearchChange).not.toHaveBeenCalled()
+    expect(api.listDocuments).toHaveBeenCalledOnce()
+    expect(api.listDocumentFolders).toHaveBeenCalledOnce()
+  })
+
+  it('retains visited project panes while hiding inactive content from navigation', async () => {
+    const view = setup({
+      search: { team_id: 'team-a', project_id: 'project-a' },
+    })
+    await view.user.click(
+      await view.screen.findByRole('tab', {
+        name: translate('en', 'admin.hierarchy.members'),
+      })
+    )
+    const member = await view.screen.findByText('project-a@example.test')
+    const requestCount = api.listProjectMembers.mock.calls.length
+    await view.user.click(
+      view.screen.getByRole('tab', {
+        name: translate('en', 'admin.hierarchy.documents'),
+      })
+    )
+    expect(member).toBeInTheDocument()
+    expect(member).not.toBeVisible()
+    expect(view.screen.getAllByRole('tabpanel')).toHaveLength(1)
+
+    await view.user.click(
+      view.screen.getByRole('tab', {
+        name: translate('en', 'admin.hierarchy.members'),
+      })
+    )
+    expect(view.screen.getByText('project-a@example.test')).toBe(member)
+    expect(member).toBeVisible()
+    expect(api.listProjectMembers).toHaveBeenCalledTimes(requestCount)
+    expect(api.listTeams).not.toHaveBeenCalled()
+    expect(api.listUsers).not.toHaveBeenCalled()
+
+    await view.user.click(
+      within(
+        view.screen.getByRole('navigation', {
+          name: translate('en', 'admin.hierarchy.breadcrumb'),
+        })
+      ).getByRole('button', { name: 'Product handbook' })
+    )
+    expect(
+      view.screen.getByRole('tab', {
+        name: translate('en', 'admin.hierarchy.documents'),
+      })
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(member).not.toBeVisible()
+    expect(api.listProjectMembers).toHaveBeenCalledTimes(requestCount)
+  })
+
+  it('discards retained project panes when the selected project changes', async () => {
+    const view = setup({
+      search: { team_id: 'team-a', project_id: 'project-a' },
+      onSearchChange: vi.fn(),
+    })
+    await view.user.click(
+      await view.screen.findByRole('tab', {
+        name: translate('en', 'admin.hierarchy.members'),
+      })
+    )
+    const previousMember = await view.screen.findByText(
+      'project-a@example.test'
+    )
+
+    view.rerender({ search: { team_id: 'team-b', project_id: 'project-b' } })
+
+    expect(
+      await view.screen.findByRole('heading', { name: 'Research notebook' })
+    ).toBeVisible()
+    expect(previousMember).not.toBeInTheDocument()
+    expect(
+      view.screen.getByRole('tab', {
+        name: translate('en', 'admin.hierarchy.documents'),
+      })
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await view.screen.findByRole('button', { name: /Research API/ })
+    ).toBeVisible()
   })
 
   it('shows the current project members without global management data for a Reader', async () => {

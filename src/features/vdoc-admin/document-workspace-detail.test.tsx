@@ -1,4 +1,4 @@
-import { act, fireEvent, render, within } from '@testing-library/react'
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentDTO, DraftDTO, VersionDTO } from '@/lib/vdoc-api'
 import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
@@ -10,6 +10,10 @@ const reading = vi.hoisted(() => ({
   selection: {} as DocumentReadingSelection,
   editorMounted: vi.fn(),
   editorUnmounted: vi.fn(),
+  readerMounted: vi.fn(),
+  readerUnmounted: vi.fn(),
+  assistantMounted: vi.fn(),
+  assistantUnmounted: vi.fn(),
   draftNavigate: undefined as
     ((patch: Partial<VdocRouteSearch>) => void) | undefined,
   versionNavigate: undefined as
@@ -30,11 +34,31 @@ vi.mock('./use-document-reading-selection', () => ({
 vi.mock('./document-workspace-toolbar', () => ({
   DocumentWorkspaceToolbar: () => null,
 }))
-vi.mock('./document-workspace-content', () => ({
-  DocumentWorkspaceContent: () => null,
-}))
+vi.mock('./document-workspace-content', async () => {
+  const { useEffect } = await import('react')
+  return {
+    DocumentWorkspaceContent: function Reader() {
+      useEffect(() => {
+        reading.readerMounted()
+        return () => reading.readerUnmounted()
+      }, [])
+      return <p>Stable document reader</p>
+    },
+  }
+})
 vi.mock('./document-workspace-branches', () => ({
-  DocumentWorkspaceBranches: () => null,
+  DocumentWorkspaceBranches: () => <p>Branch management controls</p>,
+}))
+vi.mock('./documents-page', () => ({
+  DocumentsPage: () => (
+    <label>
+      Document name
+      <input defaultValue='Guide' />
+    </label>
+  ),
+}))
+vi.mock('./diffs-page', () => ({
+  DiffsPage: () => <p>Independent diff comparison</p>,
 }))
 vi.mock('./document-workspace-share', () => ({
   DocumentWorkspaceShare: (props: unknown) => {
@@ -52,9 +76,30 @@ vi.mock('./versions-page', () => ({
     return <p>Version tools</p>
   },
 }))
-vi.mock('./document-workspace-ai', () => ({
-  DocumentWorkspaceAI: () => <p>Document AI tools</p>,
-}))
+vi.mock('./document-workspace-ai', async () => {
+  const { useEffect, useState } = await import('react')
+  return {
+    DocumentWorkspaceAI: function Assistant() {
+      const [question, setQuestion] = useState('')
+      useEffect(() => {
+        reading.assistantMounted()
+        return () => reading.assistantUnmounted()
+      }, [])
+      return (
+        <section>
+          <p>Document AI tools</p>
+          <label>
+            Assistant question
+            <textarea
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+            />
+          </label>
+        </section>
+      )
+    },
+  }
+})
 vi.mock('./drafts-page', async () => {
   const { useEffect, useState } = await import('react')
   return {
@@ -191,12 +236,49 @@ function renderDetail(
   }
 }
 
+function mockWideLayout(initial = false) {
+  let wide = initial
+  const listeners = new Set<() => void>()
+  vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+    matches: query === '(min-width: 1280px)' && wide,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: (
+      _type: string,
+      listener: EventListenerOrEventListenerObject
+    ) => listeners.add(listener as () => void),
+    removeEventListener: (
+      _type: string,
+      listener: EventListenerOrEventListenerObject
+    ) => listeners.delete(listener as () => void),
+    dispatchEvent: () => true,
+  }))
+  return (next: boolean) =>
+    act(() => {
+      wide = next
+      listeners.forEach((listener) => listener())
+    })
+}
+
 describe('document workspace draft editor retention', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
     reading.draftNavigate = undefined
     reading.versionNavigate = undefined
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
+    for (const method of ['show', 'showModal', 'close'] as const) {
+      Object.defineProperty(HTMLDialogElement.prototype, method, {
+        configurable: true,
+        writable: true,
+        value: vi.fn(function (this: HTMLDialogElement) {
+          if (method === 'close') this.removeAttribute('open')
+          else this.setAttribute('open', '')
+        }),
+      })
+    }
   })
 
   it('keeps draft sessions and conflict state while another draft resolves in the same branch', async () => {
@@ -299,6 +381,270 @@ describe('document workspace draft editor retention', () => {
       },
       true
     )
+  })
+
+  it('keeps the current editor and its scroll position while opening, closing, and resizing the single AI assistant', async () => {
+    const setWide = mockWideLayout()
+    const screen = renderDetail(selection('draft-a'))
+    const editor = await screen.findByLabelText('Working draft content')
+    fireEvent.change(editor, {
+      target: { value: 'Continue editing beside AI' },
+    })
+    const editorPane = editor.closest('[data-document-tool-pane]')!
+    editorPane.scrollTop = 173
+    const mobileTrigger = screen.getAllByRole('button', {
+      name: 'Document AI',
+    })[0]
+    fireEvent.click(mobileTrigger)
+    const question = await screen.findByLabelText('Assistant question')
+    const dialog = question.closest('dialog')!
+    expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce()
+    expect(editor).toBeVisible()
+    expect(editor).toHaveValue('Continue editing beside AI')
+    expect(editorPane.scrollTop).toBe(173)
+    fireEvent.change(question, { target: { value: 'An unsent question' } })
+    question.focus()
+    setWide(true)
+    expect(HTMLDialogElement.prototype.show).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('Assistant question')).toBe(question)
+    expect(question).toHaveFocus()
+    expect(question.closest('dialog')).toBe(dialog)
+    expect(question).toHaveValue('An unsent question')
+    fireEvent.click(screen.getByRole('button', { name: 'Close document AI' }))
+    expect(dialog).not.toHaveAttribute('open')
+    expect(dialog).toHaveAttribute('inert')
+    expect(question.isConnected).toBe(true)
+    expect(question).not.toBeVisible()
+    const desktopTrigger = screen.getAllByRole('button', {
+      name: 'Document AI',
+    })[1]
+    expect(desktopTrigger).toHaveFocus()
+    fireEvent.click(desktopTrigger)
+    expect(screen.getByLabelText('Assistant question')).toBe(question)
+    expect(question).toHaveValue('An unsent question')
+    expect(reading.assistantMounted).toHaveBeenCalledOnce()
+    expect(reading.assistantUnmounted).not.toHaveBeenCalled()
+    expect(reading.editorMounted).toHaveBeenCalledOnce()
+    expect(screen.changes).not.toHaveBeenCalled()
+  })
+
+  it('preserves the same reading node and scroll while visiting separate version and comparison tools', async () => {
+    const initial: DocumentReadingSelection = {
+      mode: 'published',
+      branchId: 'branch-1',
+    }
+    const screen = renderDetail(initial)
+    const reader = screen.getByText('Stable document reader')
+    const pane = reader.closest('[data-document-reading-pane]')!
+    pane.scrollTop = 420
+    screen.rerenderView('versions')
+    await screen.findByText('Version tools')
+    expect(screen.queryByRole('tab', { name: 'Diffs' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('tab', { name: 'Versions' })
+    ).not.toBeInTheDocument()
+    expect(reader.isConnected).toBe(true)
+    expect(reader).not.toBeVisible()
+    screen.rerenderView('diffs')
+    await screen.findByText('Independent diff comparison')
+    expect(
+      screen.queryByRole('tab', { name: 'Versions' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to preview' }))
+    expect(screen.changes).toHaveBeenLastCalledWith({
+      workspace_view: 'content',
+    })
+    screen.rerenderView('content')
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(screen.getByText('Stable document reader')).toBe(reader)
+    expect(reader).toBeVisible()
+    expect(pane.scrollTop).toBe(420)
+    expect(reading.readerMounted).toHaveBeenCalledOnce()
+    expect(reading.readerUnmounted).not.toHaveBeenCalled()
+  })
+
+  it('keeps version history usable to recover an invalid reading revision without remounting its tools', async () => {
+    const screen = renderDetail({
+      mode: 'published',
+      branchId: 'branch-1',
+      invalid: true,
+    })
+    screen.rerenderView('versions')
+    const tools = await screen.findByText('Version tools')
+    screen.rerenderSelection(
+      { mode: 'published', branchId: 'branch-1', pending: true },
+      'resolving-version'
+    )
+    expect(screen.getByText('Version tools')).toBe(tools)
+    act(() =>
+      reading.versionNavigate!({
+        version_id: 'valid-historical-version',
+        branch_id: 'branch-2',
+        workspace_view: 'content',
+      })
+    )
+    expect(screen.changes).toHaveBeenLastCalledWith(
+      {
+        version_id: 'valid-historical-version',
+        branch_id: 'branch-2',
+        workspace_view: 'content',
+        content_mode: 'published',
+        draft_id: undefined,
+      },
+      true
+    )
+    expect(reading.readerMounted).toHaveBeenCalledOnce()
+  })
+
+  it('keeps settings in a single entry and retains document form values across its branch tab', async () => {
+    const screen = renderDetail(selection('draft-a'), { canManage: true })
+    screen.rerenderView('manage')
+    const name = await screen.findByLabelText('Document name')
+    fireEvent.change(name, { target: { value: 'Unsubmitted metadata' } })
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Branches' }), {
+      button: 0,
+    })
+    await screen.findByText('Branch management controls')
+    expect(
+      screen.queryByRole('button', { name: 'Manage branches' })
+    ).not.toBeInTheDocument()
+    expect(name.isConnected).toBe(true)
+    expect(name).not.toBeVisible()
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Document details' }), {
+      button: 0,
+    })
+    expect(screen.getByLabelText('Document name')).toBe(name)
+    expect(name).toHaveValue('Unsubmitted metadata')
+  })
+
+  it('handles native mobile cancellation and returns focus to the opener without discarding chat', async () => {
+    const screen = renderDetail(selection('draft-a'))
+    await screen.findByLabelText('Working draft content')
+    const trigger = screen.getAllByRole('button', {
+      name: 'Document AI',
+    })[0]
+    fireEvent.click(trigger)
+    const question = await screen.findByLabelText('Assistant question')
+    fireEvent.change(question, { target: { value: 'Preserved after Escape' } })
+    const dialog = question.closest('dialog')!
+    fireEvent(dialog, new Event('cancel', { cancelable: true }))
+    expect(dialog).not.toHaveAttribute('open')
+    expect(trigger).toHaveFocus()
+    fireEvent.click(trigger)
+    expect(screen.getByLabelText('Assistant question')).toBe(question)
+    expect(question).toHaveValue('Preserved after Escape')
+  })
+
+  it('wraps mobile assistant keyboard focus at its boundaries while keeping desktop modeless', async () => {
+    const setWide = mockWideLayout(false)
+    const screen = renderDetail(selection('draft-a'))
+    await screen.findByLabelText('Working draft content')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Document AI' })[0])
+    const question = await screen.findByLabelText('Assistant question')
+    const dialog = question.closest('dialog')!
+    const close = within(dialog).getByRole('button', {
+      name: 'Close document AI',
+    })
+    const rectangle = {
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 100,
+      bottom: 30,
+      left: 0,
+      width: 100,
+      height: 30,
+      toJSON: () => ({}),
+    }
+    vi.spyOn(close, 'getClientRects').mockReturnValue([
+      rectangle,
+    ] as unknown as DOMRectList)
+    vi.spyOn(question, 'getClientRects').mockReturnValue([
+      rectangle,
+    ] as unknown as DOMRectList)
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    question.focus()
+    fireEvent.keyDown(question, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(question).toHaveFocus()
+    setWide(true)
+    expect(dialog).not.toHaveAttribute('aria-modal')
+    question.focus()
+    const tab = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    })
+    fireEvent(question, tab)
+    expect(tab.defaultPrevented).toBe(false)
+  })
+
+  it.each([
+    ['dialog', 'dialog-content'],
+    ['alertdialog', 'alert-dialog-content'],
+    ['dialog', 'sheet-content'],
+  ])(
+    'yields mobile AI to any active shared %s instead of starting a second modal scope',
+    async (role, slot) => {
+      const setWide = mockWideLayout(true)
+      const screen = renderDetail(selection('draft-a'), { canManage: true })
+      await screen.findByLabelText('Working draft content')
+      fireEvent.click(screen.getAllByRole('button', { name: 'Document AI' })[1])
+      const question = await screen.findByLabelText('Assistant question')
+      fireEvent.change(question, {
+        target: { value: 'Unsent question behind a form' },
+      })
+      const assistant = question.closest('dialog')!
+      const external = globalThis.document.createElement('div')
+      external.setAttribute('role', role)
+      external.setAttribute('data-slot', slot)
+      external.setAttribute('data-state', 'open')
+      // The breakpoint update must see the live modal synchronously, even before
+      // MutationObserver has delivered the newly inserted portal.
+      act(() => {
+        globalThis.document.body.append(external)
+        setWide(false)
+      })
+      expect(assistant).not.toHaveAttribute('open')
+      expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled()
+      await waitFor(() => expect(assistant).toHaveAttribute('inert'))
+      act(() => external.setAttribute('data-state', 'closed'))
+      await waitFor(() =>
+        expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce()
+      )
+      expect(screen.getByLabelText('Assistant question')).toBe(question)
+      expect(question).toHaveValue('Unsent question behind a form')
+      expect(reading.assistantMounted).toHaveBeenCalledOnce()
+      external.remove()
+    }
+  )
+
+  it('avoids overlapping modal focus scopes when a shared document dialog crosses the mobile breakpoint', async () => {
+    const setWide = mockWideLayout(true)
+    const screen = renderDetail(selection('draft-a'), { canManage: true })
+    await screen.findByLabelText('Working draft content')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Document AI' })[1])
+    const question = await screen.findByLabelText('Assistant question')
+    fireEvent.change(question, {
+      target: { value: 'Keep through share dialog' },
+    })
+    const assistant = question.closest('dialog')!
+    expect(assistant).toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    const share = await screen.findByRole('dialog', { name: 'Share · Guide' })
+    setWide(false)
+    expect(assistant).not.toHaveAttribute('open')
+    expect(assistant).toHaveAttribute('inert')
+    expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled()
+    expect(question).toHaveValue('Keep through share dialog')
+    fireEvent.click(within(share).getByRole('button', { name: 'Close' }))
+    await screen.findByRole('dialog', { name: 'Document AI' })
+    expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('Assistant question')).toBe(question)
+    expect(question).toHaveValue('Keep through share dialog')
+    expect(reading.assistantMounted).toHaveBeenCalledOnce()
+    expect(reading.assistantUnmounted).not.toHaveBeenCalled()
   })
 
   it('shares the exact selected historical version and passes no published version for a draft', async () => {

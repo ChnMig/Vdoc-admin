@@ -20,6 +20,8 @@ const selected: VdocRouteSearch = {
   endpoint_id: 'endpoint-1',
   from_version_id: 'from-1',
   to_version_id: 'to-1',
+  from_branch_id: 'source-branch',
+  to_branch_id: 'target-branch',
   diff_id: 'diff-1',
   content_mode: 'draft',
   workspace_view: 'diffs',
@@ -51,6 +53,8 @@ describe('document workspace navigation', () => {
           version_id: 'version-1',
           from_version_id: 'from-1',
           to_version_id: 'to-1',
+          from_branch_id: 'source-branch',
+          to_branch_id: 'target-branch',
           diff_id: 'diff-1',
         },
       })

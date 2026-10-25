@@ -86,9 +86,11 @@ function endpointTags(endpoint: EndpointSummaryDTO, fallback: string) {
 export function VersionsPage({
   search,
   onSearchChange,
-}: VdocPageDeepLinkProps = {}) {
+  presentation = 'full',
+}: VdocPageDeepLinkProps & { presentation?: 'full' | 'history' } = {}) {
   const { t } = useLanguage()
   const embedded = useWorkspaceEmbedding()
+  const historyOnly = presentation === 'history'
   const authUser = useAuthStore((state) => state.auth.user)
   const {
     projectsQuery,
@@ -104,6 +106,8 @@ export function VersionsPage({
       draft_id: undefined,
       version_id: undefined,
       endpoint_id: undefined,
+      from_branch_id: undefined,
+      to_branch_id: undefined,
       from_version_id: undefined,
       to_version_id: undefined,
       diff_id: undefined,
@@ -126,6 +130,8 @@ export function VersionsPage({
         draft_id: undefined,
         version_id: undefined,
         endpoint_id: undefined,
+        from_branch_id: undefined,
+        to_branch_id: undefined,
         from_version_id: undefined,
         to_version_id: undefined,
         diff_id: undefined,
@@ -147,11 +153,14 @@ export function VersionsPage({
   )
   const [versionSearch, setVersionSearch] = useState('')
   const debouncedVersionSearch = useDebouncedValue(versionSearch.trim())
+  const versionBranchFilter = historyOnly
+    ? undefined
+    : branchFilter || undefined
   const [versionOffset, setVersionOffset] = usePageOffset(
     JSON.stringify([
       projectId,
       documentId,
-      branchFilter,
+      versionBranchFilter,
       debouncedVersionSearch,
     ])
   )
@@ -165,13 +174,15 @@ export function VersionsPage({
   } = useVersionsAndSelection(
     projectId,
     documentId,
-    branchFilter || undefined,
+    versionBranchFilter,
     search?.version_id,
-    (value) =>
+    (value) => {
+      if (historyOnly) return
       onSearchChange?.({
         version_id: value || undefined,
         endpoint_id: undefined,
-      }),
+      })
+    },
     { page_size: 50, offset: versionOffset, search: debouncedVersionSearch }
   )
   const [contentKind, setContentKind] = useState('raw')
@@ -230,7 +241,10 @@ export function VersionsPage({
         { signal }
       ),
     enabled:
-      projectId.length > 0 && documentId.length > 0 && versionId.length > 0,
+      !historyOnly &&
+      projectId.length > 0 &&
+      documentId.length > 0 &&
+      versionId.length > 0,
   })
   const endpointSearch = useDebouncedValue(endpointSearchQuery.trim())
   const [endpointOffset, setEndpointOffset] = usePageOffset(
@@ -254,6 +268,7 @@ export function VersionsPage({
       projectId.length > 0 &&
       documentId.length > 0 &&
       versionId.length > 0 &&
+      !historyOnly &&
       isOpenApiDocument,
   })
   const untaggedLabel = t('admin.developerPortal.untagged')
@@ -267,9 +282,11 @@ export function VersionsPage({
       documentId.length > 0 &&
       versionId.length > 0 &&
       endpointId.length > 0 &&
+      !historyOnly &&
       isOpenApiDocument,
   })
   const invalidBranchDeepLink = Boolean(
+    !historyOnly &&
     branchesQuery.data &&
     search?.branch_id &&
     !branchesQuery.data.items.some((branch) => branch.id === search.branch_id)
@@ -413,194 +430,243 @@ export function VersionsPage({
           options={versionOptions}
         />
       </ContextSelectorGrid>
-      <Tabs
-        value={activeWorkspaceTab}
-        onValueChange={(value) =>
-          setWorkspaceTab({ context: workspaceContext, value })
-        }
-        className='min-w-0 gap-5'
-      >
-        <TabsList className='h-auto max-w-full flex-wrap justify-start'>
-          <TabsTrigger
-            ref={contentTabTriggerRef}
-            value='content'
-            className='h-auto min-h-9 flex-none'
-          >
-            {t('admin.sections.contentViewer')}
-          </TabsTrigger>
-          {isOpenApiDocument && (
-            <TabsTrigger value='endpoints' className='h-auto min-h-9 flex-none'>
-              {t('admin.sections.endpoints')}
+      {historyOnly ? (
+        <VersionsTable
+          versions={versionsQuery.data?.items ?? []}
+          selected={versionId}
+          onSelect={(value) => {
+            const version = versionsQuery.data?.items.find(
+              (version) => version.id === value
+            )
+            if (!version) return
+            setVersionId(value)
+            onSearchChange?.({
+              branch_id: version.branch_id,
+              version_id: value,
+              endpoint_id: undefined,
+              workspace_view: 'content',
+              content_mode: 'published',
+              draft_id: undefined,
+            })
+          }}
+          search={versionSearch}
+          branchLabels={
+            new Map(
+              branchesQuery.data?.items.map((branch) => [
+                branch.id,
+                entityOptionLabel(branch.name, branch.status, t),
+              ])
+            )
+          }
+          onSearchChange={setVersionSearch}
+          loadingState={versionsQuery}
+          pagination={
+            <QueryPagination
+              offset={versionOffset}
+              count={versionsQuery.data?.items.length ?? 0}
+              total={versionsQuery.data?.total}
+              hasMore={versionsQuery.data?.hasMore ?? false}
+              busy={versionsQuery.isFetching}
+              onPrevious={() => setVersionOffset(versionOffset - 50)}
+              onNext={() => setVersionOffset(versionOffset + 50)}
+            />
+          }
+        />
+      ) : (
+        <Tabs
+          value={activeWorkspaceTab}
+          onValueChange={(value) =>
+            setWorkspaceTab({ context: workspaceContext, value })
+          }
+          className='min-w-0 gap-5'
+        >
+          <TabsList className='h-auto max-w-full flex-wrap justify-start'>
+            <TabsTrigger
+              ref={contentTabTriggerRef}
+              value='content'
+              className='h-auto min-h-9 flex-none'
+            >
+              {t('admin.sections.contentViewer')}
             </TabsTrigger>
-          )}
-          <TabsTrigger value='versions' className='h-auto min-h-9 flex-none'>
-            {t('admin.sections.versions')}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value='versions' className='grid min-w-0 gap-4'>
-          <VersionsTable
-            versions={versionsQuery.data?.items ?? []}
-            selected={versionId}
-            onSelect={(value) => {
-              handleVersionChange(value)
-              contentTabTriggerRef.current?.focus()
-            }}
-            search={versionSearch}
-            onSearchChange={setVersionSearch}
-            loadingState={versionsQuery}
-            pagination={
-              <QueryPagination
-                offset={versionOffset}
-                count={versionsQuery.data?.items.length ?? 0}
-                total={versionsQuery.data?.total}
-                hasMore={versionsQuery.data?.hasMore ?? false}
-                busy={versionsQuery.isFetching}
-                onPrevious={() => setVersionOffset(versionOffset - 50)}
-                onNext={() => setVersionOffset(versionOffset + 50)}
-              />
-            }
-          />
-        </TabsContent>
-        <TabsContent value='content' className='grid min-w-0 gap-5'>
-          <CollectionCard
-            title={t('admin.sections.contentViewer')}
-            description={selectedVersion?.changelog}
-          >
-            <div className='flex min-w-0 flex-wrap items-end justify-between gap-4'>
-              {selectedVersion && (
-                <div className='flex min-w-0 flex-wrap items-center gap-3 text-sm'>
-                  <span className='font-medium break-all'>
-                    {selectedVersion.version_name}
-                  </span>
-                  <StatusBadge>
-                    {versionStatusLabel(selectedVersion.status, t)}
-                  </StatusBadge>
-                  <span className='text-muted-foreground'>
-                    {formatDate(selectedVersion.published_at)}
-                  </span>
-                </div>
-              )}
-              <div className='w-full sm:w-48'>
-                <NativeSelect
-                  label={t('admin.fields.contentKind')}
-                  value={activeVersionContentKind}
-                  onChange={setContentKind}
-                  placeholder={t('admin.types.raw')}
-                  options={versionContentKindOptions}
-                />
-              </div>
-            </div>
-            <LoadingErrorState state={contentQuery} />
-            {selectedVersionContent && isPlainTextDocument ? (
-              <div className='max-h-[36rem] min-w-0 overflow-auto'>
-                <PlainTextDocumentViewer content={selectedVersionContent} />
-              </div>
-            ) : selectedVersionContent ? (
-              <pre className='max-h-[36rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
-                {selectedVersionContent}
-              </pre>
-            ) : (
-              <p className='text-sm text-muted-foreground'>
-                {t('admin.common.empty')}
-              </p>
+            {isOpenApiDocument && (
+              <TabsTrigger
+                value='endpoints'
+                className='h-auto min-h-9 flex-none'
+              >
+                {t('admin.sections.endpoints')}
+              </TabsTrigger>
             )}
-          </CollectionCard>
-          {isMarkdownDocument && (
-            <>
-              {selectedVersionContent && (
-                <MarkdownPreview content={selectedVersionContent} />
-              )}
-              <MarkdownFactsCard content={selectedVersionContent} />
-            </>
-          )}
-        </TabsContent>
-        {isOpenApiDocument && (
-          <TabsContent value='endpoints' className='grid min-w-0 gap-4'>
-            <dl className='flex min-w-0 flex-wrap gap-x-6 gap-y-3 border-b pb-4 text-sm'>
-              {[
-                [
-                  t('admin.developerPortal.endpointCount'),
-                  String(endpointsQuery.data?.total ?? visibleEndpoints.length),
-                ],
-                [t('admin.developerPortal.methodCount'), String(methodCount)],
-                [t('admin.developerPortal.tagCount'), String(tagCount)],
-              ].map(([label, value]) => (
-                <div key={label} className='flex items-baseline gap-2'>
-                  <dt className='text-muted-foreground'>{label}</dt>
-                  <dd className='font-semibold tabular-nums'>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <EndpointsCard
-              endpoints={visibleEndpoints}
-              selected={endpointId}
+            <TabsTrigger value='versions' className='h-auto min-h-9 flex-none'>
+              {t('admin.sections.versions')}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value='versions' className='grid min-w-0 gap-4'>
+            <VersionsTable
+              versions={versionsQuery.data?.items ?? []}
+              selected={versionId}
               onSelect={(value) => {
-                setEndpointId(value)
-                onSearchChange?.({ endpoint_id: value || undefined })
+                handleVersionChange(value)
+                contentTabTriggerRef.current?.focus()
               }}
-              detail={endpointQuery.data}
-              groupMode={endpointGroupMode}
-              untaggedLabel={untaggedLabel}
-              toolbar={
-                <div className='grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]'>
-                  <div className='grid gap-2'>
-                    <Label htmlFor='endpoint-search'>
-                      {t('admin.developerPortal.searchLabel')}
-                    </Label>
-                    <div className='relative'>
-                      <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-                      <Input
-                        id='endpoint-search'
-                        value={endpointSearchQuery}
-                        onChange={(event) =>
-                          setEndpointSearchQuery(event.currentTarget.value)
-                        }
-                        placeholder={t(
-                          'admin.developerPortal.searchPlaceholder'
-                        )}
-                        className='ps-9'
-                      />
-                    </div>
-                  </div>
-                  <NativeSelect
-                    label={t('admin.developerPortal.groupBy')}
-                    value={endpointGroupMode}
-                    onChange={(value) =>
-                      setEndpointGroupMode(parseEndpointGroupMode(value))
-                    }
-                    placeholder={t('admin.developerPortal.groupByTag')}
-                    options={[
-                      {
-                        value: 'tag',
-                        label: t('admin.developerPortal.groupByTag'),
-                      },
-                      {
-                        value: 'method',
-                        label: t('admin.developerPortal.groupByMethod'),
-                      },
-                    ]}
-                  />
-                </div>
-              }
-              loadingState={
-                endpointsQuery.isError ? endpointsQuery : endpointQuery
-              }
+              search={versionSearch}
+              onSearchChange={setVersionSearch}
+              loadingState={versionsQuery}
               pagination={
                 <QueryPagination
-                  offset={endpointOffset}
-                  count={visibleEndpoints.length}
-                  total={endpointsQuery.data?.total}
-                  hasMore={endpointsQuery.data?.hasMore ?? false}
-                  busy={endpointsQuery.isFetching}
-                  onPrevious={() => setEndpointOffset(endpointOffset - 50)}
-                  onNext={() => setEndpointOffset(endpointOffset + 50)}
+                  offset={versionOffset}
+                  count={versionsQuery.data?.items.length ?? 0}
+                  total={versionsQuery.data?.total}
+                  hasMore={versionsQuery.data?.hasMore ?? false}
+                  busy={versionsQuery.isFetching}
+                  onPrevious={() => setVersionOffset(versionOffset - 50)}
+                  onNext={() => setVersionOffset(versionOffset + 50)}
                 />
               }
             />
           </TabsContent>
-        )}
-      </Tabs>
-      {!embedded && (
+          <TabsContent value='content' className='grid min-w-0 gap-5'>
+            <CollectionCard
+              title={t('admin.sections.contentViewer')}
+              description={selectedVersion?.changelog}
+            >
+              <div className='flex min-w-0 flex-wrap items-end justify-between gap-4'>
+                {selectedVersion && (
+                  <div className='flex min-w-0 flex-wrap items-center gap-3 text-sm'>
+                    <span className='font-medium break-all'>
+                      {selectedVersion.version_name}
+                    </span>
+                    <StatusBadge>
+                      {versionStatusLabel(selectedVersion.status, t)}
+                    </StatusBadge>
+                    <span className='text-muted-foreground'>
+                      {formatDate(selectedVersion.published_at)}
+                    </span>
+                  </div>
+                )}
+                <div className='w-full sm:w-48'>
+                  <NativeSelect
+                    label={t('admin.fields.contentKind')}
+                    value={activeVersionContentKind}
+                    onChange={setContentKind}
+                    placeholder={t('admin.types.raw')}
+                    options={versionContentKindOptions}
+                  />
+                </div>
+              </div>
+              <LoadingErrorState state={contentQuery} />
+              {selectedVersionContent && isPlainTextDocument ? (
+                <div className='max-h-[36rem] min-w-0 overflow-auto'>
+                  <PlainTextDocumentViewer content={selectedVersionContent} />
+                </div>
+              ) : selectedVersionContent ? (
+                <pre className='max-h-[36rem] overflow-auto rounded-md border bg-[var(--surface-control)] p-4 text-xs leading-relaxed text-foreground'>
+                  {selectedVersionContent}
+                </pre>
+              ) : (
+                <p className='text-sm text-muted-foreground'>
+                  {t('admin.common.empty')}
+                </p>
+              )}
+            </CollectionCard>
+            {isMarkdownDocument && (
+              <>
+                {selectedVersionContent && (
+                  <MarkdownPreview content={selectedVersionContent} />
+                )}
+                <MarkdownFactsCard content={selectedVersionContent} />
+              </>
+            )}
+          </TabsContent>
+          {isOpenApiDocument && (
+            <TabsContent value='endpoints' className='grid min-w-0 gap-4'>
+              <dl className='flex min-w-0 flex-wrap gap-x-6 gap-y-3 border-b pb-4 text-sm'>
+                {[
+                  [
+                    t('admin.developerPortal.endpointCount'),
+                    String(
+                      endpointsQuery.data?.total ?? visibleEndpoints.length
+                    ),
+                  ],
+                  [t('admin.developerPortal.methodCount'), String(methodCount)],
+                  [t('admin.developerPortal.tagCount'), String(tagCount)],
+                ].map(([label, value]) => (
+                  <div key={label} className='flex items-baseline gap-2'>
+                    <dt className='text-muted-foreground'>{label}</dt>
+                    <dd className='font-semibold tabular-nums'>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <EndpointsCard
+                endpoints={visibleEndpoints}
+                selected={endpointId}
+                onSelect={(value) => {
+                  setEndpointId(value)
+                  onSearchChange?.({ endpoint_id: value || undefined })
+                }}
+                detail={endpointQuery.data}
+                groupMode={endpointGroupMode}
+                untaggedLabel={untaggedLabel}
+                toolbar={
+                  <div className='grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]'>
+                    <div className='grid gap-2'>
+                      <Label htmlFor='endpoint-search'>
+                        {t('admin.developerPortal.searchLabel')}
+                      </Label>
+                      <div className='relative'>
+                        <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+                        <Input
+                          id='endpoint-search'
+                          value={endpointSearchQuery}
+                          onChange={(event) =>
+                            setEndpointSearchQuery(event.currentTarget.value)
+                          }
+                          placeholder={t(
+                            'admin.developerPortal.searchPlaceholder'
+                          )}
+                          className='ps-9'
+                        />
+                      </div>
+                    </div>
+                    <NativeSelect
+                      label={t('admin.developerPortal.groupBy')}
+                      value={endpointGroupMode}
+                      onChange={(value) =>
+                        setEndpointGroupMode(parseEndpointGroupMode(value))
+                      }
+                      placeholder={t('admin.developerPortal.groupByTag')}
+                      options={[
+                        {
+                          value: 'tag',
+                          label: t('admin.developerPortal.groupByTag'),
+                        },
+                        {
+                          value: 'method',
+                          label: t('admin.developerPortal.groupByMethod'),
+                        },
+                      ]}
+                    />
+                  </div>
+                }
+                loadingState={
+                  endpointsQuery.isError ? endpointsQuery : endpointQuery
+                }
+                pagination={
+                  <QueryPagination
+                    offset={endpointOffset}
+                    count={visibleEndpoints.length}
+                    total={endpointsQuery.data?.total}
+                    hasMore={endpointsQuery.data?.hasMore ?? false}
+                    busy={endpointsQuery.isFetching}
+                    onPrevious={() => setEndpointOffset(endpointOffset - 50)}
+                    onNext={() => setEndpointOffset(endpointOffset + 50)}
+                  />
+                }
+              />
+            </TabsContent>
+          )}
+        </Tabs>
+      )}
+      {!embedded && !historyOnly && (
         <AIContextPanel
           target={selectedVersionAITarget}
           interactive={selectedVersionAIInteractive}
@@ -619,6 +685,7 @@ function VersionsTable({
   onSearchChange,
   loadingState,
   pagination,
+  branchLabels,
 }: {
   versions: VersionDTO[]
   selected: string
@@ -627,6 +694,7 @@ function VersionsTable({
   onSearchChange: (value: string) => void
   loadingState: React.ComponentProps<typeof LoadingErrorState>['state']
   pagination: React.ReactNode
+  branchLabels?: ReadonlyMap<string, string>
 }) {
   const { t } = useLanguage()
   return (
@@ -649,6 +717,9 @@ function VersionsTable({
           <TableHeader>
             <TableRow>
               <TableHead>{t('admin.fields.versionName')}</TableHead>
+              {branchLabels && (
+                <TableHead>{t('admin.fields.branch')}</TableHead>
+              )}
               <TableHead>{t('admin.fields.status')}</TableHead>
               <TableHead>{t('admin.fields.createdAt')}</TableHead>
             </TableRow>
@@ -671,6 +742,11 @@ function VersionsTable({
                     {version.changelog}
                   </div>
                 </TableCell>
+                {branchLabels && (
+                  <TableCell>
+                    {branchLabels.get(version.branch_id) ?? version.branch_id}
+                  </TableCell>
+                )}
                 <TableCell>
                   <StatusBadge>
                     {versionStatusLabel(version.status, t)}

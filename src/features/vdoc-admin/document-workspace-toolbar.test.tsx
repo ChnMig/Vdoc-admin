@@ -50,7 +50,6 @@ function renderToolbar(
     onBranchChange: vi.fn(),
     onModeChange: vi.fn(),
     onRevisionChange: vi.fn(),
-    onManageBranches: vi.fn(),
   }
   const element = (nextSelection: DocumentReadingSelection) => (
     <LanguageProvider>
@@ -59,7 +58,6 @@ function renderToolbar(
         branches={[branch]}
         versions={emptyRevisions ? [] : [version]}
         drafts={emptyRevisions ? [] : [draft]}
-        canManage={false}
         {...callbacks}
       />
     </LanguageProvider>
