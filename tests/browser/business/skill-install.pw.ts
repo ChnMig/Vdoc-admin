@@ -3,10 +3,8 @@ import { expect, test } from '@playwright/test'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const guideUrls = {
-  release: 'https://chnmig.github.io/Vdoc-site/skill-install.md',
-  beta: 'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.14/docs/public/skill-install.md',
-}
+const guide =
+  'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.14/docs/public/skill-install.md'
 
 for (const language of ['en', 'zh-CN'] as const) {
   for (const channel of ['release', 'beta'] as const) {
@@ -64,16 +62,22 @@ for (const language of ['en', 'zh-CN'] as const) {
         await page.goto('/skill')
         const title =
           language === 'en'
-            ? 'Let AI install or update'
-            : '让 AI 帮你安装或更新'
+            ? 'Let AI install, update, or uninstall'
+            : '让 AI 帮你安装、更新或卸载'
         const section = page.getByRole('region', { name: title })
         await expect(section).toBeVisible()
-        const guide = guideUrls[channel]
-        for (const action of ['install', 'update'] as const) {
-          if (action === 'update') {
+        for (const action of ['install', 'update', 'uninstall'] as const) {
+          if (action !== 'install') {
             await section
               .getByRole('button', {
-                name: language === 'en' ? 'Update' : '更新',
+                name:
+                  language === 'en'
+                    ? action === 'update'
+                      ? 'Update'
+                      : 'Uninstall'
+                    : action === 'update'
+                      ? '更新'
+                      : '卸载',
                 exact: true,
               })
               .click()
@@ -83,9 +87,13 @@ for (const language of ['en', 'zh-CN'] as const) {
               ? language === 'en'
                 ? `Read ${guide} and install the Vdoc Skill in the current project using the ${channel} channel.`
                 : `请阅读 ${guide}，帮我把 Vdoc Skill 安装到当前项目，使用 ${channel} 渠道。`
-              : language === 'en'
-                ? `Read ${guide} and update this project's Vdoc MCP and Skill to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
-                : `请阅读 ${guide}，将当前项目的 Vdoc MCP 和 Skill 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
+              : action === 'update'
+                ? language === 'en'
+                  ? `Read ${guide} and update this project's Vdoc MCP and Skill to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
+                  : `请阅读 ${guide}，将当前项目的 Vdoc MCP 和 Skill 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
+                : language === 'en'
+                  ? `Read ${guide} and uninstall the current project's Vdoc MCP and Skill integration, preserving installations shared with other projects and other tool configurations.`
+                  : `请阅读 ${guide}，卸载当前项目的 Vdoc MCP 和 Skill 接入，保留其他项目共用的安装以及其他工具配置。`
           await expect(
             section.getByText(sentence, { exact: true })
           ).toBeVisible()
@@ -120,7 +128,7 @@ for (const language of ['en', 'zh-CN'] as const) {
           ).toBe(true)
           const directory = resolve(
             '..',
-            '.artifacts/ai-skill-update-20261026/screenshots'
+            '.artifacts/ai-skill-update-20261026/screenshots-uninstall'
           )
           await mkdir(directory, { recursive: true })
           await page.screenshot({
@@ -137,10 +145,14 @@ for (const language of ['en', 'zh-CN'] as const) {
                 language === 'en'
                   ? action === 'install'
                     ? 'Copy install prompt'
-                    : 'Copy update prompt'
+                    : action === 'update'
+                      ? 'Copy update prompt'
+                      : 'Copy uninstall prompt'
                   : action === 'install'
                     ? '复制安装提示词'
-                    : '复制更新提示词',
+                    : action === 'update'
+                      ? '复制更新提示词'
+                      : '复制卸载提示词',
             })
             .click()
           await expect
