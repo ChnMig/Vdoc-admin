@@ -67,6 +67,80 @@ it('copies the Chinese install request in the Chinese interface', async () => {
   )
 })
 
+it.each([
+  ['en', 'release'],
+  ['en', 'beta'],
+  ['zh-CN', 'release'],
+  ['zh-CN', 'beta'],
+] as const)(
+  'copies the full %s update request for %s',
+  async (language, channel) => {
+    document.cookie = `${LANGUAGE_COOKIE_NAME}=${language}; path=/`
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    const screen = render(prompt(channel))
+    const update = screen.getByRole('button', {
+      name: language === 'en' ? 'Update' : '更新',
+    })
+    fireEvent.click(update)
+    expect(update).toHaveAttribute('aria-pressed', 'true')
+    const expectedGuide = channel === 'beta' ? betaGuideUrl : guideUrl
+    const sentence =
+      language === 'en'
+        ? `Read ${expectedGuide} and update this project's Vdoc MCP and Skill to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
+        : `请阅读 ${expectedGuide}，将当前项目的 Vdoc MCP 和 Skill 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: language === 'en' ? 'Copy update prompt' : '复制更新提示词',
+      })
+    )
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(sentence))
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        language === 'en' ? 'Copied' : '已复制'
+      )
+    )
+    expect(screen.getByText(sentence, { exact: true })).toBeVisible()
+  }
+)
+
+it('prevents overlapping clipboard writes when switching from installation to updating', async () => {
+  let complete!: () => void
+  const writeText = vi
+    .fn()
+    .mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        complete = resolve
+      })
+    )
+    .mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { clipboard: { writeText } })
+  const screen = render(prompt('beta'))
+  fireEvent.click(screen.getByRole('button', { name: 'Copy install prompt' }))
+  expect(screen.getByRole('button', { name: 'Copying…' })).toBeDisabled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+  const pending = screen.getByRole('button', { name: 'Copying…' })
+  expect(pending).toBeDisabled()
+  fireEvent.click(pending)
+  expect(writeText).toHaveBeenCalledTimes(1)
+  await act(async () => complete())
+
+  expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  const copyUpdate = screen.getByRole('button', { name: 'Copy update prompt' })
+  expect(copyUpdate).toBeEnabled()
+  fireEvent.click(copyUpdate)
+  await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+  expect(writeText).toHaveBeenLastCalledWith(
+    `Read ${betaGuideUrl} and update this project's Vdoc MCP and Skill to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
+  )
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent('Copied')
+  )
+})
+
 it('keeps the install request selectable when clipboard access fails', async () => {
   const writeText = vi.fn().mockRejectedValue(new Error('Clipboard denied'))
   vi.stubGlobal('navigator', { clipboard: { writeText } })

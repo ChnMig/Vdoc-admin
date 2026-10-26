@@ -63,70 +63,101 @@ for (const language of ['en', 'zh-CN'] as const) {
         })
         await page.goto('/skill')
         const title =
-          language === 'en' ? 'Let AI install the Skill' : '让 AI 帮你安装'
+          language === 'en'
+            ? 'Let AI install or update'
+            : '让 AI 帮你安装或更新'
         const section = page.getByRole('region', { name: title })
         await expect(section).toBeVisible()
         const guide = guideUrls[channel]
-        const sentence =
-          language === 'en'
-            ? `Read ${guide} and install the Vdoc Skill in the current project using the ${channel} channel.`
-            : `请阅读 ${guide}，帮我把 Vdoc Skill 安装到当前项目，使用 ${channel} 渠道。`
-        await expect(section.getByText(sentence, { exact: true })).toBeVisible()
-        await expect(section.getByRole('link')).toHaveAttribute('href', guide)
-        expect(
-          await page.evaluate(
-            () => document.documentElement.scrollWidth <= window.innerWidth
+        for (const action of ['install', 'update'] as const) {
+          if (action === 'update') {
+            await section
+              .getByRole('button', {
+                name: language === 'en' ? 'Update' : '更新',
+                exact: true,
+              })
+              .click()
+          }
+          const sentence =
+            action === 'install'
+              ? language === 'en'
+                ? `Read ${guide} and install the Vdoc Skill in the current project using the ${channel} channel.`
+                : `请阅读 ${guide}，帮我把 Vdoc Skill 安装到当前项目，使用 ${channel} 渠道。`
+              : language === 'en'
+                ? `Read ${guide} and update this project's Vdoc MCP and Skill to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
+                : `请阅读 ${guide}，将当前项目的 Vdoc MCP 和 Skill 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
+          await expect(
+            section.getByText(sentence, { exact: true })
+          ).toBeVisible()
+          await expect(section.getByRole('link')).toHaveAttribute('href', guide)
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= window.innerWidth
+            )
+          ).toBe(true)
+          expect(
+            await section.evaluate(
+              (element) => element.scrollWidth <= element.clientWidth
+            )
+          ).toBe(true)
+          expect(
+            await section
+              .getByText(sentence, { exact: true })
+              .evaluate((element) => {
+                const bounds = element
+                  .closest('section')!
+                  .getBoundingClientRect()
+                const range = document.createRange()
+                range.selectNodeContents(element)
+                return Array.from(range.getClientRects()).every(
+                  (rect) =>
+                    rect.left >= bounds.left - 0.5 &&
+                    rect.right <= bounds.right + 0.5 &&
+                    rect.top >= bounds.top - 0.5 &&
+                    rect.bottom <= bounds.bottom + 0.5
+                )
+              })
+          ).toBe(true)
+          const directory = resolve(
+            '..',
+            '.artifacts/ai-skill-update-20261026/screenshots'
           )
-        ).toBe(true)
-        expect(
-          await section.evaluate(
-            (element) => element.scrollWidth <= element.clientWidth
-          )
-        ).toBe(true)
-        expect(
+          await mkdir(directory, { recursive: true })
+          await page.screenshot({
+            path: resolve(
+              directory,
+              `admin-${action}-${language}-${channel}-${width}.png`
+            ),
+            fullPage: true,
+            animations: 'disabled',
+          })
           await section
-            .getByText(sentence, { exact: true })
-            .evaluate((element) => {
-              const bounds = element.closest('section')!.getBoundingClientRect()
-              const range = document.createRange()
-              range.selectNodeContents(element)
-              return Array.from(range.getClientRects()).every(
-                (rect) =>
-                  rect.left >= bounds.left - 0.5 &&
-                  rect.right <= bounds.right + 0.5 &&
-                  rect.top >= bounds.top - 0.5 &&
-                  rect.bottom <= bounds.bottom + 0.5
-              )
+            .getByRole('button', {
+              name:
+                language === 'en'
+                  ? action === 'install'
+                    ? 'Copy install prompt'
+                    : 'Copy update prompt'
+                  : action === 'install'
+                    ? '复制安装提示词'
+                    : '复制更新提示词',
             })
-        ).toBe(true)
-        const directory = resolve(
-          '..',
-          '.artifacts/ai-skill-install-20261026/screenshots'
-        )
-        await mkdir(directory, { recursive: true })
-        await page.screenshot({
-          path: resolve(directory, `admin-${language}-${channel}-${width}.png`),
-          fullPage: true,
-        })
-        await section
-          .getByRole('button', {
-            name: language === 'en' ? 'Copy install prompt' : '复制安装提示词',
-          })
-          .click()
-        await expect
-          .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-          .toBe(sentence)
-        await expect(
-          section.getByRole('button', {
-            name: language === 'en' ? 'Copied' : '已复制',
-          })
-        ).toBeVisible()
-        const id = await section.getAttribute('aria-labelledby')
-        const result = await new AxeBuilder({ page })
-          .include(`section[aria-labelledby="${id}"]`)
-          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
-          .analyze()
-        expect(result.violations).toEqual([])
+            .click()
+          await expect
+            .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+            .toBe(sentence)
+          await expect(
+            section.getByRole('button', {
+              name: language === 'en' ? 'Copied' : '已复制',
+            })
+          ).toBeVisible()
+          const id = await section.getAttribute('aria-labelledby')
+          const result = await new AxeBuilder({ page })
+            .include(`section[aria-labelledby="${id}"]`)
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+            .analyze()
+          expect(result.violations).toEqual([])
+        }
       })
     }
   }
