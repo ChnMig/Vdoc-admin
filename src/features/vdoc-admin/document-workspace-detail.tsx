@@ -461,14 +461,6 @@ export function DocumentWorkspaceDetail({
                   />
                 ))}
                 <div ref={contentRootRef}>
-                  <div className='mb-7'>
-                    <h1 className='text-[1.75rem] leading-snug font-semibold tracking-[-0.025em] break-words sm:text-[2.125rem]'>
-                      {document.name}
-                    </h1>
-                    <p className='mt-3 text-xs leading-5 break-all text-muted-foreground'>
-                      {document.relative_path ?? document.file_name}
-                    </p>
-                  </div>
                   <DocumentWorkspaceContent
                     projectId={projectId}
                     document={document}

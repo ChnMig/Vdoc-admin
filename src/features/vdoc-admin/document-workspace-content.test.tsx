@@ -194,6 +194,82 @@ describe('document workspace reading selection', () => {
     expect(api.getVersionContent.mock.calls[0][2]).toBe('older-version')
   })
 
+  it('separates document metadata from Markdown and switches views locally with one labeled icon button', async () => {
+    const source =
+      '# Release guide\n\n## Content section\n\n**Reviewed content**'
+    api.getVersionContent.mockResolvedValue({ content: source })
+    const screen = renderReader(publishedSelection, {
+      presentation: 'page',
+      documentType: 2,
+    })
+    const heading = await screen.findByRole('heading', {
+      name: 'Content section',
+    })
+    const metadata = screen.container.querySelector<HTMLElement>(
+      '[data-document-reading-header]'
+    )!
+    const body = screen.container.querySelector<HTMLElement>(
+      '[data-document-content]'
+    )!
+    expect(metadata).toHaveTextContent('Release guide')
+    expect(metadata).toHaveTextContent('File path')
+    expect(metadata).toHaveTextContent('release.txt')
+    expect(body).toContainElement(heading)
+    expect(body).not.toContainElement(metadata)
+    expect(body).not.toContainElement(
+      screen.getByRole('heading', { name: 'Release guide' })
+    )
+    expect(
+      screen.queryByRole('tab', { name: 'Preview' })
+    ).not.toBeInTheDocument()
+
+    const toggle = screen.getByRole('button', { name: 'Switch to source' })
+    const previewIcon = toggle.querySelector('svg')!.innerHTML
+    toggle.focus()
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Switch to preview' })).toBe(
+      toggle
+    )
+    expect(toggle).toHaveFocus()
+    expect(toggle.querySelector('svg')!.innerHTML).not.toBe(previewIcon)
+    expect(body.querySelector('pre')).toHaveTextContent('# Release guide')
+    expect(body.querySelector('h2')).toBeNull()
+
+    screen.rerenderSelection({ mode: 'draft', branchId: 'branch-1', draft })
+    await screen.findByText('Selected draft content', { selector: 'pre' })
+    const draftBody = screen.container.querySelector<HTMLElement>(
+      '[data-document-content]'
+    )!
+    expect(screen.getByRole('button', { name: 'Switch to preview' })).toBe(
+      toggle
+    )
+    fireEvent.click(toggle)
+    expect(screen.getByRole('button', { name: 'Switch to source' })).toBe(
+      toggle
+    )
+    expect(draftBody.querySelector('article')).toHaveTextContent(
+      'Selected draft content'
+    )
+    expect(api.getVersionContent).toHaveBeenCalledOnce()
+    expect(api.getDraftContent).toHaveBeenCalledOnce()
+  })
+
+  it('retains metadata while a Markdown selection is pending and disables its view control', () => {
+    const screen = renderReader(
+      { ...publishedSelection, pending: true },
+      {
+        presentation: 'page',
+        documentType: 2,
+      }
+    )
+    expect(screen.getByRole('heading', { name: 'Release guide' })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Switch to source' })
+    ).toBeDisabled()
+    expect(screen.container.querySelector('[data-document-content]')).toBeNull()
+    expect(api.getVersionContent).not.toHaveBeenCalled()
+  })
+
   it('aborts the old request and does not show late published content after switching to a draft', async () => {
     const oldContent = deferred<{ content: string }>()
     const draftContent = deferred<{ content: string }>()

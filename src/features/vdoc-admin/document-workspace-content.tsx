@@ -1,6 +1,13 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, FileText, GitBranch, SquarePen } from 'lucide-react'
+import {
+  AlertCircle,
+  Code2,
+  Eye,
+  FileText,
+  GitBranch,
+  SquarePen,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   getDraftContent,
@@ -14,8 +21,14 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { OpenApiCodeViewer } from '@/features/public-share/openapi-code-viewer'
 import { PlainTextDocumentViewer } from '@/features/public-share/plain-text-document-viewer'
+import { DocumentTypeIcon } from './document-type-icon'
 import { MarkdownPreview } from './markdown-preview'
 import {
   DOCUMENT_TYPE_MARKDOWN,
@@ -59,7 +72,8 @@ export function DocumentWorkspaceContent({
   onEndpointChange?: (value: string) => void
 }) {
   const { t } = useLanguage()
-  const [view, setView] = useState('preview')
+  const [view, setView] = useState<'preview' | 'source'>('preview')
+  const viewContentId = useId()
   const [openApiView, setOpenApiView] = useState({
     context: '',
     value: 'source',
@@ -111,20 +125,106 @@ export function DocumentWorkspaceContent({
     enabled: Boolean(targetId) && showSource,
     placeholderData: undefined,
   })
+  const content = contentQuery.isSuccess
+    ? contentQuery.data?.content
+    : undefined
+  const canSwitchView = Boolean(
+    targetId &&
+    !selection?.pending &&
+    !invalid &&
+    contentQuery.isSuccess &&
+    content
+  )
+  const viewControl = document.document_type === DOCUMENT_TYPE_MARKDOWN && (
+    <div
+      className='flex shrink-0 items-center gap-3 self-end @md:self-center'
+      data-document-view-control
+    >
+      <span className='text-xs text-muted-foreground'>
+        {t('admin.workspace.viewMode')}
+      </span>
+      <div className='flex items-center gap-2'>
+        <span className='text-xs font-medium'>
+          {t(`admin.workspace.${view}`)}
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type='button'
+              variant='outline'
+              size='icon'
+              aria-label={t(
+                view === 'preview'
+                  ? 'admin.workspace.switchToSource'
+                  : 'admin.workspace.switchToPreview'
+              )}
+              aria-controls={canSwitchView ? viewContentId : undefined}
+              disabled={!canSwitchView}
+              onClick={() =>
+                setView((current) =>
+                  current === 'preview' ? 'source' : 'preview'
+                )
+              }
+            >
+              {view === 'preview' ? <Eye aria-hidden /> : <Code2 aria-hidden />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t(
+              view === 'preview'
+                ? 'admin.workspace.switchToSource'
+                : 'admin.workspace.switchToPreview'
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  )
+  const renderReader = (body: ReactNode) => (
+    <>
+      {presentation === 'page' && (
+        <header
+          aria-label={t('admin.workspace.documentDetails')}
+          data-document-reading-header
+          className='@container mb-6 grid min-w-0 gap-4 rounded-lg border bg-[var(--surface-control)] p-4 sm:p-5'
+        >
+          <h1 className='flex min-w-0 items-start gap-2.5 text-lg leading-7 font-semibold sm:text-xl'>
+            <DocumentTypeIcon
+              documentType={document.document_type}
+              className='mt-1 size-5 text-muted-foreground'
+            />
+            <span className='min-w-0 break-words'>{document.name}</span>
+          </h1>
+          <div className='flex min-w-0 flex-col gap-x-5 gap-y-3 border-t pt-3 @md:flex-row @md:items-center @md:justify-between'>
+            <dl className='grid min-w-0 flex-1 gap-1 text-xs leading-5'>
+              <dt className='text-muted-foreground'>
+                {t('admin.workspace.filePath')}
+              </dt>
+              <dd className='font-mono break-all'>
+                {document.relative_path || document.file_name}
+              </dd>
+            </dl>
+            {viewControl}
+          </div>
+        </header>
+      )}
+      {body}
+    </>
+  )
   if (selection?.pending)
-    return (
+    return renderReader(
       <p role='status' className='px-1 py-8 text-sm text-muted-foreground'>
         {t('admin.common.loading')}
       </p>
     )
   if (invalid)
-    return (
+    return renderReader(
       <p role='status' className='px-1 py-8 text-sm text-muted-foreground'>
         {t('admin.workspace.readerUnavailable')}
       </p>
     )
   if (!targetId)
-    return (
+    return renderReader(
       <div className='grid min-h-64 place-content-center justify-items-center gap-4 px-6 py-12 text-center'>
         <FileText aria-hidden className='size-9 text-muted-foreground' />
         <p className='max-w-md text-sm leading-6 text-muted-foreground'>
@@ -144,10 +244,7 @@ export function DocumentWorkspaceContent({
         )}
       </div>
     )
-  const content = contentQuery.isSuccess
-    ? contentQuery.data?.content
-    : undefined
-  return (
+  return renderReader(
     <section className='grid min-w-0 gap-4'>
       {presentation !== 'page' && (
         <div className='flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-4'>
@@ -279,38 +376,28 @@ export function DocumentWorkspaceContent({
         content !== '' && (
           <div data-document-content className='min-w-0'>
             {document.document_type === DOCUMENT_TYPE_MARKDOWN ? (
-              <Tabs
-                value={view}
-                onValueChange={setView}
-                className='min-w-0 gap-4'
-              >
-                <TabsList>
-                  <TabsTrigger value='preview'>
-                    {t('admin.workspace.preview')}
-                  </TabsTrigger>
-                  <TabsTrigger value='source'>
-                    {t('admin.workspace.source')}
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent
-                  value='preview'
+              <div className='grid min-w-0 gap-4'>
+                {presentation !== 'page' && viewControl}
+                <div
+                  id={viewContentId}
                   className={cn(
                     'w-full min-w-0',
                     presentation === 'page' ? '' : 'mx-auto max-w-[75ch]'
                   )}
                 >
-                  <MarkdownPreview
-                    content={content}
-                    variant={presentation === 'page' ? 'article' : 'panel'}
-                    documentTitle={document.name}
-                  />
-                </TabsContent>
-                <TabsContent value='source' className='min-w-0'>
-                  <pre className='max-w-full overflow-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-6'>
-                    {content}
-                  </pre>
-                </TabsContent>
-              </Tabs>
+                  {view === 'preview' ? (
+                    <MarkdownPreview
+                      content={content}
+                      variant={presentation === 'page' ? 'article' : 'panel'}
+                      documentTitle={document.name}
+                    />
+                  ) : (
+                    <pre className='max-w-full overflow-auto rounded-md bg-[var(--surface-control)] p-4 font-mono text-xs leading-6'>
+                      {content}
+                    </pre>
+                  )}
+                </div>
+              </div>
             ) : document.document_type === DOCUMENT_TYPE_TEXT ? (
               <PlainTextDocumentViewer
                 content={content}

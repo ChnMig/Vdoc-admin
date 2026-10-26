@@ -100,6 +100,60 @@ async function capture(page: Page, name: string, width: number) {
   })
 }
 
+test('Markdown icon switching retains the reading mode and mobile outline through document tools', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const api = await installWorkspace(page)
+  await openDocument(page)
+  const reader = page.locator('[data-document-reading-pane]')
+  const readerNode = await reader.elementHandle()
+  const toggle = page.locator('[data-document-view-control] button')
+  await expect(toggle).toBeEnabled()
+  const initialUrl = page.url()
+  const requests = api.requests.filter((request) =>
+    request.path.endsWith('/content/raw')
+  ).length
+  const previewIcon = await toggle.locator('svg').innerHTML()
+  await toggle.click()
+  await expect(toggle).toHaveAccessibleName('Switch to preview')
+  await expect(toggle).toBeFocused()
+  expect(await toggle.locator('svg').innerHTML()).not.toBe(previewIcon)
+  await expect(reader.locator('pre')).toContainText(
+    '# Integration handbook 2.4'
+  )
+  expect(page.url()).toBe(initialUrl)
+
+  await openTool(page, 'Versions')
+  await page
+    .getByRole('button', { name: 'Back to preview', exact: true })
+    .click()
+  await expect(toggle).toHaveAccessibleName('Switch to preview')
+  expect(
+    await reader.evaluate((node, retained) => node === retained, readerNode)
+  ).toBe(true)
+  await toggle.click()
+  await expect(toggle).toHaveAccessibleName('Switch to source')
+  await expect(
+    reader.getByRole('heading', { name: 'Release checklist', exact: true })
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'On this page', exact: true }).click()
+  const outline = page.getByRole('dialog', {
+    name: 'On this page',
+    exact: true,
+  })
+  await expect(
+    outline.getByRole('link', { name: 'Release checklist', exact: true })
+  ).toBeVisible()
+  await expect(
+    outline.getByRole('link', { name: 'Integration handbook', exact: true })
+  ).toHaveCount(0)
+  expect(
+    api.requests.filter((request) => request.path.endsWith('/content/raw'))
+  ).toHaveLength(requests)
+  expect(api.unexpected).toEqual([])
+})
+
 for (const width of [1440, 1920, 390]) {
   test(`document reading preserves exact revision and folder selection at ${width}px`, async ({
     page,
