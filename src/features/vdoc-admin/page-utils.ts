@@ -19,9 +19,9 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#35a60d23963aec29832b4da059081883d195bef3'
+  'github:ChnMig/Vdoc-mcp#da89235457248cc9da0a723218dd2c631844956d'
 
-export const vdocMcpReleaseVersion = '0.3.17-beta.10'
+export const vdocMcpReleaseVersion = '0.3.17-beta.11'
 
 export const ACTIVE_STATUS = 1
 
