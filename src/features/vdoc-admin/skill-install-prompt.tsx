@@ -86,7 +86,7 @@ export function SkillInstallPrompt({
       </div>
       <p
         id={promptId}
-        className='max-w-prose text-sm leading-7 break-words select-text'
+        className='max-w-prose min-w-0 text-sm leading-7 break-words select-text'
       >
         {prompt}
       </p>

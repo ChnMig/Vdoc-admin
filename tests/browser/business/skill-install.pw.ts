@@ -78,6 +78,27 @@ for (const language of ['en', 'zh-CN'] as const) {
             () => document.documentElement.scrollWidth <= window.innerWidth
           )
         ).toBe(true)
+        expect(
+          await section.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth
+          )
+        ).toBe(true)
+        expect(
+          await section
+            .getByText(sentence, { exact: true })
+            .evaluate((element) => {
+              const bounds = element.closest('section')!.getBoundingClientRect()
+              const range = document.createRange()
+              range.selectNodeContents(element)
+              return Array.from(range.getClientRects()).every(
+                (rect) =>
+                  rect.left >= bounds.left - 0.5 &&
+                  rect.right <= bounds.right + 0.5 &&
+                  rect.top >= bounds.top - 0.5 &&
+                  rect.bottom <= bounds.bottom + 0.5
+              )
+            })
+        ).toBe(true)
         const directory = resolve(
           '..',
           '.artifacts/ai-skill-install-20261026/screenshots'
