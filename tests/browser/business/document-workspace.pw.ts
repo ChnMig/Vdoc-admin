@@ -108,7 +108,9 @@ test('Markdown icon switching retains the reading mode and mobile outline throug
   await openDocument(page)
   const reader = page.locator('[data-document-reading-pane]')
   const readerNode = await reader.elementHandle()
-  const toggle = page.locator('[data-document-view-control] button')
+  const toggle = page.getByRole('button', {
+    name: /^Switch to (source|preview)$/,
+  })
   await expect(toggle).toBeEnabled()
   const initialUrl = page.url()
   const requests = api.requests.filter((request) =>
