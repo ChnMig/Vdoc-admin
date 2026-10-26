@@ -172,7 +172,7 @@ test.describe('public share original downloads', () => {
       await page.goto(`/share/${shareId}#${secret}`)
       await expect.poll(() => new URL(page.url()).hash.length).toBe(0)
       const downloadPromise = page.waitForEvent('download')
-      await page.getByRole('button', { name: 'Download original' }).click()
+      await page.getByRole('button', { name: 'Download source' }).click()
       const download = await downloadPromise
       expect(download.suggestedFilename()).toBe(filename)
       const path = await download.path()

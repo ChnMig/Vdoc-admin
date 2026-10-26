@@ -259,6 +259,7 @@ export type DraftDTO = {
   review_comment?: string
   created_by: string
   submitted_at?: string
+  published_at?: string
   created_at: string
   updated_at: string
 }
@@ -314,7 +315,7 @@ export function getDocumentMCPReadiness(
   )
 }
 
-type DraftActionResultDTO = DraftDTO | VersionDTO
+export type DraftActionResultDTO = DraftDTO | VersionDTO
 
 type ContentDTO = {
   owner_type: string
@@ -450,6 +451,8 @@ type DraftContentPayload = {
 }
 
 type CreateDraftPayload = DraftContentPayload & {
+  source_branch_id?: string
+  source_version_id?: string
   branch_id: string
   version_name: string
   changelog?: string
@@ -1480,6 +1483,31 @@ export function getDiff(
     vdocApi.get(
       `/api/v1/private/projects/${projectId}/documents/${documentId}/diffs/${diffId}`,
       { signal: options?.signal }
+    )
+  )
+}
+
+export type DocumentActivityDTO = {
+  id: string
+  action: string
+  resource_id: string
+  branch_id?: string
+  branch_name?: string
+  version_name?: string
+  review_action?: string
+  created_at: string
+}
+
+export function listDocumentActivity(
+  projectId: string,
+  documentId: string,
+  cursor?: string,
+  options?: RequestOptions
+) {
+  return unwrapListEnvelope<DocumentActivityDTO>(
+    vdocApi.get(
+      `/api/v1/private/projects/${projectId}/documents/${documentId}/activity`,
+      { signal: options?.signal, params: { limit: 50, cursor } }
     )
   )
 }

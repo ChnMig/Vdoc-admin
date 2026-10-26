@@ -110,12 +110,10 @@ describe('PublicDocumentSharePage', () => {
     expect(
       screen.getByText('Release notes', { exact: true })
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'Release notes' })
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Release notes' })).toBeVisible()
     expect(screen.queryByRole('link', { name: 'link' })).not.toBeInTheDocument()
     expect(screen.container.querySelector('script')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    await user.click(screen.getByRole('button', { name: 'Download source' }))
     await waitFor(() =>
       expect(publicShareApiMocks.savePublicShareDownload).toHaveBeenCalledWith(
         download
@@ -398,9 +396,7 @@ describe('PublicDocumentSharePage', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Version two')).toBeInTheDocument()
     expect(versionSelect).toHaveValue(secondVersionId)
-    expect(
-      screen.getByText('v2', { selector: '[data-slot="badge"]' })
-    ).toBeInTheDocument()
+    expect(screen.getByText('v2', { exact: true })).toBeInTheDocument()
   })
 
   it('allows password re-entry when an in-memory unlock proof stops working', async () => {
@@ -421,7 +417,7 @@ describe('PublicDocumentSharePage', () => {
       await screen.findByText('Protected policy content')
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    await user.click(screen.getByRole('button', { name: 'Download source' }))
     expect(
       await screen.findByText(
         'Your password session expired. Enter the password again to continue.'
@@ -565,9 +561,7 @@ describe('PublicDocumentSharePage', () => {
         expect.objectContaining({ shareId, secret, versionId })
       )
 
-      await user.click(
-        screen.getByRole('button', { name: 'Download original' })
-      )
+      await user.click(screen.getByRole('button', { name: 'Download source' }))
 
       expect(
         publicShareApiMocks.downloadPublicShareVersion
@@ -610,9 +604,7 @@ describe('PublicDocumentSharePage', () => {
       expect(publicShareApiMocks.getPublicShareContent).toHaveBeenCalledWith(
         expect.objectContaining({ versionId, unlockProof: 'proof-1' })
       )
-      await user.click(
-        screen.getByRole('button', { name: 'Download original' })
-      )
+      await user.click(screen.getByRole('button', { name: 'Download source' }))
       expect(
         publicShareApiMocks.downloadPublicShareVersion
       ).toHaveBeenCalledWith(
@@ -655,7 +647,7 @@ describe('PublicDocumentSharePage', () => {
       )
       expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
       expect(
-        screen.queryByRole('button', { name: 'Download original' })
+        screen.queryByRole('button', { name: 'Download source' })
       ).not.toBeInTheDocument()
     })
 
@@ -679,7 +671,7 @@ describe('PublicDocumentSharePage', () => {
         screen.queryByText('Unauthorized other version')
       ).not.toBeInTheDocument()
       expect(
-        screen.queryByRole('button', { name: 'Download original' })
+        screen.queryByRole('button', { name: 'Download source' })
       ).not.toBeInTheDocument()
       expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
     })
@@ -700,7 +692,7 @@ describe('PublicDocumentSharePage', () => {
       expect(publicShareApiMocks.getPublicShareContent).not.toHaveBeenCalled()
       expect(publicShareApiMocks.listPublicShareVersions).not.toHaveBeenCalled()
       expect(
-        screen.queryByRole('button', { name: 'Download original' })
+        screen.queryByRole('button', { name: 'Download source' })
       ).not.toBeInTheDocument()
     })
 
@@ -715,9 +707,7 @@ describe('PublicDocumentSharePage', () => {
         </LanguageProvider>
       )
       await screen.findByText('Fixed release content')
-      await user.click(
-        screen.getByRole('button', { name: 'Download original' })
-      )
+      await user.click(screen.getByRole('button', { name: 'Download source' }))
 
       expect(
         await screen.findByText('The original file could not be downloaded.')
@@ -789,9 +779,7 @@ describe('PublicDocumentSharePage', () => {
         await screen.findByText('New publication content')
       ).toBeInTheDocument()
       expect(screen.getByText('Updated release policy')).toBeInTheDocument()
-      expect(
-        screen.getByText('v2', { selector: '[data-slot="badge"]' })
-      ).toBeInTheDocument()
+      expect(screen.getByText('v2', { exact: true })).toBeInTheDocument()
       expect(publicShareApiMocks.getPublicShareMetadata).toHaveBeenCalledTimes(
         2
       )
@@ -979,9 +967,7 @@ describe('PublicDocumentSharePage', () => {
       await user.type(screen.getByLabelText('Share password'), '密码密码')
       await user.click(screen.getByRole('button', { name: 'Unlock document' }))
       await screen.findByText('First unlocked content')
-      await user.click(
-        screen.getByRole('button', { name: 'Download original' })
-      )
+      await user.click(screen.getByRole('button', { name: 'Download source' }))
       expect(
         publicShareApiMocks.downloadPublicShareVersion
       ).toHaveBeenCalledWith(
@@ -1007,9 +993,7 @@ describe('PublicDocumentSharePage', () => {
       ).toHaveBeenLastCalledWith(
         expect.objectContaining({ unlockProof: 'proof-2' })
       )
-      await user.click(
-        screen.getByRole('button', { name: 'Download original' })
-      )
+      await user.click(screen.getByRole('button', { name: 'Download source' }))
       expect(
         publicShareApiMocks.downloadPublicShareVersion
       ).toHaveBeenLastCalledWith(
@@ -1066,7 +1050,7 @@ describe('PublicDocumentSharePage', () => {
         savedDownload
       )
       expect(
-        screen.getByRole('button', { name: 'Download original' })
+        screen.getByRole('button', { name: 'Download source' })
       ).toBeEnabled()
     }
   )
@@ -1090,17 +1074,17 @@ describe('PublicDocumentSharePage', () => {
     await user.type(screen.getByLabelText('Share password'), '密码密码')
     await user.click(screen.getByRole('button', { name: 'Unlock document' }))
     await screen.findByText('Protected policy content')
-    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    await user.click(screen.getByRole('button', { name: 'Download source' }))
     expect(
       await screen.findByText('The original file could not be downloaded.')
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Download original' })
+      screen.getByRole('button', { name: 'Download source' })
     ).toBeEnabled()
     expect(publicShareApiMocks.downloadPublicShareVersion).toHaveBeenCalledWith(
       expect.objectContaining({ unlockProof: 'proof-1' })
     )
-    await user.click(screen.getByRole('button', { name: 'Download original' }))
+    await user.click(screen.getByRole('button', { name: 'Download source' }))
     expect(publicShareApiMocks.savePublicShareDownload).toHaveBeenCalledOnce()
   })
 })

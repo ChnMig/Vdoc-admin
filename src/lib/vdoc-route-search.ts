@@ -35,6 +35,7 @@ export const vdocRouteSearchSchema = z.object({
         'content',
         'drafts',
         'versions',
+        'activity',
         'diffs',
         'share',
         'manage',

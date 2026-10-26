@@ -358,7 +358,7 @@ describe('shared document reading selection', () => {
     expect(view.result.current.selection.branchId).toBe('release')
   })
 
-  it('never resolves a published draft as an editable reading draft', async () => {
+  it('resolves published draft history for reading while retaining its immutable status', async () => {
     api.listDrafts.mockResolvedValue({
       items: [{ ...mainDraft, status: 5 }],
       total: 1,
@@ -370,9 +370,11 @@ describe('shared document reading selection', () => {
     await waitFor(() =>
       expect(view.result.current.selection.pending).toBe(false)
     )
-    expect(view.result.current.selection.invalid).toBe(true)
-    expect(view.result.current.selection.draft).toBeUndefined()
-    expect(view.result.current.drafts).toEqual([])
+    expect(view.result.current.selection.invalid).toBe(false)
+    expect(view.result.current.selection.draft?.status).toBe(5)
+    expect(view.result.current.drafts).toEqual([
+      expect.objectContaining({ id: mainDraft.id, status: 5 }),
+    ])
   })
 
   it('does not retain the old document revision while the next document scope loads', async () => {

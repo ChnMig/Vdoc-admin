@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, BookOpenText, Route } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { readUtf8File } from '@/lib/read-utf8-file'
@@ -7,6 +7,8 @@ import {
   approveDraft,
   createDraft,
   getDraftContent,
+  getVersionContent,
+  listVersions,
   listBranches,
   listDrafts,
   listProjectMembers,
@@ -87,6 +89,7 @@ import {
   activeContentKind,
   entityOptionLabel,
   fieldValue,
+  formatDate,
   type QueryState,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
@@ -176,6 +179,7 @@ export function DraftsPage({
   const { t } = useLanguage()
   const embedded = useWorkspaceEmbedding()
   const invalidate = useInvalidateResources()
+  const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const authSessionVersion = useAuthStore((state) => state.auth.sessionVersion)
   const {
@@ -303,6 +307,20 @@ export function DraftsPage({
     reviewRevision: string
     comment?: string
   }>()
+  const actionContextRef = useRef({
+    projectId,
+    documentId,
+    draftId,
+    authSessionVersion,
+  })
+  useLayoutEffect(() => {
+    actionContextRef.current = {
+      projectId,
+      documentId,
+      draftId,
+      authSessionVersion,
+    }
+  }, [projectId, documentId, draftId, authSessionVersion])
   const reviewActionLockedRef = useRef(false)
   const [promoteSourceBranchId, setPromoteSourceBranchId] = useState('')
   const [promoteTargetBranchId, setPromoteTargetBranchId] = useState('')
@@ -487,10 +505,53 @@ export function DraftsPage({
   })
   const actionMutation = useMutation({
     mutationFn: (request: DraftActionRequest) => runDraftAction(request),
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      const current = actionContextRef.current
+      if (current.authSessionVersion !== authSessionVersion) return
       if (variables.action !== 'submit') {
         setReviewNote('')
         setPendingReviewAction(undefined)
+      }
+      if (
+        data?.project_id === variables.projectId &&
+        data.document_id === variables.documentId
+      ) {
+        const published =
+          'draft_id' in data && data.draft_id === variables.draftId
+        if (published) {
+          queryClient.setQueryData(
+            ['version', variables.projectId, variables.documentId, data.id],
+            data
+          )
+        }
+        if (
+          current.projectId === variables.projectId &&
+          current.documentId === variables.documentId &&
+          current.draftId === variables.draftId
+        ) {
+          if (published) {
+            onSearchChange?.({
+              branch_id: data.branch_id,
+              version_id: data.id,
+              draft_id: undefined,
+              content_mode: 'published',
+              workspace_view: 'content',
+              endpoint_id: undefined,
+            })
+          } else if (!('draft_id' in data) && data.id === variables.draftId) {
+            queryClient.setQueriesData<{ draft: DraftDTO }>(
+              {
+                queryKey: [
+                  'draft-content',
+                  variables.projectId,
+                  variables.documentId,
+                  data.id,
+                ],
+              },
+              (old) => (old ? { ...old, draft: data } : old)
+            )
+          }
+        }
       }
       return invalidate({
         kind: 'document',
@@ -688,6 +749,8 @@ export function DraftsPage({
               {canDraftForRole && (
                 <DraftEditorCard
                   contextKey={`${authUser?.id ?? ''}:${projectId}:${documentId}:${draftId || 'new'}`}
+                  projectId={projectId}
+                  documentId={documentId}
                   selectedDraft={selectedDraft}
                   snapshotDraft={editorRawContentQuery.data?.draft}
                   rawContent={editorRawContentQuery.data?.content}
@@ -720,15 +783,16 @@ export function DraftsPage({
             </div>
             {draftId && (
               <div className='grid min-w-0 gap-5'>
-                {selectedSnapshot?.review_comment && (
-                  <Alert>
-                    <BookOpenText />
-                    <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
-                    <AlertDescription>
-                      {selectedSnapshot.review_comment}
-                    </AlertDescription>
-                  </Alert>
-                )}
+                {selectedSnapshot?.review_comment &&
+                  selectedSnapshot.status >= DRAFT_STATUS_CHANGES_REQUESTED && (
+                    <Alert>
+                      <BookOpenText />
+                      <AlertTitle>{t('admin.fields.reviewNote')}</AlertTitle>
+                      <AlertDescription>
+                        {selectedSnapshot.review_comment}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 {selectedSnapshot?.diff_preview && (
                   <CollectionCard
                     title={t('admin.sections.diffPreview')}
@@ -841,28 +905,29 @@ export function DraftsPage({
                       </AlertDescription>
                     </Alert>
                   )}
-                {canPublish && (
-                  <ReviewNotePanel
-                    selectedDraftName={selectedSnapshot?.version_name}
-                    value={reviewNote}
-                    onChange={setReviewNote}
-                    pending={actionMutation.isPending}
-                    reviewable={canReviewSelectedDraft}
-                    onReview={(action) => {
-                      if (!selectedSnapshot || !canReviewSelectedDraft) return
-                      actionMutation.reset()
-                      setPendingReviewAction({
-                        projectId,
-                        documentId,
-                        draftId: selectedSnapshot.id,
-                        draftName: selectedSnapshot.version_name,
-                        action,
-                        reviewRevision: selectedSnapshot.review_revision,
-                        comment: reviewNote.trim() || undefined,
-                      })
-                    }}
-                  />
-                )}
+                {canPublish &&
+                  selectedDraft?.status === DRAFT_STATUS_SUBMITTED && (
+                    <ReviewNotePanel
+                      selectedDraftName={selectedSnapshot?.version_name}
+                      value={reviewNote}
+                      onChange={setReviewNote}
+                      pending={actionMutation.isPending}
+                      reviewable={canReviewSelectedDraft}
+                      onReview={(action) => {
+                        if (!selectedSnapshot || !canReviewSelectedDraft) return
+                        actionMutation.reset()
+                        setPendingReviewAction({
+                          projectId,
+                          documentId,
+                          draftId: selectedSnapshot.id,
+                          draftName: selectedSnapshot.version_name,
+                          action,
+                          reviewRevision: selectedSnapshot.review_revision,
+                          comment: reviewNote.trim() || undefined,
+                        })
+                      }}
+                    />
+                  )}
               </div>
             )}
           </div>
@@ -1097,6 +1162,8 @@ type UpdateDraftPayload = Parameters<typeof updateDraft>[3]
 
 function DraftEditorCard({
   contextKey,
+  projectId,
+  documentId,
   selectedDraft,
   snapshotDraft,
   rawContent,
@@ -1109,6 +1176,8 @@ function DraftEditorCard({
   onUpdate,
 }: {
   contextKey: string
+  projectId: string
+  documentId: string
   selectedDraft?: DraftListDTO
   snapshotDraft?: DraftDTO
   rawContent?: string
@@ -1130,6 +1199,7 @@ function DraftEditorCard({
     snapshotReady ? rawContent : undefined
   )
   const [submitting, setSubmitting] = useState(false)
+  const [sourceLoading, setSourceLoading] = useState(false)
   const mountedRef = useRef(false)
   useLayoutEffect(() => {
     mountedRef.current = true
@@ -1137,7 +1207,7 @@ function DraftEditorCard({
       mountedRef.current = false
     }
   }, [])
-  const busy = pending || submitting
+  const busy = pending || submitting || sourceLoading
   const editable = Boolean(
     selectedDraft &&
     (selectedDraft.status === DRAFT_STATUS_DRAFT ||
@@ -1231,6 +1301,12 @@ function DraftEditorCard({
             await onCreate({
               ...payload,
               branch_id: editor.values.branch_id,
+              ...(editor.values.source_version_id
+                ? {
+                    source_version_id: editor.values.source_version_id,
+                    source_branch_id: editor.values.source_branch_id,
+                  }
+                : {}),
             })
           }
           // A completed save still clears its own cached editor after file
@@ -1321,6 +1397,22 @@ function DraftEditorCard({
         </Alert>
       )}
       <fieldset className='grid min-w-0 gap-4' disabled={busy}>
+        {!editable && (
+          <DraftSourcePicker
+            key={contextKey}
+            projectId={projectId}
+            documentId={documentId}
+            branches={branches}
+            dirty={Boolean(editor.values.content || editor.values.file)}
+            onLoadingChange={setSourceLoading}
+            onLoad={(content, branchId, versionId) => {
+              editor.change('content', content)
+              editor.change('file', undefined)
+              editor.change('source_branch_id', branchId)
+              editor.change('source_version_id', versionId)
+            }}
+          />
+        )}
         <div className='grid gap-4 md:grid-cols-2'>
           {editable ? (
             <TextField
@@ -1548,6 +1640,8 @@ function DraftsTable({
             <TableRow>
               <TableHead>{t('admin.fields.versionName')}</TableHead>
               <TableHead>{t('admin.fields.status')}</TableHead>
+              <TableHead>{t('admin.fields.createdAt')}</TableHead>
+              <TableHead>{t('reader.publishedAt')}</TableHead>
               <TableHead>{t('admin.fields.actions')}</TableHead>
             </TableRow>
           </TableHeader>
@@ -1581,6 +1675,20 @@ function DraftsTable({
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
+                    <time dateTime={draft.created_at}>
+                      {formatDate(draft.created_at)}
+                    </time>
+                  </TableCell>
+                  <TableCell>
+                    {draft.published_at ? (
+                      <time dateTime={draft.published_at}>
+                        {formatDate(draft.published_at)}
+                      </time>
+                    ) : (
+                      t('reader.unpublished')
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <div className='flex flex-wrap justify-center gap-2'>
                       <Button
                         variant='outline'
@@ -1610,5 +1718,128 @@ function DraftsTable({
         <EmptyState preset='drafts' />
       )}
     </CollectionCard>
+  )
+}
+
+function DraftSourcePicker({
+  projectId,
+  documentId,
+  branches,
+  dirty,
+  onLoad,
+  onLoadingChange,
+}: {
+  projectId: string
+  documentId: string
+  branches: BranchDTO[]
+  dirty: boolean
+  onLoad: (content: string, branchId: string, versionId: string) => void
+  onLoadingChange: (value: boolean) => void
+}) {
+  const { t } = useLanguage()
+  const [branchId, setBranchId] = useState('')
+  const [versionId, setVersionId] = useState('')
+  const [confirmReplace, setConfirmReplace] = useState(false)
+  const controller = useRef<AbortController | null>(null)
+  useLayoutEffect(
+    () => () => {
+      controller.current?.abort()
+    },
+    []
+  )
+  const versionsQuery = useQuery({
+    queryKey: ['versions', projectId, documentId, branchId, 'draft-source'],
+    queryFn: ({ signal }) =>
+      listVersions(projectId, documentId, branchId, { signal }),
+    enabled: Boolean(projectId && documentId && branchId),
+  })
+  const versions = (versionsQuery.data?.items ?? []).filter(
+    (version) =>
+      version.status === 1 &&
+      version.branch_id === branchId &&
+      version.document_id === documentId &&
+      version.project_id === projectId
+  )
+  const loadMutation = useMutation({
+    mutationFn: async () => {
+      controller.current?.abort()
+      const request = new AbortController()
+      controller.current = request
+      const source = await getVersionContent(
+        projectId,
+        documentId,
+        versionId,
+        'raw',
+        { signal: request.signal }
+      )
+      if (request.signal.aborted) return
+      onLoad(source.content, branchId, versionId)
+      setConfirmReplace(false)
+    },
+    onMutate: () => onLoadingChange(true),
+    onSettled: () => onLoadingChange(false),
+  })
+  return (
+    <section className='grid min-w-0 gap-3 rounded-md border bg-[var(--surface-control)] p-4'>
+      <p className='text-sm text-muted-foreground'>{t('reader.sourceHint')}</p>
+      <div className='grid min-w-0 gap-3 sm:grid-cols-2'>
+        <NativeSelect
+          label={t('reader.sourceBranch')}
+          value={branchId}
+          placeholder={t('reader.blank')}
+          options={branches.map((branch) => ({
+            value: branch.id,
+            label: branch.name,
+          }))}
+          onChange={(value) => {
+            setBranchId(value)
+            setVersionId('')
+            setConfirmReplace(false)
+          }}
+        />
+        <NativeSelect
+          label={t('reader.sourceVersion')}
+          value={versionId}
+          placeholder={t('admin.placeholders.selectVersion')}
+          options={versions.map((version) => ({
+            value: version.id,
+            label: version.version_name,
+          }))}
+          onChange={(value) => {
+            setVersionId(value)
+            setConfirmReplace(false)
+          }}
+          disabled={!branchId || versionsQuery.isFetching}
+        />
+      </div>
+      <LoadingErrorState state={versionsQuery} />
+      {confirmReplace && (
+        <p role='status' className='text-sm text-muted-foreground'>
+          {t('reader.replaceSource')}
+        </p>
+      )}
+      <Button
+        type='button'
+        variant='outline'
+        className='w-fit'
+        disabled={
+          !versions.some((version) => version.id === versionId) ||
+          loadMutation.isPending
+        }
+        onClick={() => {
+          if (dirty && !confirmReplace) setConfirmReplace(true)
+          else loadMutation.mutate()
+        }}
+      >
+        {t(confirmReplace ? 'reader.confirmLoad' : 'reader.loadSource')}
+      </Button>
+      <LoadingErrorState
+        state={{
+          isLoading: loadMutation.isPending,
+          isError: loadMutation.isError,
+          error: loadMutation.error,
+        }}
+      />
+    </section>
   )
 }

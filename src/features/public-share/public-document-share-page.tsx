@@ -8,10 +8,10 @@ import {
 } from 'react'
 import {
   CircleAlert,
-  Download,
   FileText,
   LoaderCircle,
   LockKeyhole,
+  ListTree,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
@@ -49,13 +49,21 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { LanguageSwitch } from '@/components/language-switch'
 import { OptionsSelect } from '@/components/options-select'
-import { MarkdownDocumentViewer } from './markdown-document-viewer'
-import { OpenApiCodeViewer } from './openapi-code-viewer'
-import { PlainTextDocumentViewer } from './plain-text-document-viewer'
+import { DocumentWorkspaceOutline } from '@/features/document-reader/document-outline'
+import {
+  DocumentReader,
+  DocumentReadingPreferences,
+} from '@/features/document-reader/document-reader'
 
 type LoadState = 'loading' | 'locked' | 'ready' | 'recoverable' | 'unavailable'
 
@@ -364,6 +372,9 @@ function PublicDocumentShareSession({
     }
   }
 
+  const readingRootRef = useRef<HTMLDivElement>(null)
+  const [outlineOpen, setOutlineOpen] = useState(false)
+
   const selectedVersion =
     versions.find((version) => version.id === versionId) ??
     metadata?.current_version
@@ -371,7 +382,7 @@ function PublicDocumentShareSession({
   return (
     <main className='min-h-svh bg-background text-foreground'>
       <header className='border-b bg-background/95 backdrop-blur'>
-        <div className='mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6'>
+        <div className='mx-auto flex max-w-[76rem] items-center justify-between gap-4 px-4 py-4 sm:px-6'>
           <div className='flex min-w-0 items-center gap-3'>
             <span className='flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground'>
               <FileText className='size-4' />
@@ -383,16 +394,24 @@ function PublicDocumentShareSession({
               </p>
             </div>
           </div>
-          <LanguageSwitch />
+          <div className='flex items-center gap-1'>
+            {loadState === 'ready' && (
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='lg:hidden'
+                aria-label={t('admin.workspace.outline')}
+                onClick={() => setOutlineOpen(true)}
+              >
+                <ListTree aria-hidden />
+              </Button>
+            )}
+            <DocumentReadingPreferences />
+          </div>
         </div>
       </header>
-      <div className='mx-auto grid max-w-5xl gap-5 px-4 py-6 sm:px-6 sm:py-10'>
-        <Alert>
-          <ShieldCheck />
-          <AlertTitle>{t('publicShare.title')}</AlertTitle>
-          <AlertDescription>{t('publicShare.security')}</AlertDescription>
-        </Alert>
-
+      <div className='mx-auto grid max-w-[76rem] gap-5 px-4 py-6 sm:px-8 sm:py-8'>
         {loadState === 'loading' && (
           <Card>
             <CardContent
@@ -518,69 +537,6 @@ function PublicDocumentShareSession({
 
         {loadState === 'ready' && metadata && (
           <>
-            <Card>
-              <CardHeader className='gap-4 sm:flex-row sm:items-start sm:justify-between'>
-                <div className='grid gap-2'>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <Badge variant='secondary'>
-                      {metadata.document_type === 3
-                        ? t('publicShare.textLabel')
-                        : metadata.document_type === 2
-                          ? 'Markdown'
-                          : 'OpenAPI'}
-                    </Badge>
-                    <Badge variant='outline'>
-                      {selectedVersion?.version_name}
-                    </Badge>
-                  </div>
-                  <CardTitle className='text-2xl break-words'>
-                    {metadata.document_name}
-                  </CardTitle>
-                  <CardDescription>
-                    {metadata.version_scope === 1
-                      ? t('publicShare.latestOnly')
-                      : metadata.version_scope === 2
-                        ? t('publicShare.history')
-                        : t('publicShare.fixedOnly')}
-                    {metadata.expires_at
-                      ? ` · ${t('publicShare.expires', {
-                          date: new Date(metadata.expires_at).toLocaleString(),
-                        })}`
-                      : ''}
-                  </CardDescription>
-                </div>
-                <Button
-                  variant='outline'
-                  disabled={
-                    !content || content.version_id !== versionId || downloading
-                  }
-                  onClick={handleDownload}
-                >
-                  <Download className='size-4' />
-                  {downloading
-                    ? t('publicShare.downloading')
-                    : t('publicShare.download')}
-                </Button>
-              </CardHeader>
-              {versions.length > 1 && (
-                <CardContent>
-                  <div className='grid max-w-sm gap-2'>
-                    <Label htmlFor='public-version'>
-                      {t('publicShare.version')}
-                    </Label>
-                    <OptionsSelect
-                      id='public-version'
-                      value={versionId}
-                      onChange={(value) => void handleVersionChange(value)}
-                      options={versions.map((version) => ({
-                        value: version.id,
-                        label: version.version_name,
-                      }))}
-                    />
-                  </div>
-                </CardContent>
-              )}
-            </Card>
             {message && (
               <Alert variant='destructive' aria-live='polite'>
                 <AlertTitle>{t(message)}</AlertTitle>
@@ -612,24 +568,104 @@ function PublicDocumentShareSession({
                 )}
               </Alert>
             )}
-            {content ? (
-              metadata.document_type === 3 ? (
-                <PlainTextDocumentViewer content={content.content} />
-              ) : metadata.document_type === 2 ? (
-                <MarkdownDocumentViewer content={content.content} />
-              ) : (
-                <OpenApiCodeViewer content={content.content} />
-              )
-            ) : (
-              <Card>
-                <CardContent className='py-10 text-center text-sm text-muted-foreground'>
-                  {t('publicShare.loading')}
-                </CardContent>
-              </Card>
-            )}
+            <div className='grid min-w-0 items-start gap-10 lg:grid-cols-[minmax(0,52rem)_minmax(12rem,1fr)]'>
+              <div ref={readingRootRef} className='min-w-0'>
+                <DocumentReader
+                  title={metadata.document_name}
+                  documentType={metadata.document_type}
+                  content={
+                    content?.version_id === versionId
+                      ? content.content
+                      : undefined
+                  }
+                  onDownload={() => void handleDownload()}
+                  downloading={downloading}
+                  metadata={
+                    <div className='flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground'>
+                      <Badge variant='secondary'>
+                        {metadata.document_type === 3
+                          ? t('publicShare.textLabel')
+                          : metadata.document_type === 2
+                            ? 'Markdown'
+                            : 'OpenAPI'}
+                      </Badge>
+                      {versions.length > 1 ? (
+                        <div className='w-48'>
+                          <OptionsSelect
+                            id='public-version'
+                            aria-label={t('publicShare.version')}
+                            value={versionId}
+                            onChange={(value) =>
+                              void handleVersionChange(value)
+                            }
+                            options={versions.map((version) => ({
+                              value: version.id,
+                              label: version.version_name,
+                            }))}
+                          />
+                        </div>
+                      ) : (
+                        <Badge variant='outline'>
+                          {selectedVersion?.version_name}
+                        </Badge>
+                      )}
+                      <span>
+                        {metadata.version_scope === 1
+                          ? t('publicShare.latestOnly')
+                          : metadata.version_scope === 2
+                            ? t('publicShare.history')
+                            : t('publicShare.fixedOnly')}
+                      </span>
+                      {metadata.expires_at && (
+                        <span>
+                          {t('publicShare.expires', {
+                            date: new Date(
+                              metadata.expires_at
+                            ).toLocaleString(),
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  }
+                >
+                  <p
+                    role='status'
+                    className='py-10 text-sm text-muted-foreground'
+                  >
+                    {t('publicShare.loading')}
+                  </p>
+                </DocumentReader>
+              </div>
+              <aside className='hidden min-w-0 border-s ps-6 lg:sticky lg:top-6 lg:block'>
+                <DocumentWorkspaceOutline
+                  contentRootRef={readingRootRef}
+                  contextKey={versionId}
+                />
+              </aside>
+            </div>
           </>
         )}
+        <Alert>
+          <ShieldCheck />
+          <AlertTitle>{t('publicShare.title')}</AlertTitle>
+          <AlertDescription>{t('publicShare.security')}</AlertDescription>
+        </Alert>
       </div>
+      <Dialog open={outlineOpen} onOpenChange={setOutlineOpen}>
+        <DialogContent className='max-h-[80svh] overflow-y-auto'>
+          <DialogHeader>
+            <DialogTitle>{t('admin.workspace.outline')}</DialogTitle>
+            <DialogDescription className='sr-only'>
+              {t('publicShare.title')}
+            </DialogDescription>
+          </DialogHeader>
+          <DocumentWorkspaceOutline
+            contentRootRef={readingRootRef}
+            contextKey={versionId}
+            onNavigate={() => setOutlineOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

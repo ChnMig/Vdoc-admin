@@ -388,7 +388,7 @@ describe('document workspace reading selection', () => {
     )
   })
 
-  it('opens an exact OpenAPI endpoint deep link directly without fetching raw source', async () => {
+  it('opens an exact OpenAPI endpoint deep link and loads raw source for copy and download', async () => {
     const screen = renderReader(publishedSelection, {
       documentType: 1,
       endpointId: 'endpoint-1',
@@ -399,7 +399,7 @@ describe('document workspace reading selection', () => {
     expect(
       screen.getByRole('tab', { name: 'OpenAPI endpoints' })
     ).toHaveAttribute('data-state', 'active')
-    expect(api.getVersionContent).not.toHaveBeenCalled()
+    expect(api.getVersionContent).toHaveBeenCalledOnce()
     expect(api.getEndpoint).toHaveBeenCalledWith(
       'project-1',
       'document-1',

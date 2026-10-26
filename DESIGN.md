@@ -65,6 +65,8 @@ Drafts separate Workspace, History, and AI; visited tabs retain edits and review
 
 Responsive behavior should preserve task hierarchy: sidebar and header chrome first, then forms, tables, detail panels, and diff/content viewers. Use horizontal overflow intentionally for tables rather than compressing technical identifiers beyond recognition.
 
+Authenticated documents and public shares share `features/document-reader/`: source rendering, heading outline, Preview/Source icons, copy/download, theme, and language controls. The caller owns fetching and permissions; public downloads still use the capability endpoint. Copy the exact original content without page metadata. Public shares omit private trees, AI, management, and activity. Keep reading actions at the upper right and use an outline dialog on narrow screens. Document Activity is a reverse-chronological private tool; draft history shows actual creation/publication times and published snapshots remain readable. Toasts appear at the top right.
+
 ## Components
 
 - Buttons use `buttonVariants` with `default`, `destructive`, `outline`, `secondary`, `ghost`, and `link` variants; keep focus rings and disabled states intact.

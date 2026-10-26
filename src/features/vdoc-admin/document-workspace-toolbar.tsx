@@ -117,7 +117,7 @@ export function DocumentWorkspaceToolbar({
             options={(selection.mode === 'published' ? versions : drafts).map(
               (revision) => ({
                 value: revision.id,
-                label: revision.version_name,
+                label: `${revision.version_name}${selection.mode === 'draft' && revision.status === 5 ? ` · ${t('admin.statuses.published')}` : ''}`,
               })
             )}
             disabled={

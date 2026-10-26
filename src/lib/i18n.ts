@@ -85,6 +85,40 @@ const en = {
     show: 'Show password',
     hide: 'Hide password',
   },
+  reader: {
+    confirmLoad: 'Replace content and load',
+    events: {
+      createDraft: 'Draft created',
+      updateDraft: 'Draft updated',
+      submit: 'Submitted for review',
+      approve: 'Review approved',
+      reject: 'Review rejected',
+      requestChanges: 'Changes requested',
+      publish: 'Version published',
+      promote: 'Draft promoted',
+      createBranch: 'Branch created',
+      updateBranch: 'Branch updated',
+      archiveBranch: 'Branch archived',
+      createDocument: 'Document created',
+      updateDocument: 'Document updated',
+      archiveDocument: 'Document archived',
+    },
+    publishedAt: 'Published at',
+    copy: 'Copy content',
+    download: 'Download source',
+    activity: 'Activity',
+    activityEmpty: 'No document activity yet.',
+    more: 'Load earlier activity',
+    unpublished: 'Not published',
+    sourceBranch: 'Start from branch',
+    sourceVersion: 'Start from version',
+    loadSource: 'Load source content',
+    blank: 'Blank draft',
+    sourceHint:
+      'Load a published version into the editor, then choose the target branch and make your changes.',
+    replaceSource:
+      'Loading this version replaces the content and selected file. Your other draft fields stay unchanged.',
+  },
   publicShare: {
     fixedOnly: 'This link only grants access to this published version.',
     contextTitle: 'Sharing this version',
@@ -968,6 +1002,10 @@ const en = {
       clientLabel: 'Agent client',
       codexSteps:
         'Add this section to your personal configuration, save it, and restart the Vdoc MCP server or open a new Codex session. Use /mcp to check the connection.',
+      claudeSteps:
+        'Merge this entry into the top-level mcpServers in your private ~/.claude.json, keeping the other settings. Restart Claude Code, then use /mcp to check Vdoc. Do not put the token in a shared .mcp.json.',
+      betaClaudeSteps:
+        'Add vdoc_beta to the top-level mcpServers in your private ~/.claude.json. Use the absolute beta adapter path and this environment’s backend URL and token. Restart Claude Code and check /mcp; keep vdoc alongside it.',
       cursorSteps:
         'Merge this entry into your personal MCP configuration, save it, then enable or restart Vdoc in Cursor Settings → Tools & MCP.',
       betaClientSetup:
@@ -1626,6 +1664,38 @@ const zhCN = {
   passwordInput: {
     show: '显示密码',
     hide: '隐藏密码',
+  },
+  reader: {
+    confirmLoad: '替换正文并载入',
+    events: {
+      createDraft: '创建草稿',
+      updateDraft: '修改草稿',
+      submit: '提交审核',
+      approve: '审核通过',
+      reject: '审核拒绝',
+      requestChanges: '要求修改',
+      publish: '发布版本',
+      promote: '跨分支起草',
+      createBranch: '创建分支',
+      updateBranch: '修改分支',
+      archiveBranch: '归档分支',
+      createDocument: '创建文档',
+      updateDocument: '修改文档',
+      archiveDocument: '归档文档',
+    },
+    publishedAt: '发布时间',
+    copy: '复制内容',
+    download: '下载源文件',
+    activity: '日志',
+    activityEmpty: '暂无文档操作记录。',
+    more: '加载更早记录',
+    unpublished: '未发布',
+    sourceBranch: '起始分支',
+    sourceVersion: '起始版本',
+    loadSource: '载入源文件内容',
+    blank: '空白草稿',
+    sourceHint: '载入已发布版本的内容，再选择目标分支并修改。',
+    replaceSource: '载入后将替换正文和已选文件，其他草稿字段保持不变。',
   },
   publicShare: {
     fixedOnly: '此链接仅可访问指定的已发布版本。',
@@ -2449,6 +2519,10 @@ const zhCN = {
       clientLabel: '智能体客户端',
       codexSteps:
         '将这一节加入个人配置并保存，重启 Vdoc MCP 服务或新开 Codex 会话，再用 /mcp 查看连接状态。',
+      claudeSteps:
+        '将这一项合并到个人 ~/.claude.json 顶层的 mcpServers，保留其他设置。重启 Claude Code，再用 /mcp 检查 Vdoc；不要将令牌写入共享的 .mcp.json。',
+      betaClaudeSteps:
+        '在个人 ~/.claude.json 顶层的 mcpServers 中新增 vdoc_beta，使用 beta 适配器绝对路径及当前环境的后端地址和令牌。重启 Claude Code 后用 /mcp 检查，可与 vdoc 同时保留。',
       cursorSteps:
         '将这一项合并到个人 MCP 配置并保存，在 Cursor Settings → Tools & MCP 中启用或重启 Vdoc。',
       betaClientSetup:

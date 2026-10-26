@@ -3836,6 +3836,119 @@ describe('DraftsPage lifecycle boundaries', () => {
     apiMocks.updateDraft.mockResolvedValue({ ...draftFixture, status: 1 })
   })
 
+  it('loads an exact published source into a new draft and retains provenance when saving edits', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [], total: 0 })
+    apiMocks.listVersions.mockResolvedValue({
+      items: [markdownVersionFixture],
+      total: 1,
+    })
+    const source = '\uFEFF# Published source\r\n\nOriginal text  '
+    apiMocks.getVersionContent.mockResolvedValue({ content: source })
+    apiMocks.createDraft.mockResolvedValue({ ...draftFixture, status: 1 })
+    const screen = renderDraftsPage()
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+    )
+    await selectOption(
+      screen.getByLabelText('Start from branch'),
+      'branch-1',
+      user
+    )
+    await selectOption(
+      screen.getByLabelText('Start from version'),
+      markdownVersionFixture.id,
+      user
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Load source content' })
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('Content')).toHaveValue(
+        source.replace(/\r\n/g, '\n')
+      )
+    )
+    fireEvent.change(screen.getByLabelText('Content'), {
+      target: { value: source.replace(/\r\n/g, '\n') + '\nEdited' },
+    })
+    await selectOption(
+      screen.getAllByLabelText('Branch', { exact: true })[1],
+      'branch-1',
+      user
+    )
+    await user.type(screen.getByLabelText('Version name'), 'v-next')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() =>
+      expect(apiMocks.createDraft).toHaveBeenCalledWith(
+        'project-1',
+        'document-1',
+        expect.objectContaining({
+          source_branch_id: 'branch-1',
+          source_version_id: markdownVersionFixture.id,
+          content: source.replace(/\r\n/g, '\n') + '\nEdited',
+        })
+      )
+    )
+  })
+
+  it.each([1, 3, 4, 5])(
+    'does not render review input for a draft in status %s',
+    async (status) => {
+      apiMocks.listDrafts.mockResolvedValue({
+        items: [{ ...draftFixture, status }],
+        total: 1,
+      })
+      const screen = renderDraftsPage()
+      await selectOption(
+        screen.getByLabelText('Draft'),
+        'draft-1',
+        userEvent.setup()
+      )
+      await screen.findByText('# Loaded raw content', { selector: 'pre' })
+      expect(screen.queryByRole('textbox', { name: 'Review note' })).toBeNull()
+    }
+  )
+
+  it('navigates to the actual publication returned by review before invalidating stale draft selections', async () => {
+    apiMocks.listDrafts.mockResolvedValue({ items: [draftFixture], total: 1 })
+    const published = { ...markdownVersionFixture, draft_id: draftFixture.id }
+    apiMocks.approveDraft.mockResolvedValue(published)
+    const change = vi.fn()
+    const screen = renderPage(
+      <WorkspaceEmbedding>
+        <DraftsPage
+          search={{
+            project_id: 'project-1',
+            document_id: 'document-1',
+            draft_id: 'draft-1',
+            branch_id: 'branch-1',
+          }}
+          onSearchChange={change}
+        />
+      </WorkspaceEmbedding>
+    )
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Approve',
+      })
+    )
+    await waitFor(() =>
+      expect(change).toHaveBeenCalledWith(
+        expect.objectContaining({
+          version_id: published.id,
+          draft_id: undefined,
+          content_mode: 'published',
+          workspace_view: 'content',
+        })
+      )
+    )
+  })
+
   it('preserves embedded draft edits across history without duplicate context or AI', async () => {
     apiMocks.listDrafts.mockResolvedValue({
       items: [{ ...draftFixture, status: 1 }],

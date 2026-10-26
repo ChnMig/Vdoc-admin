@@ -127,7 +127,7 @@ export function useDocumentReadingSelection(
   )
   if (
     validSeedDraft?.branch_id === branchId &&
-    validSeedDraft.status !== 5 &&
+    (validSeedDraft.status !== 5 || search.draft_id === validSeedDraft.id) &&
     !drafts.some((item) => item.id === validSeedDraft.id)
   )
     drafts.push(validSeedDraft)
@@ -139,7 +139,7 @@ export function useDocumentReadingSelection(
       : undefined
   const draft =
     mode === 'draft'
-      ? seedDraftId
+      ? seedDraftId && (search.draft_id || validSeedDraft?.status !== 5)
         ? drafts.find((item) => item.id === seedDraftId)
         : drafts[0]
       : undefined
@@ -165,7 +165,7 @@ export function useDocumentReadingSelection(
     Boolean(
       (search.branch_id && !branch) ||
       (seedVersionId && mode === 'published' && !version) ||
-      (seedDraftId && mode === 'draft' && !draft)
+      (search.draft_id && mode === 'draft' && !draft)
     )
   const selection: DocumentReadingSelection = {
     mode,

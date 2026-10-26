@@ -121,3 +121,32 @@ it('uses the isolated beta adapter and retains this environment URL and token in
     }
   )
 })
+
+it.each(['release', 'beta'] as const)(
+  'offers private Claude Code configuration for %s alongside the other clients',
+  async (releaseChannel) => {
+    window.__VDOC_ADMIN_CONFIG__ = { releaseChannel }
+    const screen = render(
+      <MCPClientConfig
+        baseUrl='https://vdoc.example.test'
+        token='fixture-token'
+      />
+    )
+    await userEvent
+      .setup()
+      .click(screen.getByRole('tab', { name: 'Claude Code' }))
+    const code = screen.container.querySelector('pre')!.textContent!
+    const server =
+      JSON.parse(code).mcpServers[
+        releaseChannel === 'beta' ? 'vdoc_beta' : 'vdoc'
+      ]
+    expect(server.env).toEqual({
+      VDOC_BASE_URL: 'https://vdoc.example.test',
+      VDOC_MCP_TOKEN: 'fixture-token',
+    })
+    expect(server.command).toBe(
+      releaseChannel === 'beta' ? '<ABSOLUTE_BETA_MCP_PATH>' : 'npx'
+    )
+    expect(screen.getAllByText(/~\/.claude.json/).length).toBeGreaterThan(0)
+  }
+)

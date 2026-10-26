@@ -9,12 +9,14 @@ function Reader({
   contextKey = 'document-1:version-1',
   controlledScroll = false,
   externalAriaHidden = false,
+  extraOutline = false,
   onNavigate,
 }: {
   content?: ReactNode
   contextKey?: string
   controlledScroll?: boolean
   externalAriaHidden?: boolean
+  extraOutline?: boolean
   onNavigate?: () => void
 }) {
   const contentRootRef = useRef<HTMLDivElement>(null)
@@ -37,6 +39,12 @@ function Reader({
         contextKey={contextKey}
         onNavigate={onNavigate}
       />
+      {extraOutline && (
+        <DocumentWorkspaceOutline
+          contentRootRef={contentRootRef}
+          contextKey={contextKey}
+        />
+      )}
     </LanguageProvider>
   )
 }
@@ -47,6 +55,28 @@ describe('DocumentWorkspaceOutline', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('shares valid anchors when a dialog outline opens and closes beside the inline outline', async () => {
+    const content = <h2>Shared section</h2>
+    const screen = render(<Reader content={content} />)
+    const first = await screen.findByRole('link', { name: 'Shared section' })
+    const anchor = first.getAttribute('href')!
+    screen.rerender(<Reader content={content} extraOutline />)
+    await waitFor(() => {
+      const links = screen.getAllByRole('link', { name: 'Shared section' })
+      expect(links).toHaveLength(2)
+      expect(links.map((link) => link.getAttribute('href'))).toEqual([
+        anchor,
+        anchor,
+      ])
+      expect(document.getElementById(anchor.slice(1))).toBeTruthy()
+    })
+    screen.rerender(<Reader content={content} />)
+    expect(
+      screen.getByRole('link', { name: 'Shared section' })
+    ).toHaveAttribute('href', anchor)
+    expect(document.getElementById(anchor.slice(1))).toBeTruthy()
+  })
 
   it('collects asynchronous rendered headings, gives duplicate titles unique stable ids, and ignores the page title', async () => {
     const screen = render(<Reader />)

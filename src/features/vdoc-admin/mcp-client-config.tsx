@@ -45,6 +45,7 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
       <TabsList aria-label={t('admin.token.clientLabel')}>
         <TabsTrigger value='codex'>Codex</TabsTrigger>
         <TabsTrigger value='cursor'>Cursor</TabsTrigger>
+        <TabsTrigger value='claude'>Claude Code</TabsTrigger>
       </TabsList>
       {(
         [
@@ -53,6 +54,12 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
             '~/.codex/config.toml',
             codex,
             t(beta ? 'admin.token.betaCodexSteps' : 'admin.token.codexSteps'),
+          ],
+          [
+            'claude',
+            '~/.claude.json',
+            cursor,
+            t(beta ? 'admin.token.betaClaudeSteps' : 'admin.token.claudeSteps'),
           ],
           [
             'cursor',

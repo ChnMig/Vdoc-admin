@@ -13,6 +13,7 @@ import {
   BookOpen,
   Bot,
   Clock3,
+  History,
   GitCompareArrows,
   Link2,
   ListTree,
@@ -33,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DocumentReadingPreferences } from '@/features/document-reader/document-reader'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceContent } from './document-workspace-content'
 import { DocumentWorkspaceToolbar } from './document-workspace-toolbar'
@@ -53,6 +55,12 @@ const DocumentWorkspaceBranches = lazy(() =>
 const DocumentWorkspaceShare = lazy(() =>
   import('./document-workspace-share').then((module) => ({
     default: module.DocumentWorkspaceShare,
+  }))
+)
+
+const DocumentWorkspaceActivity = lazy(() =>
+  import('./document-workspace-activity').then((module) => ({
+    default: module.DocumentWorkspaceActivity,
   }))
 )
 
@@ -240,10 +248,11 @@ export function DocumentWorkspaceDetail({
   const isReading = view === 'content' || view === 'share'
   const readingKey = `${projectId}:${document.id}:${selection.branchId}:${selection.mode}:${selection.version?.id ?? selection.draft?.id ?? ''}`
   const toolItems: {
-    value: 'versions' | 'diffs' | 'ai' | 'manage'
+    value: 'versions' | 'diffs' | 'ai' | 'manage' | 'activity'
     label: string
     icon: typeof Clock3
   }[] = [
+    { value: 'activity', label: t('reader.activity'), icon: History },
     { value: 'versions', label: t('admin.workspace.versions'), icon: Clock3 },
     {
       value: 'diffs',
@@ -271,7 +280,9 @@ export function DocumentWorkspaceDetail({
     if (requestedView === 'ai')
       onSearchChange({ workspace_view: 'content' }, true)
   }
-  const activateTool = (value: 'versions' | 'diffs' | 'ai' | 'manage') => {
+  const activateTool = (
+    value: 'versions' | 'diffs' | 'ai' | 'manage' | 'activity'
+  ) => {
     if (value === 'ai') {
       if (assistantOpen) closeAssistant()
       else setAssistantOpen(true)
@@ -298,7 +309,7 @@ export function DocumentWorkspaceDetail({
       className='flex h-full min-h-0 min-w-0 flex-col bg-card'
       data-document-page
     >
-      <header className='flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-4 sm:px-6'>
+      <header className='flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-2 sm:px-6'>
         <div className='flex min-w-0 items-center gap-2.5'>
           {navigationActions}
           <DocumentTypeIcon
@@ -316,7 +327,8 @@ export function DocumentWorkspaceDetail({
             )}
           </div>
         </div>
-        <div className='flex shrink-0 items-center gap-1.5'>
+        <div className='ms-auto flex shrink-0 items-center gap-1.5'>
+          <DocumentReadingPreferences />
           <Button
             variant='ghost'
             size='icon'
@@ -506,6 +518,16 @@ export function DocumentWorkspaceDetail({
               <DiffsPage
                 search={contextSearch}
                 onSearchChange={changeEmbedded('diffs')}
+              />
+            </RetainedPane>
+            <RetainedPane
+              active={view === 'activity'}
+              title={t('reader.activity')}
+              onClose={goToContent}
+            >
+              <DocumentWorkspaceActivity
+                projectId={projectId}
+                documentId={document.id}
               />
             </RetainedPane>
             {canManage && (

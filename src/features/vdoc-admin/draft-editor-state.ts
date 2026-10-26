@@ -13,6 +13,8 @@ type DraftValues = {
   changelog: string
   source_git_commit_id: string
   content: string
+  source_branch_id: string
+  source_version_id: string
   file?: File
 }
 
@@ -37,6 +39,8 @@ const fields = [
   'changelog',
   'source_git_commit_id',
   'content',
+  'source_branch_id',
+  'source_version_id',
 ] as const
 
 function equalValues(left: DraftValues, right: DraftValues) {
@@ -62,6 +66,8 @@ export function useDraftEditorState(
     changelog: draft?.changelog ?? '',
     source_git_commit_id: draft?.source_git_commit_id ?? '',
     content: rawContent ?? '',
+    source_branch_id: draft?.source_branch_id ?? '',
+    source_version_id: draft?.source_version_id ?? '',
   }
   const stored = sessions[contextKey]
   const dirty = Boolean(stored && !equalValues(stored.values, stored.baseline))

@@ -19,6 +19,7 @@ const documentQueries = new Set([
   'diff-summary',
   'document-shares',
   'document-overview',
+  'document-activity',
   'mcp-readiness',
 ])
 

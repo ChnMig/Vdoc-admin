@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -39,7 +46,6 @@ import {
   DocumentFormFields,
   documentPayloadFromFormData,
 } from './document-form-fields'
-import { DocumentWorkspaceDetail } from './document-workspace-detail'
 import {
   documentSelection,
   emptyDocumentSelection,
@@ -54,6 +60,12 @@ import {
   activeProjectRole,
   fieldValue,
 } from './page-utils'
+
+const DocumentWorkspaceDetail = lazy(() =>
+  import('./document-workspace-detail').then((module) => ({
+    default: module.DocumentWorkspaceDetail,
+  }))
+)
 
 export type DocumentWorkspacePageProps = VdocPageDeepLinkProps & {
   defaultView?: WorkspaceView
@@ -414,21 +426,29 @@ export function DocumentWorkspacePage({
       <DraftEditorSessionProvider key={effectiveScope}>
         <div className='min-h-0 min-w-0'>
           {document && !unavailable ? (
-            <DocumentWorkspaceDetail
-              key={`${effectiveScope}:${document.id}`}
-              projectId={projectId}
-              projectName={project?.name}
-              document={document}
-              search={{ ...routeSearch, workspace_view: view }}
-              canManage={canManage}
-              canWrite={canWrite}
-              interactive={Boolean(
-                project?.status === ACTIVE_STATUS &&
-                document.status === ACTIVE_STATUS
-              )}
-              navigationActions={navigationActions}
-              onSearchChange={changeSearch}
-            />
+            <Suspense
+              fallback={
+                <p role='status' className='p-6 text-sm text-muted-foreground'>
+                  {t('admin.common.loading')}
+                </p>
+              }
+            >
+              <DocumentWorkspaceDetail
+                key={`${effectiveScope}:${document.id}`}
+                projectId={projectId}
+                projectName={project?.name}
+                document={document}
+                search={{ ...routeSearch, workspace_view: view }}
+                canManage={canManage}
+                canWrite={canWrite}
+                interactive={Boolean(
+                  project?.status === ACTIVE_STATUS &&
+                  document.status === ACTIVE_STATUS
+                )}
+                navigationActions={navigationActions}
+                onSearchChange={changeSearch}
+              />
+            </Suspense>
           ) : (
             <div className='flex h-full min-h-0 flex-col'>
               <header className='flex h-14 shrink-0 items-center gap-3 border-b px-4'>
