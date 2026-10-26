@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertCircle, BookOpenText, Route } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { readUtf8File } from '@/lib/read-utf8-file'
 import {
   approveDraft,
   createDraft,
@@ -1198,19 +1199,21 @@ function DraftEditorCard({
           throw new Error(t('admin.draftEditor.conflictDescription'))
         setSubmitting(true)
         const submittingAuth = useAuthStore.getState().auth
-        const ownsSubmission = () => {
+        const ownsSession = () => {
           const currentAuth = useAuthStore.getState().auth
           return (
-            mountedRef.current &&
             currentAuth.sessionVersion === submittingAuth.sessionVersion &&
             currentAuth.accessToken === submittingAuth.accessToken &&
             currentAuth.user?.id === submittingAuth.user?.id
           )
         }
+        const ownsSubmission = () => mountedRef.current && ownsSession()
         try {
           const file = editor.values.file
           const content =
-            file instanceof File ? await file.text() : editor.values.content
+            file instanceof File
+              ? await readUtf8File(file, t)
+              : editor.values.content
           if (!ownsSubmission()) return
           const payload = {
             version_name: editor.values.version_name,
@@ -1230,7 +1233,9 @@ function DraftEditorCard({
               branch_id: editor.values.branch_id,
             })
           }
-          if (ownsSubmission()) editor.saved()
+          // A completed save still clears its own cached editor after file
+          // navigation; edits made since submission remain protected by saved().
+          if (ownsSession()) editor.saved()
         } catch (error) {
           if (!ownsSubmission()) return
           if (

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { deferFileRead } from '@/test/deferred-file-read'
 import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -3880,6 +3881,7 @@ describe('DraftsPage lifecycle boundaries', () => {
       '# Not Markdown\r\n<em>literal</em>\n  indented\ttext\n',
     ],
     ['an empty TXT file', ''],
+    ['a UTF-8 TXT file with BOM', '\uFEFF中文\r\n'],
   ])(
     'uploads %s without changing its bytes or using editor fallback',
     async (_label, content) => {
@@ -3894,7 +3896,6 @@ describe('DraftsPage lifecycle boundaries', () => {
         status: 1,
       })
       const file = new File([content], 'notes.txt', { type: 'text/plain' })
-      file.text = vi.fn().mockResolvedValue(content)
       const screen = renderDraftsPage()
       const user = userEvent.setup()
       await waitFor(() =>
@@ -3922,6 +3923,72 @@ describe('DraftsPage lifecycle boundaries', () => {
           })
         )
       )
+    }
+  )
+
+  it.each(['create', 'update'] as const)(
+    'rejects invalid UTF-8 before draft %s without replacing current edits',
+    async (operation) => {
+      apiMocks.listDocuments.mockResolvedValue({
+        items: [{ ...markdownDocumentFixture, document_type: 3 }],
+        total: 1,
+      })
+      apiMocks.listDrafts.mockResolvedValue({
+        items:
+          operation === 'update'
+            ? [{ ...draftFixture, status: 1, document_format: 4 }]
+            : [],
+        total: operation === 'update' ? 1 : 0,
+      })
+      apiMocks.createDraft.mockResolvedValue({ ...draftFixture, status: 1 })
+      const screen = renderDraftsPage()
+      const user = userEvent.setup()
+      await waitFor(() =>
+        expect(screen.getByLabelText('Document')).toHaveValue('document-1')
+      )
+      if (operation === 'update') {
+        await selectOption(screen.getByLabelText('Draft'), 'draft-1', user)
+        await waitFor(() =>
+          expect(screen.getByLabelText('Content')).toHaveValue(
+            '# Loaded raw content'
+          )
+        )
+        await user.clear(screen.getByLabelText('Version name'))
+      } else {
+        await selectOption(
+          screen.getAllByLabelText('Branch', { exact: true })[1],
+          'branch-1',
+          user
+        )
+      }
+      await user.type(screen.getByLabelText('Version name'), 'unsaved-version')
+      await user.clear(screen.getByLabelText('Content'))
+      await user.type(screen.getByLabelText('Content'), 'Current unsaved text')
+      const file = new File(
+        [new Uint8Array([0xd6, 0xd0, 0xce, 0xc4])],
+        'gbk.txt',
+        { type: 'text/plain' }
+      )
+      // File.text() decodes malformed UTF-8 with replacement characters in browsers.
+      file.text = vi.fn().mockResolvedValue('\uFFFD\uFFFD\uFFFD\uFFFD')
+      await user.upload(screen.getByLabelText('Document file'), file)
+      await user.click(
+        screen.getByRole('button', {
+          name: operation === 'create' ? 'Create' : 'Update',
+        })
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent('UTF-8')
+      )
+      expect(apiMocks.createDraft).not.toHaveBeenCalled()
+      expect(apiMocks.updateDraft).not.toHaveBeenCalled()
+      expect(screen.getByLabelText('Content')).toHaveValue(
+        'Current unsaved text'
+      )
+      expect(screen.getByLabelText('Version name')).toHaveValue(
+        'unsaved-version'
+      )
+      expect(screen.getByText('gbk.txt')).toBeInTheDocument()
     }
   )
 
@@ -4307,14 +4374,10 @@ describe('DraftsPage lifecycle boundaries', () => {
       total: 2,
     })
     apiMocks.createDraft.mockResolvedValue({ ...draftFixture, status: 1 })
-    let finishRead!: (content: string) => void
     const file = new File(['# Delayed upload'], 'delayed.md', {
       type: 'text/markdown',
     })
-    file.text = () =>
-      new Promise<string>((resolve) => {
-        finishRead = resolve
-      })
+    const read = deferFileRead(file)
     const screen = renderDraftsPage()
     const user = userEvent.setup()
     await waitFor(() =>
@@ -4332,7 +4395,7 @@ describe('DraftsPage lifecycle boundaries', () => {
     expect(apiMocks.createDraft).not.toHaveBeenCalled()
     await selectOption(screen.getByLabelText('Document'), 'document-2', user)
     await act(async () => {
-      finishRead('# Delayed upload')
+      read.resolve('# Delayed upload')
     })
     await waitFor(() =>
       expect(apiMocks.createDraft).toHaveBeenCalledWith(
@@ -4389,11 +4452,10 @@ describe('DraftsPage lifecycle boundaries', () => {
         saved = true
         return updatedDraft
       })
-      const read = createDeferred<string>()
       const file = new File(['# Delayed upload'], 'delayed.md', {
         type: 'text/markdown',
       })
-      file.text = () => read.promise
+      const read = deferFileRead(file)
       const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: 10_000 } },
       })

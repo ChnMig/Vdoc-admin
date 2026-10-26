@@ -45,6 +45,7 @@ import {
   emptyDocumentSelection,
   type WorkspaceView,
 } from './document-workspace-model'
+import { DraftEditorSessionProvider } from './draft-editor-session-provider'
 import { FormDialog, LoadingErrorState, TextField } from './page-shared'
 import {
   ACTIVE_STATUS,
@@ -177,19 +178,43 @@ export function DocumentWorkspacePage({
     mutationFn: async (request: {
       projectId: string
       owner: string
+      sessionVersion: number
       formData: FormData
-    }) =>
-      createDocument(
-        request.projectId,
-        await documentPayloadFromFormData(request.formData, t)
-      ),
+    }) => {
+      const ownsRequest = () =>
+        currentScope.current === request.owner &&
+        useAuthStore.getState().auth.sessionVersion === request.sessionVersion
+      if (!ownsRequest()) return
+      try {
+        const payload = await documentPayloadFromFormData(request.formData, t)
+        // FileReader may finish after sign-out, reauthentication, or navigation.
+        // The API captures the current token when dispatched, so check again.
+        if (!ownsRequest()) return
+        const result = await createDocument(request.projectId, payload)
+        if (
+          useAuthStore.getState().auth.sessionVersion === request.sessionVersion
+        )
+          return result
+      } catch (error) {
+        if (ownsRequest()) throw error
+      }
+    },
     onSuccess: async (result, request) => {
+      if (
+        !result ||
+        useAuthStore.getState().auth.sessionVersion !== request.sessionVersion
+      )
+        return
       await invalidateVdocQueries(queryClient, {
         kind: 'document',
         projectId: request.projectId,
         documentId: result.id,
       })
-      if (currentScope.current !== request.owner) return
+      if (
+        currentScope.current !== request.owner ||
+        useAuthStore.getState().auth.sessionVersion !== request.sessionVersion
+      )
+        return
       changeSearch({
         ...documentSelection(result),
         ...(result.initial_draft_id
@@ -296,6 +321,7 @@ export function DocumentWorkspacePage({
                 createMutation.mutateAsync({
                   projectId,
                   owner: mutationScope,
+                  sessionVersion,
                   formData,
                 })
               }
@@ -385,68 +411,70 @@ export function DocumentWorkspacePage({
           </SheetContent>
         </Sheet>
       )}
-      <div className='min-h-0 min-w-0'>
-        {document && !unavailable ? (
-          <DocumentWorkspaceDetail
-            key={`${effectiveScope}:${document.id}`}
-            projectId={projectId}
-            projectName={project?.name}
-            document={document}
-            search={{ ...routeSearch, workspace_view: view }}
-            canManage={canManage}
-            canWrite={canWrite}
-            interactive={Boolean(
-              project?.status === ACTIVE_STATUS &&
-              document.status === ACTIVE_STATUS
-            )}
-            navigationActions={navigationActions}
-            onSearchChange={changeSearch}
-          />
-        ) : (
-          <div className='flex h-full min-h-0 flex-col'>
-            <header className='flex h-14 shrink-0 items-center gap-3 border-b px-4'>
-              {navigationActions}
-              <p className='truncate text-sm font-medium'>
-                {project?.name ?? t('admin.workspace.title')}
-              </p>
-            </header>
-            <div
-              id='content'
-              tabIndex={-1}
-              className='min-h-0 flex-1 overflow-y-auto p-5 focus:outline-none'
-            >
-              <LoadingErrorState state={projectsQuery} />
-              <LoadingErrorState state={documentsQuery} />
-              {unavailable && (
-                <Alert variant='destructive'>
-                  <AlertDescription>
-                    {t('admin.workspace.unavailable')}
-                  </AlertDescription>
-                </Alert>
+      <DraftEditorSessionProvider key={effectiveScope}>
+        <div className='min-h-0 min-w-0'>
+          {document && !unavailable ? (
+            <DocumentWorkspaceDetail
+              key={`${effectiveScope}:${document.id}`}
+              projectId={projectId}
+              projectName={project?.name}
+              document={document}
+              search={{ ...routeSearch, workspace_view: view }}
+              canManage={canManage}
+              canWrite={canWrite}
+              interactive={Boolean(
+                project?.status === ACTIVE_STATUS &&
+                document.status === ACTIVE_STATUS
               )}
-              {!projectsQuery.isPending &&
-                (!projectId || !documentsQuery.isPending) && (
-                  <div className='grid min-h-72 place-content-center justify-items-center gap-3 py-12 text-center'>
-                    <FileText
-                      aria-hidden
-                      className='size-9 text-muted-foreground'
-                    />
-                    <h1 className='text-lg font-semibold'>
-                      {folder?.name ?? t('admin.workspace.selectFile')}
-                    </h1>
-                    <p className='max-w-md text-sm leading-6 text-muted-foreground'>
-                      {t('admin.workspace.selectFileDescription')}
-                    </p>
-                    <Button variant='outline' onClick={backToWorkspace}>
-                      <ArrowLeft aria-hidden />
-                      {t('admin.workspace.backToWorkspace')}
-                    </Button>
-                  </div>
+              navigationActions={navigationActions}
+              onSearchChange={changeSearch}
+            />
+          ) : (
+            <div className='flex h-full min-h-0 flex-col'>
+              <header className='flex h-14 shrink-0 items-center gap-3 border-b px-4'>
+                {navigationActions}
+                <p className='truncate text-sm font-medium'>
+                  {project?.name ?? t('admin.workspace.title')}
+                </p>
+              </header>
+              <div
+                id='content'
+                tabIndex={-1}
+                className='min-h-0 flex-1 overflow-y-auto p-5 focus:outline-none'
+              >
+                <LoadingErrorState state={projectsQuery} />
+                <LoadingErrorState state={documentsQuery} />
+                {unavailable && (
+                  <Alert variant='destructive'>
+                    <AlertDescription>
+                      {t('admin.workspace.unavailable')}
+                    </AlertDescription>
+                  </Alert>
                 )}
+                {!projectsQuery.isPending &&
+                  (!projectId || !documentsQuery.isPending) && (
+                    <div className='grid min-h-72 place-content-center justify-items-center gap-3 py-12 text-center'>
+                      <FileText
+                        aria-hidden
+                        className='size-9 text-muted-foreground'
+                      />
+                      <h1 className='text-lg font-semibold'>
+                        {folder?.name ?? t('admin.workspace.selectFile')}
+                      </h1>
+                      <p className='max-w-md text-sm leading-6 text-muted-foreground'>
+                        {t('admin.workspace.selectFileDescription')}
+                      </p>
+                      <Button variant='outline' onClick={backToWorkspace}>
+                        <ArrowLeft aria-hidden />
+                        {t('admin.workspace.backToWorkspace')}
+                      </Button>
+                    </div>
+                  )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </DraftEditorSessionProvider>
     </div>
   )
 }

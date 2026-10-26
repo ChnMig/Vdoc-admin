@@ -18,6 +18,8 @@ const reading = vi.hoisted(() => ({
     ((patch: Partial<VdocRouteSearch>) => void) | undefined,
   versionNavigate: undefined as
     ((patch: Partial<VdocRouteSearch>) => void) | undefined,
+  changeReadingMode: undefined as
+    ((mode: 'published' | 'draft') => void) | undefined,
   shareProps: vi.fn(),
 }))
 
@@ -32,7 +34,14 @@ vi.mock('./use-document-reading-selection', () => ({
   }),
 }))
 vi.mock('./document-workspace-toolbar', () => ({
-  DocumentWorkspaceToolbar: () => null,
+  DocumentWorkspaceToolbar: ({
+    onModeChange,
+  }: {
+    onModeChange: (mode: 'published' | 'draft') => void
+  }) => {
+    reading.changeReadingMode = onModeChange
+    return null
+  },
 }))
 vi.mock('./document-workspace-content', async () => {
   const { useEffect } = await import('react')
@@ -189,7 +198,10 @@ const selection = (id: string): DocumentReadingSelection => ({
 
 function renderDetail(
   initial: DocumentReadingSelection,
-  { canManage = false }: { canManage?: boolean } = {}
+  {
+    canManage = false,
+    endpointId,
+  }: { canManage?: boolean; endpointId?: string } = {}
 ) {
   reading.selection = initial
   let search: VdocRouteSearch = {
@@ -198,6 +210,7 @@ function renderDetail(
     branch_id: 'branch-1',
     draft_id: initial.draft?.id,
     version_id: initial.version?.id,
+    endpoint_id: endpointId,
     content_mode: initial.mode,
     workspace_view: initial.mode === 'draft' ? 'drafts' : 'content',
   }
@@ -268,6 +281,7 @@ describe('document workspace draft editor retention', () => {
     vi.clearAllMocks()
     reading.draftNavigate = undefined
     reading.versionNavigate = undefined
+    reading.changeReadingMode = undefined
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
     for (const method of ['show', 'showModal', 'close'] as const) {
       Object.defineProperty(HTMLDialogElement.prototype, method, {
@@ -279,6 +293,42 @@ describe('document workspace draft editor retention', () => {
         }),
       })
     }
+  })
+
+  it('clears a version-scoped endpoint when changing published and draft reading modes', () => {
+    const screen = renderDetail(
+      { mode: 'published', branchId: 'branch-1' },
+      { endpointId: 'old-version-endpoint' }
+    )
+
+    act(() => reading.changeReadingMode!('draft'))
+    expect({
+      endpoint_id: 'old-version-endpoint',
+      ...screen.changes.mock.calls[screen.changes.mock.calls.length - 1]?.[0],
+    }).toHaveProperty('endpoint_id', undefined)
+    expect(screen.changes).toHaveBeenLastCalledWith({
+      content_mode: 'draft',
+      version_id: undefined,
+      draft_id: undefined,
+      endpoint_id: undefined,
+      workspace_view: 'content',
+      branch_id: 'branch-1',
+    })
+
+    screen.rerenderSelection(selection('draft-a'), 'draft-a')
+    act(() => reading.changeReadingMode!('published'))
+    expect({
+      endpoint_id: 'old-version-endpoint',
+      ...screen.changes.mock.calls[screen.changes.mock.calls.length - 1]?.[0],
+    }).toHaveProperty('endpoint_id', undefined)
+    expect(screen.changes).toHaveBeenLastCalledWith({
+      content_mode: 'published',
+      version_id: undefined,
+      draft_id: undefined,
+      endpoint_id: undefined,
+      workspace_view: 'content',
+      branch_id: 'branch-1',
+    })
   })
 
   it('keeps draft sessions and conflict state while another draft resolves in the same branch', async () => {

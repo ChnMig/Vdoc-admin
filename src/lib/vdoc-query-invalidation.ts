@@ -57,7 +57,8 @@ export function queryAffectedByChange(
       'mcp-usage',
       'mcp-readiness',
     ].includes(root)
-  if (change.kind === 'teams') return root === 'teams'
+  // Project DTOs embed team_name, including in the document navigation rail.
+  if (change.kind === 'teams') return root === 'teams' || root === 'projects'
   if (change.kind === 'users')
     return [
       'users',

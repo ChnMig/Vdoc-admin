@@ -380,6 +380,7 @@ export function DocumentWorkspaceDetail({
               content_mode: mode,
               version_id: undefined,
               draft_id: undefined,
+              endpoint_id: undefined,
               workspace_view: 'content',
               branch_id: selection.branchId || undefined,
             })

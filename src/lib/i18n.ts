@@ -731,7 +731,7 @@ const en = {
         'YAML, JSON, Markdown, or TXT. The selected file replaces the editor content when saved.',
       noFile: 'No file selected',
       unsavedDescription:
-        'Unsaved edits are kept for this document while you switch selections on this page. Save before leaving the page.',
+        'Unsaved edits are kept while switching documents or drafts in this project on this page. Save before refreshing or leaving the project or page.',
       conflictTitle: 'This draft changed on the server',
       saveConflict:
         'Save stopped because the draft changed. Your edits are preserved.',
@@ -2230,7 +2230,7 @@ const zhCN = {
         '支持 YAML、JSON、Markdown 或 TXT，保存时以所选文件替换编辑器内容。',
       noFile: '尚未选择文件',
       unsavedDescription:
-        '切换当前页面的文档或草稿时，会保留各自的未保存编辑。离开页面前请先保存。',
+        '在当前页面内切换同一项目的文档或草稿时，会保留各自的未保存编辑。刷新页面、切换项目或离开页面前请先保存。',
       conflictTitle: '服务器上的草稿已更新',
       saveConflict: '草稿已有更新，本次保存未完成。你的修改已保留。',
       snapshotUnavailable: '未能加载可编辑的草稿，请刷新页面后再保存。',

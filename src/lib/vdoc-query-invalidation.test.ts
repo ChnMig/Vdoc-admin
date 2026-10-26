@@ -1,8 +1,37 @@
 import { QueryClient } from '@tanstack/react-query'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { invalidateVdocQueries } from './vdoc-query-invalidation'
 
 describe('scoped mutation invalidation', () => {
+  it('reloads cached project team names when entering a document after renaming its team', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    })
+    const projects = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [{ id: 'p1', team_name: 'Original team' }],
+      })
+      .mockResolvedValueOnce({
+        items: [{ id: 'p1', team_name: 'Renamed team' }],
+      })
+    const projectQuery = { queryKey: ['projects'], queryFn: projects }
+    await client.fetchQuery(projectQuery)
+    client.setQueryData(['teams'], {
+      items: [{ id: 't1', name: 'Original team' }],
+    })
+    client.setQueryData(['users'], { items: [] })
+
+    await invalidateVdocQueries(client, { kind: 'teams' })
+    const documentPageProjects = await client.fetchQuery(projectQuery)
+
+    expect(projects).toHaveBeenCalledTimes(2)
+    expect(documentPageProjects.items[0].team_name).toBe('Renamed team')
+    expect(client.getQueryState(['teams'])?.isInvalidated).toBe(true)
+    expect(client.getQueryState(['users'])?.isInvalidated).toBe(false)
+    client.clear()
+  })
+
   it('refreshes the changed document and dependent summaries without invalidating other documents or account data', async () => {
     const client = new QueryClient()
     const affected = [

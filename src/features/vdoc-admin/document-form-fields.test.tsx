@@ -124,6 +124,21 @@ describe('document file and folder fields', () => {
     await expect(documentPayloadFromFormData(data, t)).rejects.toThrow('UTF-8')
   })
 
+  it('preserves a UTF-8 BOM and non-ASCII bytes in initial upload content', async () => {
+    const data = new FormData()
+    data.set('name', 'UTF-8 document')
+    data.set('file_name', 'utf8.txt')
+    data.set('document_type', '3')
+    const content = '\uFEFF中文\r\n'
+    data.set('initial_file', new File([content], 'utf8.txt'))
+    expect(
+      (await documentPayloadFromFormData(data, t)).initial_content
+    ).toEqual({
+      content,
+      version_name: '0.1.0',
+    })
+  })
+
   it('rejects path traversal and type mismatches without making a create request', async () => {
     const data = new FormData()
     data.set('name', 'Title')

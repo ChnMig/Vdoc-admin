@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { deferFileRead } from '@/test/deferred-file-read'
 import { selectOption } from '@/test/select-option'
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -372,11 +373,10 @@ describe('delayed draft file uploads', () => {
           const unbind = bindQueryCacheToAuth(client)
           save.mockClear()
           transport.mockClear()
-          const read = deferred<string>()
           const file = new File(['# Delayed content'], 'draft.md', {
             type: 'text/markdown',
           })
-          file.text = () => read.promise
+          const read = deferFileRead(file)
           const view = renderPage(<DraftsPage />, client)
           const user = userEvent.setup()
           await user.click(view.getAllByLabelText('Branch', { exact: true })[0])

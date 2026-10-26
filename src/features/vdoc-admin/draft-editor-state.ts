@@ -1,4 +1,10 @@
-import { useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { DraftDTO } from '@/lib/vdoc-api'
 
 type DraftValues = {
@@ -15,6 +21,15 @@ type EditorSession = {
   values: DraftValues
   revision: string
 }
+
+type DraftSessions = Record<string, EditorSession>
+
+// The workspace owns these sessions above its keyed document detail. Dirty
+// editors can remount without losing work; changing project/auth unmounts it.
+export const DraftEditorSessionsContext = createContext<{
+  sessions: DraftSessions
+  setSessions: Dispatch<SetStateAction<DraftSessions>>
+} | null>(null)
 
 const fields = [
   'branch_id',
@@ -36,7 +51,11 @@ export function useDraftEditorState(
   draft: DraftDTO | undefined,
   rawContent: string | undefined
 ) {
-  const [sessions, setSessions] = useState<Record<string, EditorSession>>({})
+  const local = useState<DraftSessions>({})
+  const shared = useContext(DraftEditorSessionsContext)
+  const [sessions, setSessions] = shared
+    ? [shared.sessions, shared.setSessions]
+    : local
   const server: DraftValues = {
     branch_id: draft?.branch_id ?? '',
     version_name: draft?.version_name ?? '',
