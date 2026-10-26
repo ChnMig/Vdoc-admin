@@ -35,6 +35,11 @@ it('preserves the existing pinned release package and personal Skill installatio
   )
   expect(install).not.toContain('install-channel.mjs')
   expect(install).not.toContain('--channel beta')
+  expect(
+    screen.getByRole('region', { name: 'Let AI install the Skill' })
+  ).toHaveTextContent(
+    'Read https://chnmig.github.io/Vdoc-site/skill-install.md and install the Vdoc Skill in the current project using the release channel.'
+  )
 })
 
 it('requires a reviewed installer release tag and verifies it before installing beta in a separate prefix and project Skill directory', () => {
@@ -79,4 +84,9 @@ it('requires a reviewed installer release tag and verifies it before installing 
   )
   expect(container.textContent).toContain('[mcp_servers.vdoc_beta]')
   expect(screen.getByRole('tab', { name: 'Codex' })).toBeInTheDocument()
+  expect(
+    screen.getByRole('region', { name: 'Let AI install the Skill' })
+  ).toHaveTextContent(
+    'Read https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.14/docs/public/skill-install.md and install the Vdoc Skill in the current project using the beta channel.'
+  )
 })

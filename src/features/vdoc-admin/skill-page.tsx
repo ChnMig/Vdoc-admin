@@ -8,6 +8,7 @@ import { CodeSnippet } from './code-snippet'
 import { MCPClientConfig } from './mcp-client-config'
 import { PageChrome, CollectionCard } from './page-shared'
 import { vdocMcpReleaseVersion } from './page-utils'
+import { SkillInstallPrompt } from './skill-install-prompt'
 
 const vdocSkillInstallSnippet = `# Personal install; use .agents/skills/vdoc for repository scope instead.
 (
@@ -55,6 +56,7 @@ export function SkillPage() {
             : 'admin.skill.installDescription'
         )}
       >
+        <SkillInstallPrompt channel={beta ? 'beta' : 'release'} />
         <div className='grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]'>
           <div className='grid min-w-0 gap-6'>
             <ol className='grid gap-5'>
