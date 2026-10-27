@@ -17,11 +17,16 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { ChangePasswordPanel } from './change-password-panel'
-import { ReleaseStatusPanel } from './release-status-panel'
 
 const AISettingsPanel = lazy(() =>
   import('./ai-settings').then(({ AISettingsPanel }) => ({
     default: AISettingsPanel,
+  }))
+)
+
+const ReleaseStatusPanel = lazy(() =>
+  import('./release-status-panel').then(({ ReleaseStatusPanel }) => ({
+    default: ReleaseStatusPanel,
   }))
 )
 
@@ -135,7 +140,20 @@ export function SettingsPage() {
                   )}
                   {item === 'version' && (
                     <div className='grid min-w-0 gap-6'>
-                      {identity && <ReleaseStatusPanel />}
+                      {identity && (
+                        <Suspense
+                          fallback={
+                            <p
+                              role='status'
+                              className='py-6 text-sm text-muted-foreground'
+                            >
+                              {t('admin.common.loading')}
+                            </p>
+                          }
+                        >
+                          <ReleaseStatusPanel />
+                        </Suspense>
+                      )}
                       <RuntimeSettings />
                     </div>
                   )}
