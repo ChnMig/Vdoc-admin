@@ -1339,6 +1339,9 @@ for (const size of [
     await expect(
       page.getByLabel('From version', { exact: true })
     ).toHaveAttribute('value', previousVersionId)
+    await page
+      .getByRole('button', { name: 'Review semantic changes', exact: true })
+      .click()
     await expect(
       page
         .getByText('Schema compatibility requires manual review', {
@@ -1358,6 +1361,9 @@ for (const size of [
       page.getByLabel('From version', { exact: true })
     ).toHaveAttribute('value', previousVersionId)
     await page.getByRole('tab', { name: 'Diff result', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Review semantic changes', exact: true })
+      .click()
     await expect(
       page
         .getByText('Schema compatibility requires manual review', {
@@ -1498,6 +1504,9 @@ for (const width of [1280, 390]) {
     await page.goto(
       `/diffs/?project_id=${projectId}&document_id=${documentId}&diff_id=diff-precision`
     )
+    await page
+      .getByRole('button', { name: 'Review semantic changes', exact: true })
+      .click()
     await expect(
       page.locator('pre').filter({ hasText: /^9007199254740992$/ })
     ).toBeVisible()
