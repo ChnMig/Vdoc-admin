@@ -5,7 +5,7 @@ import { LanguageProvider, useLanguage } from '@/context/language-provider'
 import { SkillInstallPrompt } from './skill-install-prompt'
 
 const guideUrl =
-  'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.18/docs/public/skill-install.md'
+  'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.19/docs/public/skill-install.md'
 
 function prompt(channel: 'beta' | 'release') {
   return (

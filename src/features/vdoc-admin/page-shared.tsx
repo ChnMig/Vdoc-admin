@@ -58,7 +58,6 @@ import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { OptionsSelect } from '@/components/options-select'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
@@ -114,7 +113,6 @@ export function PageChrome({
         <Search className='me-auto' />
         <LanguageSwitch />
         <ThemeSwitch />
-        <ProfileDropdown />
       </Header>
       <Main>
         <section className='mb-6 grid min-w-0 gap-4'>

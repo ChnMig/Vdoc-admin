@@ -51,7 +51,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LanguageSwitch } from '@/components/language-switch'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import {
@@ -451,7 +450,6 @@ export function WorkspaceHierarchyPage({
         <Search className='me-auto' />
         <LanguageSwitch />
         <ThemeSwitch />
-        <ProfileDropdown />
       </Header>
       <Main fluid className='min-w-0 pt-3'>
         <div className='mb-5'>
