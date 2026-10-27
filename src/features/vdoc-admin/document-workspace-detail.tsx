@@ -329,8 +329,6 @@ export function DocumentWorkspaceDetail({
           </div>
         </div>
         <div className='ms-auto flex shrink-0 items-center gap-1.5'>
-          <RepositoryLink />
-          <DocumentReadingPreferences />
           <Button
             variant='ghost'
             size='icon'
@@ -380,6 +378,8 @@ export function DocumentWorkspaceDetail({
               </span>
             </Button>
           )}
+          <DocumentReadingPreferences />
+          <RepositoryLink />
         </div>
       </header>
       <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2 sm:px-6'>

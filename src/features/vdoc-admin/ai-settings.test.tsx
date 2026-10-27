@@ -16,6 +16,8 @@ import { AISettingsPanel } from './ai-settings'
 const apiMocks = vi.hoisted(() => ({
   getProjectAIProvider: vi.fn(),
   getSystemAIProvider: vi.fn(),
+  listSystemAIProviderModels: vi.fn(),
+  listProjectAIProviderModels: vi.fn(),
   listProjectAIPrompts: vi.fn(),
   listProjectMembers: vi.fn(),
   listProjects: vi.fn(),
@@ -137,6 +139,12 @@ describe('AISettingsPanel project boundaries', () => {
       total: 2,
     })
     apiMocks.getSystemAIProvider.mockResolvedValue(provider('system'))
+    apiMocks.listSystemAIProviderModels.mockResolvedValue({
+      models: ['gpt-test', 'remote-system-model'],
+    })
+    apiMocks.listProjectAIProviderModels.mockResolvedValue({
+      models: ['gpt-test', 'remote-project-model'],
+    })
     apiMocks.listSystemAIPrompts.mockResolvedValue({
       items: prompts('system'),
       total: 1,
@@ -148,6 +156,119 @@ describe('AISettingsPanel project boundaries', () => {
       async (projectId: string) => ({ items: prompts(projectId), total: 1 })
     )
     apiMocks.listProjectMembers.mockResolvedValue({ items: [], total: 0 })
+  })
+
+  it('loads remote models with saved credentials and still saves a manually entered model', async () => {
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const model = await screen.findByRole('textbox', { name: 'Model' })
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    await user.click(
+      await screen.findByRole('option', { name: 'remote-system-model' })
+    )
+    expect(model).toHaveValue('remote-system-model')
+    expect(model).toHaveFocus()
+    expect(apiMocks.listSystemAIProviderModels).toHaveBeenCalledWith(
+      { base_url: 'https://api.openai.example', timeout_ms: 30000 },
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(apiMocks.updateSystemAIProvider).not.toHaveBeenCalled()
+    await user.clear(model)
+    await user.type(model, 'my-private-model')
+    await user.click(
+      screen.getByRole('button', { name: 'Save system provider' })
+    )
+    expect(apiMocks.updateSystemAIProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'my-private-model' })
+    )
+  })
+
+  it('keeps custom model entry available when remote discovery fails', async () => {
+    apiMocks.listSystemAIProviderModels.mockRejectedValueOnce(
+      new Error('Unsupported models API')
+    )
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const model = await screen.findByRole('textbox', { name: 'Model' })
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    await screen.findByText(/Could not load models/)
+    await user.keyboard('{Escape}')
+    expect(model).toHaveValue('gpt-test')
+    await user.clear(model)
+    await user.type(model, 'custom-despite-no-list')
+    await user.click(
+      screen.getByRole('button', { name: 'Save system provider' })
+    )
+    expect(apiMocks.updateSystemAIProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'custom-despite-no-list' })
+    )
+  })
+
+  it('uses project-scoped model discovery and preserves the model until a choice is made', async () => {
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin)
+    await selectOption(
+      screen.getByRole('combobox', { name: 'Project provider scope' }),
+      activeProject.id
+    )
+    const model = await screen.findByRole('textbox', { name: 'Model' })
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    const option = await screen.findByRole('option', {
+      name: 'remote-project-model',
+    })
+    expect(model).toHaveValue('gpt-test')
+    expect(apiMocks.listProjectAIProviderModels).toHaveBeenCalledWith(
+      activeProject.id,
+      { base_url: 'https://api.openai.example', timeout_ms: 30000 },
+      { signal: expect.any(AbortSignal) }
+    )
+    expect(apiMocks.listSystemAIProviderModels).not.toHaveBeenCalled()
+    await user.click(option)
+    expect(model).toHaveValue('remote-project-model')
+  })
+
+  it('aborts and ignores a late model list after the connection changes', async () => {
+    const old = deferred<{ models: string[] }>()
+    apiMocks.listSystemAIProviderModels.mockReturnValueOnce(old.promise)
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    await screen.findByRole('textbox', { name: 'Model' })
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    await waitFor(() =>
+      expect(apiMocks.listSystemAIProviderModels).toHaveBeenCalledTimes(1)
+    )
+    const signal = apiMocks.listSystemAIProviderModels.mock.calls[0][1]
+      .signal as AbortSignal
+    await user.keyboard('{Escape}')
+    const url = screen.getByRole('textbox', { name: 'Base URL' })
+    await user.clear(url)
+    await user.type(url, 'https://new-provider.example')
+    await user.type(screen.getByLabelText('System API key'), 'new-test-key')
+    expect(signal.aborted).toBe(true)
+    await act(async () => old.resolve({ models: ['stale-old-provider-model'] }))
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    await screen.findByRole('option', { name: 'remote-system-model' })
+    expect(
+      screen.queryByRole('option', { name: 'stale-old-provider-model' })
+    ).not.toBeInTheDocument()
+    expect(apiMocks.listSystemAIProviderModels).toHaveBeenLastCalledWith(
+      {
+        base_url: 'https://new-provider.example',
+        api_key: 'new-test-key',
+        timeout_ms: 30000,
+      },
+      { signal: expect.any(AbortSignal) }
+    )
   })
 
   it('groups each scope and preserves provider and prompt drafts when switching scopes', async () => {

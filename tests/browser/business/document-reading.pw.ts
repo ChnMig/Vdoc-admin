@@ -246,6 +246,76 @@ test.use({
   permissions: ['clipboard-read', 'clipboard-write'],
   acceptDownloads: true,
 })
+
+test('a first-time share follows the browser language and retains an explicit choice', async ({
+  browser,
+  baseURL,
+}, info) => {
+  const context = await browser.newContext({
+    baseURL,
+    locale: 'zh-CN',
+    colorScheme: 'dark',
+    viewport: { width: 390, height: 900 },
+  })
+  try {
+    const page = await context.newPage()
+    const secret = `vdoc_share_${'c'.repeat(48)}`
+    await registerCapabilitySecret(
+      process.env.VDOC_PLAYWRIGHT_SECRET_REGISTRY!,
+      secret
+    )
+    const sharePath = `/share/${'f'.repeat(32)}#${secret}`
+    await page.route('**/api/v1/open/document-shares/**', async (route) => {
+      if (route.request().method() === 'OPTIONS')
+        return route.fulfill({ status: 204, headers: responseHeaders })
+      if (new URL(route.request().url()).pathname.endsWith('/content'))
+        return ok(route, { version_id: versionId, content: source })
+      return ok(route, {
+        document_name: 'Reading guide',
+        document_type: 2,
+        version_scope: 1,
+        current_version: {
+          id: versionId,
+          version_name: '1.0.0',
+          published_at: timestamp,
+        },
+      })
+    })
+    await page.goto(sharePath)
+    await expect(page.getByRole('button', { name: '下载源文件' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+    await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+    await expect(
+      page.getByRole('heading', { name: 'Getting started' })
+    ).toBeVisible()
+    expect(
+      (await context.cookies()).find(
+        (cookie) => cookie.name === 'vdoc-admin-language'
+      )
+    ).toBeUndefined()
+    await page.screenshot({
+      path: info.outputPath('browser-language-zh-dark.png'),
+      fullPage: true,
+    })
+    await page.getByRole('button', { name: '语言：中文' }).click()
+    await page.getByRole('menuitem', { name: '英文', exact: true }).click()
+    await expect(
+      page.getByRole('button', { name: 'Download source' })
+    ).toBeVisible()
+    await page.goto('about:blank')
+    await page.goto(sharePath)
+    await expect(
+      page.getByRole('button', { name: 'Download source' })
+    ).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(
+      page.getByRole('heading', { name: 'Getting started' })
+    ).toBeVisible()
+  } finally {
+    await context.close()
+  }
+})
+
 for (const width of [1280, 390]) {
   for (const theme of ['light', 'dark'] as const) {
     test(`shared reader at ${width}px in ${theme} mode`, async ({

@@ -871,6 +871,16 @@ const en = {
       providerName: 'Provider name',
       baseUrl: 'Base URL',
       model: 'Model',
+      browseModels: 'Browse provider models',
+      searchModels: 'Search models',
+      loadingModels: 'Loading models from the provider…',
+      refreshModels: 'Refresh models',
+      noModels: 'No matching models. You can type a model ID in the field.',
+      modelsHint:
+        'Type a model ID, or open the list to fetch models using the current URL and API key. A saved key can be reused for the same URL.',
+      modelsCredentials: 'Enter the provider URL and API key first.',
+      modelsLoadFailed:
+        'Could not load models. Check the URL and API key, or enter a model ID manually. The provider may not offer a model list.',
       apiMode: 'API mode',
       apiModePlaceholder: 'Select API mode',
       apiModeChatCompletions: 'Chat Completions',
@@ -2428,6 +2438,16 @@ const zhCN = {
       providerName: '提供商名称',
       baseUrl: 'Base URL',
       model: '模型',
+      browseModels: '选择远端模型',
+      searchModels: '搜索模型',
+      loadingModels: '正在读取远端模型列表…',
+      refreshModels: '刷新模型列表',
+      noModels: '没有匹配的模型，也可以在输入框中手动填写模型 ID。',
+      modelsHint:
+        '可直接填写模型 ID，或展开列表，按当前服务地址和凭证自动获取；地址不变时可使用已保存的凭证。',
+      modelsCredentials: '请先填写服务地址和 API Key。',
+      modelsLoadFailed:
+        '无法获取模型列表，请检查地址和凭证，也可手动填写模型 ID；部分服务不提供模型列表接口。',
       apiMode: 'API 模式',
       apiModePlaceholder: '选择 API 模式',
       apiModeChatCompletions: 'Chat Completions',
@@ -3122,12 +3142,24 @@ function isLanguage(value: string | undefined): value is Language {
   return languages.includes(value as Language)
 }
 
-function normalizeLanguage(value: string | undefined): Language {
-  return isLanguage(value) ? value : DEFAULT_LANGUAGE
-}
-
 export function getStoredLanguage(): Language {
-  return normalizeLanguage(getCookie(LANGUAGE_COOKIE_NAME))
+  const storedLanguage = getCookie(LANGUAGE_COOKIE_NAME)
+  if (isLanguage(storedLanguage)) return storedLanguage
+
+  if (typeof navigator !== 'undefined') {
+    const preferredLanguages = [
+      ...(navigator.languages ?? []),
+      navigator.language,
+    ]
+    for (const locale of preferredLanguages) {
+      if (typeof locale !== 'string') continue
+      const primaryLanguage = locale.toLowerCase().split('-')[0]
+      if (primaryLanguage === 'zh') return 'zh-CN'
+      if (primaryLanguage === 'en') return 'en'
+    }
+  }
+
+  return DEFAULT_LANGUAGE
 }
 
 export function translate(

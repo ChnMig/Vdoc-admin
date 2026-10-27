@@ -400,7 +400,6 @@ function PublicDocumentShareSession({
             </div>
           </div>
           <div className='flex items-center gap-1'>
-            <RepositoryLink />
             {loadState === 'ready' && (
               <Button
                 type='button'
@@ -414,6 +413,7 @@ function PublicDocumentShareSession({
               </Button>
             )}
             <DocumentReadingPreferences />
+            <RepositoryLink />
           </div>
         </div>
       </header>

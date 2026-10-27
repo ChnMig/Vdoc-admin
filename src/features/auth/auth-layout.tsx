@@ -15,9 +15,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
     <div className='relative grid min-h-svh max-w-none overflow-hidden bg-background px-4 py-6 sm:px-6'>
       <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,var(--workspace-glow),transparent_28rem),linear-gradient(135deg,var(--surface-control),transparent_42%)]' />
       <div className='absolute top-4 right-4 z-10 flex items-center gap-2'>
-        <RepositoryLink />
         <LanguageSwitch />
         <ThemeSwitch />
+        <RepositoryLink />
       </div>
       <div className='relative mx-auto grid w-full max-w-5xl items-center gap-8 self-center lg:grid-cols-[1fr_26rem]'>
         <div className='hidden max-w-xl gap-5 lg:grid'>

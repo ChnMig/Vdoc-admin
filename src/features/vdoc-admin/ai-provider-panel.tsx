@@ -3,6 +3,7 @@ import { AI_PROVIDER_API_MODES } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { AIModelField } from './ai-model-field'
 import {
   AINumberField,
   AITextField,
@@ -37,6 +38,7 @@ export function AIProviderPanel({
   const { t } = useLanguage()
   const saveLockedRef = useRef(false)
   const testLockedRef = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
   const disabled =
     readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   const tuning = {
@@ -82,6 +84,7 @@ export function AIProviderPanel({
         </p>
       </div>
       <form
+        ref={formRef}
         key={providerFormKey(scope, provider, projectId)}
         className='grid gap-4'
         onSubmit={(event) => {
@@ -96,7 +99,7 @@ export function AIProviderPanel({
         }}
         onChange={onTestPayloadChange}
       >
-        <div className='grid min-w-0 gap-4 @xl/provider-panel:grid-cols-2'>
+        <div className='grid min-w-0 items-start gap-4 @xl/provider-panel:grid-cols-2'>
           <AITextField
             id={`${scope}-ai-provider-name`}
             label={t('admin.ai.providerName')}
@@ -113,13 +116,15 @@ export function AIProviderPanel({
             disabled={disabled}
             required
           />
-          <AITextField
+          <AIModelField
+            key={providerFormKey(scope, provider, projectId)}
             id={`${scope}-ai-provider-model`}
-            label={t('admin.ai.model')}
-            name='model'
+            scope={scope}
+            projectId={projectId}
+            formRef={formRef}
             defaultValue={provider?.model ?? ''}
             disabled={disabled}
-            required
+            onModelChange={onTestPayloadChange}
           />
           <AINativeSelect
             id={`${scope}-ai-provider-api-mode`}

@@ -529,6 +529,16 @@ export type AIProviderTestResultDTO = {
   readonly content: string
 }
 
+export type AIProviderModelsPayload = {
+  readonly base_url: string
+  readonly api_key?: string
+  readonly timeout_ms?: number
+}
+
+export type AIProviderModelsDTO = {
+  readonly models: readonly string[]
+}
+
 export type AIPromptTemplateDTO = {
   readonly prompt_key: string
   readonly system_prompt: string
@@ -1289,6 +1299,31 @@ export function updateSystemAIProvider(payload: AIProviderPayload) {
 export function testSystemAIProvider(payload?: AIProviderPayload) {
   return unwrapEnvelope<AIProviderTestResultDTO>(
     vdocApi.post('/api/v1/private/ai/provider/test', payload)
+  )
+}
+
+export function listSystemAIProviderModels(
+  payload?: AIProviderModelsPayload,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<AIProviderModelsDTO>(
+    vdocApi.post('/api/v1/private/ai/provider/models', payload, {
+      signal: options?.signal,
+    })
+  )
+}
+
+export function listProjectAIProviderModels(
+  projectId: string,
+  payload?: AIProviderModelsPayload,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<AIProviderModelsDTO>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/provider/models`,
+      payload,
+      { signal: options?.signal }
+    )
   )
 }
 
