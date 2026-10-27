@@ -378,14 +378,14 @@ for (const width of [1440, 1920, 390]) {
       )?.body
     ).toMatchObject({
       document_id: documentId,
-      context_type: 'version',
-      context_id: historicalId,
+      context_type: 'document',
+      context_id: documentId,
     })
     expect(
       api.requests.some(
         (request) =>
           request.path.endsWith('/ai/chat-sessions') &&
-          request.query.context_id === historicalId
+          request.query.context_id === documentId
       )
     ).toBe(true)
     await capture(page, 'ai-historical', width)
@@ -425,8 +425,8 @@ for (const width of [1440, 1920, 390]) {
       api.requests.some(
         (request) =>
           request.path.endsWith('/ai/chat-sessions') &&
-          request.query.context_type === 'draft' &&
-          request.query.context_id === releaseDraftId
+          request.query.context_type === 'document' &&
+          request.query.context_id === documentId
       )
     ).toBe(true)
     await capture(page, 'ai-draft', width)
@@ -668,8 +668,8 @@ for (const width of [1440, 1920, 390]) {
       )?.body
     ).toMatchObject({
       document_id: documentId,
-      context_type: 'version',
-      context_id: historicalId,
+      context_type: 'document',
+      context_id: documentId,
     })
     expect(
       api.requests.some(

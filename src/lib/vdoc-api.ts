@@ -566,6 +566,12 @@ export type AISummaryDTO = {
 
 export type AIContextType = 'draft' | 'version' | 'diff'
 
+export type AIChatContextType = AIContextType | 'document'
+
+export type AIChatTarget = Omit<AISummaryTarget, 'ownerType'> & {
+  readonly ownerType: AIChatContextType
+}
+
 export type AISummaryTarget = {
   readonly projectId: string
   readonly documentId: string
@@ -575,7 +581,7 @@ export type AISummaryTarget = {
 
 export type AIChatSessionPayload = {
   readonly document_id: string
-  readonly context_type: AIContextType
+  readonly context_type: AIChatContextType
   readonly context_id: string
   readonly title?: string
 }
@@ -584,7 +590,7 @@ export type AIChatSessionDTO = {
   readonly id: string
   readonly project_id: string
   readonly document_id?: string
-  readonly context_type: AIContextType
+  readonly context_type: AIChatContextType
   readonly context_id: string
   readonly title: string
   readonly created_by: string
@@ -1387,7 +1393,7 @@ export function createAIChatSession(
 }
 
 export function listAIChatSessions(
-  target: AISummaryTarget,
+  target: AIChatTarget,
   options?: RequestOptions
 ) {
   return unwrapListEnvelope<AIChatSessionDTO>(

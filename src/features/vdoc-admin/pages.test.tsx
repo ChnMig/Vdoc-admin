@@ -3260,6 +3260,9 @@ describe('DraftsPage and DiffsPage AI panels', () => {
         }}
       />
     )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Review semantic changes' })
+    )
     expect(await screen.findByText('Unified line diff')).toBeInTheDocument()
     expect(screen.getByText('Added lines')).toBeInTheDocument()
     expect(screen.queryByText('Added endpoints')).not.toBeInTheDocument()
@@ -3414,9 +3417,9 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       await waitFor(() => expect(screen.getByLabelText(label)).toBeEnabled())
       await user.click(screen.getByLabelText(label))
       expect(
-        await screen.findByRole('option', { name: 'v0' })
+        await screen.findByRole('option', { name: / · v0$/ })
       ).toBeInTheDocument()
-      expect(screen.getByRole('option', { name: 'v1' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: / · v1$/ })).toBeInTheDocument()
       await user.keyboard('{Escape}')
     }
     await selectOption(screen.getByLabelText('From version'), 'version-0', user)
@@ -3688,6 +3691,9 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       'true'
     )
     expect(screen.getByRole('tab', { name: 'Diff result' })).toHaveFocus()
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Review semantic changes' })
+    )
     const reviewFilter = screen.getByLabelText('Review filter')
     await userEvent.click(reviewFilter)
     expect(screen.getAllByRole('option', { name: 'All changes' })).toHaveLength(
@@ -3780,13 +3786,16 @@ describe('DraftsPage and DiffsPage AI panels', () => {
       await waitFor(() => expect(screen.getByLabelText(label)).toBeEnabled())
       await user.click(screen.getByLabelText(label))
       expect(
-        await screen.findByRole('option', { name: 'v0' })
+        await screen.findByRole('option', { name: / · v0$/ })
       ).toBeInTheDocument()
       await user.keyboard('{Escape}')
     }
     await selectOption(screen.getByLabelText('源版本'), 'version-0', user)
     await selectOption(screen.getByLabelText('目标版本'), 'version-1', user)
     await user.click(screen.getByRole('button', { name: '比较' }))
+    await user.click(
+      await screen.findByRole('button', { name: '查看语义变更' })
+    )
 
     for (const label of [
       '新增端点',

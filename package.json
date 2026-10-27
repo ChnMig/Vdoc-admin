@@ -1,7 +1,7 @@
 {
   "name": "vdoc-admin",
   "private": true,
-  "version": "0.3.17-beta.16",
+  "version": "0.3.17-beta.17",
   "type": "module",
   "packageManager": "pnpm@12.15.0",
   "scripts": {
@@ -51,6 +51,7 @@
     "clsx": "^2.1.1",
     "cmdk": "1.1.1",
     "date-fns": "^4.4.0",
+    "diff": "9.0.0",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
     "react-day-picker": "10.0.2",

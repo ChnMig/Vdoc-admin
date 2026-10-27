@@ -252,6 +252,13 @@ for (const width of [1280, 390]) {
       page,
       context,
     }, info) => {
+      const channel = theme === 'light' ? 'beta' : 'release'
+      await page.addInitScript((releaseChannel) => {
+        window.__VDOC_ADMIN_CONFIG__ = {
+          ...window.__VDOC_ADMIN_CONFIG__,
+          releaseChannel,
+        }
+      }, channel)
       const shareId = 'a'.repeat(32)
       const secret = `vdoc_share_${'b'.repeat(48)}`
       await registerCapabilitySecret(
@@ -294,6 +301,22 @@ for (const width of [1280, 390]) {
         page.getByRole('heading', { name: 'Getting started' })
       ).toBeVisible()
       await expect(page).not.toHaveURL(/#vdoc_share_/)
+      await expect(page.locator('header img').first()).toHaveAttribute(
+        'src',
+        channel === 'beta'
+          ? '/images/vdoc-logo-beta.png'
+          : '/images/vdoc-logo.png'
+      )
+      await expect(page.getByText('Beta', { exact: true })).toHaveCount(
+        channel === 'beta' ? 1 : 0
+      )
+      const repository = page.getByRole('link', { name: 'Open Vdoc on GitHub' })
+      await expect(repository).toHaveAttribute(
+        'href',
+        'https://github.com/ChnMig/Vdoc'
+      )
+      await expect(repository).toHaveAttribute('referrerpolicy', 'no-referrer')
+
       const body = page.locator('[data-document-content]')
       if (width < 1024)
         await page.getByRole('button', { name: 'On this page' }).click()

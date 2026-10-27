@@ -64,12 +64,15 @@ function renderAI(selection: DocumentReadingSelection, interactive = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  const element = (nextSelection: DocumentReadingSelection) => (
+  const element = (
+    nextSelection: DocumentReadingSelection,
+    nextDocument = document
+  ) => (
     <QueryClientProvider client={client}>
       <LanguageProvider>
         <DocumentWorkspaceAI
-          projectId={document.project_id}
-          document={document}
+          projectId={nextDocument.project_id}
+          document={nextDocument}
           selection={nextSelection}
           interactive={interactive}
           canRegenerate={false}
@@ -82,6 +85,10 @@ function renderAI(selection: DocumentReadingSelection, interactive = true) {
     ...screen,
     rerenderSelection: (nextSelection: DocumentReadingSelection) =>
       screen.rerender(element(nextSelection)),
+    rerenderDocument: (nextDocument: DocumentDTO) =>
+      screen.rerender(
+        element({ mode: 'published', branchId: '' }, nextDocument)
+      ),
   }
 }
 
@@ -101,7 +108,7 @@ describe('document workspace AI context', () => {
     })
   })
 
-  it('uses the exact selected published and draft targets and resets unsent chat on context changes', async () => {
+  it('keeps document chat and unsent input while the revision summary follows the reading selection', async () => {
     const screen = renderAI(publishedSelection)
     const publishedTarget = {
       projectId: 'project-1',
@@ -115,7 +122,7 @@ describe('document workspace AI context', () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
       expect(api.listAIChatSessions).toHaveBeenCalledWith(
-        publishedTarget,
+        { ...publishedTarget, ownerType: 'document', ownerId: 'document-1' },
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     })
@@ -136,11 +143,14 @@ describe('document workspace AI context', () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
       expect(api.listAIChatSessions).toHaveBeenLastCalledWith(
-        draftTarget,
+        { ...publishedTarget, ownerType: 'document', ownerId: 'document-1' },
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     })
-    expect(screen.getByLabelText('AI chat message')).toHaveValue('')
+    expect(screen.getByLabelText('AI chat message')).toHaveValue(
+      'Unsent published question'
+    )
+    await userEvent.clear(screen.getByLabelText('AI chat message'))
     await userEvent.type(
       screen.getByLabelText('AI chat message'),
       'Question about the draft'
@@ -151,9 +161,9 @@ describe('document workspace AI context', () => {
     await waitFor(() =>
       expect(api.createAIChatSession).toHaveBeenCalledWith('project-1', {
         document_id: 'document-1',
-        context_type: 'draft',
-        context_id: 'selected-draft',
-        title: 'AI chat for draft selected-draft',
+        context_type: 'document',
+        context_id: 'document-1',
+        title: 'AI chat for document document-1',
       })
     )
     expect(api.sendAIChatMessage).toHaveBeenCalledWith(
@@ -178,15 +188,48 @@ describe('document workspace AI context', () => {
       version: { ...version, project_id: 'other-project' },
     },
   ])(
-    'does not mount AI requests for missing or invalid revision context: %j',
+    'keeps document chat available without requesting an invalid revision summary: %j',
     async (selection) => {
       const screen = renderAI(selection)
       await act(async () => Promise.resolve())
       expect(api.getAISummary).not.toHaveBeenCalled()
-      expect(api.listAIChatSessions).not.toHaveBeenCalled()
-      expect(screen.queryByLabelText('AI chat message')).not.toBeInTheDocument()
+      expect(api.listAIChatSessions).toHaveBeenCalledWith(
+        {
+          projectId: 'project-1',
+          documentId: 'document-1',
+          ownerType: 'document',
+          ownerId: 'document-1',
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+      expect(screen.getByLabelText('AI chat message')).toBeEnabled()
     }
   )
+
+  it('clears unsent chat when moving to a different document', async () => {
+    const screen = renderAI(publishedSelection)
+    await userEvent.type(
+      screen.getByLabelText('AI chat message'),
+      'Private question about document one'
+    )
+    screen.rerenderDocument({
+      ...document,
+      id: 'document-2',
+      name: 'Second document',
+    })
+    expect(screen.getByLabelText('AI chat message')).toHaveValue('')
+    await waitFor(() =>
+      expect(api.listAIChatSessions).toHaveBeenLastCalledWith(
+        {
+          projectId: 'project-1',
+          documentId: 'document-2',
+          ownerType: 'document',
+          ownerId: 'document-2',
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    )
+  })
 
   it('preserves read-only permissions for an exact historical target', async () => {
     const screen = renderAI(publishedSelection, false)

@@ -8,13 +8,14 @@ import {
 } from 'react'
 import {
   CircleAlert,
-  FileText,
   LoaderCircle,
   LockKeyhole,
   ListTree,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
+import { Logo } from '@/assets/logo'
+import { getAdminBranding } from '@/lib/branding'
 import { documentSharePasswordError } from '@/lib/document-share-password'
 import {
   createPublicShareSession,
@@ -59,6 +60,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { OptionsSelect } from '@/components/options-select'
+import { RepositoryLink } from '@/components/repository-link'
 import { DocumentWorkspaceOutline } from '@/features/document-reader/document-outline'
 import {
   DocumentReader,
@@ -384,17 +386,21 @@ function PublicDocumentShareSession({
       <header className='border-b bg-background/95 backdrop-blur'>
         <div className='mx-auto flex max-w-[76rem] items-center justify-between gap-4 px-4 py-4 sm:px-6'>
           <div className='flex min-w-0 items-center gap-3'>
-            <span className='flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground'>
-              <FileText className='size-4' />
-            </span>
+            <Logo className='size-9' />
             <div>
-              <p className='font-semibold'>Vdoc</p>
+              <div className='flex items-center gap-2'>
+                <p className='font-semibold'>Vdoc</p>
+                {getAdminBranding().beta && (
+                  <Badge variant='outline'>Beta</Badge>
+                )}
+              </div>
               <p className='text-xs text-muted-foreground'>
                 {t('publicShare.title')}
               </p>
             </div>
           </div>
           <div className='flex items-center gap-1'>
+            <RepositoryLink />
             {loadState === 'ready' && (
               <Button
                 type='button'

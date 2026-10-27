@@ -527,8 +527,8 @@ function DocumentSharePanelContent({
           <Alert>
             <Link2 />
             <AlertTitle>{t('publicShare.linkReady')}</AlertTitle>
-            <AlertDescription className='grid gap-3'>
-              <code className='overflow-x-auto rounded-md border bg-muted p-3 text-xs'>
+            <AlertDescription className='min-w-0 gap-3'>
+              <code className='block w-full min-w-0 rounded-md border bg-muted p-3 text-xs break-all whitespace-pre-wrap'>
                 {activeLink}
               </code>
               <Button

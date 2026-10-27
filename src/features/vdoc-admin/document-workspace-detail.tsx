@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RepositoryLink } from '@/components/repository-link'
 import { DocumentReadingPreferences } from '@/features/document-reader/document-reader'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceContent } from './document-workspace-content'
@@ -328,6 +329,7 @@ export function DocumentWorkspaceDetail({
           </div>
         </div>
         <div className='ms-auto flex shrink-0 items-center gap-1.5'>
+          <RepositoryLink />
           <DocumentReadingPreferences />
           <Button
             variant='ghost'
@@ -685,7 +687,8 @@ export function DocumentWorkspaceDetail({
                         projectId={projectId}
                         document={document}
                         selection={selection}
-                        interactive={interactive && branch?.status === 1}
+                        interactive={interactive}
+                        summaryInteractive={interactive && branch?.status === 1}
                         canRegenerate={canWrite && branch?.status === 1}
                       />
                     </Suspense>

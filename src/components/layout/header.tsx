@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { RepositoryLink } from '@/components/repository-link'
 
 type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   fixed?: boolean
@@ -44,6 +45,7 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
         <SidebarTrigger variant='outline' className='size-8 max-md:scale-110' />
         <Separator orientation='vertical' className='h-5' />
         {children}
+        <RepositoryLink />
       </div>
     </header>
   )

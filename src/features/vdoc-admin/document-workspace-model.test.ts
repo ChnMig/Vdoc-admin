@@ -102,6 +102,8 @@ describe('document workspace tree model', () => {
       draft_id: undefined,
       version_id: undefined,
       endpoint_id: undefined,
+      from_draft_id: undefined,
+      to_draft_id: undefined,
       from_version_id: undefined,
       to_version_id: undefined,
       from_branch_id: undefined,

@@ -10,6 +10,7 @@ export const LANGUAGE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 const en = {
   app: {
     name: 'Vdoc Admin',
+    openSourceRepository: 'Open Vdoc on GitHub',
     serviceConsole: 'Product Workbench',
     consoleLabel: 'Vdoc Console',
     dashboardPreviewAlt: 'Vdoc Admin dashboard preview',
@@ -307,9 +308,11 @@ const en = {
       noDraftContent: 'This branch has no draft yet.',
       emptyRevision: 'This revision has no content.',
       aiContext: 'Document AI',
+      documentChatDescription:
+        'Ask about any branch, published revision or saved draft in this document. Relevant sources are selected per question; specify a branch or revision for precision.',
       aiContextDescription:
-        'Summary and chat use the document revision selected above.',
-      aiNoContext: 'Select a published version or draft to use document AI.',
+        'The summary describes the revision selected above. Document chat can refer to other branches and drafts.',
+      aiNoContext: 'Select a published version or draft to see its summary.',
       shareContextDescription:
         'Create a public link for the version you are viewing.',
       chooseRevision: 'Select a revision',
@@ -812,6 +815,8 @@ const en = {
       noMessages: 'No AI chat messages yet.',
       chatMessage: 'AI chat message',
       sendMessage: 'Send AI message',
+      summaryReadOnlyDescription:
+        'This revision summary is read-only and cannot be regenerated.',
       readOnlyTitle: 'Archived context is read-only',
       readOnlyDescription:
         'Historical summaries and chat sessions remain available, but no new AI work can be started.',
@@ -1069,18 +1074,41 @@ const en = {
     },
     diff: {
       comparisonContext: 'Version comparison',
+      selectRevision: 'Select a version or draft',
+      draftUnavailable:
+        'This draft is unavailable in the selected branch. Select another revision.',
+      draftPagination: 'Draft pages',
+      draftSnapshot:
+        'Draft content snapshot · {time}. Compare again to include newly saved changes.',
+      downloadBefore: 'Download source',
+      downloadAfter: 'Download target',
+      sourceReview: 'Source diff',
+      semanticReview: 'Review semantic changes',
+      diffLayout: 'Diff layout',
+      unified: 'Unified',
+      split: 'Split',
+      expandContext: 'Show full context',
+      collapseContext: 'Changes with context',
+      largeSource:
+        'These files exceed the online diff limit (1,000,000 characters or 20,000 lines combined). Download both source files to compare them locally. No partial diff is shown.',
+      diffTimeout:
+        'The diff took too long to compute. Download the source files to compare them locally.',
+      identicalSource: 'Both sources are identical.',
+      noFinalNewline: 'No newline at end of file',
+      oldLine: 'Old',
+      newLine: 'New',
       source: 'Source',
       target: 'Target',
       fromBranch: 'From branch',
       toBranch: 'To branch',
       branchCompareHint:
-        'Choose a branch and published version on each side. Changes are shown from the source to the target.',
+        'Choose a branch and a published version or draft on each side. Changes are shown from source to target.',
       searchSourceVersions: 'Search source versions',
       searchTargetVersions: 'Search target versions',
       sourceVersionPagination: 'Source version pages',
       targetVersionPagination: 'Target version pages',
       compareHint:
-        'Stored comparisons load automatically. A new comparison is created only when the selected pair has no history.',
+        'Published comparisons are saved in history. Draft comparisons use a fresh content snapshot each time you compare.',
       noDiffSelected: 'Run a comparison to review changes.',
       existingLoaded: 'Stored diff loaded',
       historyTitle: 'Stored diff history',
@@ -1591,6 +1619,7 @@ export type TFunction = (
 const zhCN = {
   app: {
     name: 'Vdoc Admin',
+    openSourceRepository: '访问 Vdoc 开源仓库',
     serviceConsole: '产品工作台',
     consoleLabel: 'Vdoc 控制台',
     dashboardPreviewAlt: 'Vdoc Admin 仪表盘预览',
@@ -1870,8 +1899,11 @@ const zhCN = {
       noDraftContent: '此分支暂无草稿。',
       emptyRevision: '此版本内容为空。',
       aiContext: '文档 AI',
-      aiContextDescription: '摘要与聊天基于上方选定的当前文档版本。',
-      aiNoContext: '选择正式版本或草稿后，即可使用文档 AI。',
+      documentChatDescription:
+        '文档问答可结合当前文档各分支的正式版本与已保存草稿，按问题选取相关内容。建议注明分支或版本，方便准确定位。',
+      aiContextDescription:
+        '摘要对应上方选定版本；文档问答可以结合其他分支与草稿。',
+      aiNoContext: '选择正式版本或草稿以查看对应摘要。',
       shareContextDescription: '为当前正在查看的正式版本创建公开链接。',
       chooseRevision: '选择版本',
 
@@ -2344,6 +2376,7 @@ const zhCN = {
       noMessages: '还没有 AI 聊天消息。',
       chatMessage: 'AI 聊天消息',
       sendMessage: '发送 AI 消息',
+      summaryReadOnlyDescription: '此版本摘要为只读，无法重新生成。',
       readOnlyTitle: '归档上下文为只读',
       readOnlyDescription:
         '历史摘要和聊天会话仍可查看，但不能再启动新的 AI 工作。',
@@ -2586,17 +2619,38 @@ const zhCN = {
     },
     diff: {
       comparisonContext: '版本比较',
+      selectRevision: '选择版本或草稿',
+      draftUnavailable: '所选分支下的草稿不可用，请选择其他版本或草稿。',
+      draftPagination: '草稿分页',
+      draftSnapshot: '草稿内容快照 · {time}。再次比较可读取最新保存的改动。',
+      downloadBefore: '下载源内容',
+      downloadAfter: '下载目标内容',
+      sourceReview: '源码差异',
+      semanticReview: '查看语义变更',
+      diffLayout: '差异布局',
+      unified: '统一',
+      split: '并排',
+      expandContext: '展开完整上下文',
+      collapseContext: '仅变更及上下文',
+      largeSource:
+        '文件超出在线比较范围（两端合计 100 万字符或 2 万行），请下载源文件后在本地比较。这里不会显示不完整的差异。',
+      diffTimeout: '差异计算超时，请下载源文件后在本地比较。',
+      identicalSource: '两端源码完全一致。',
+      noFinalNewline: '文件末尾没有换行',
+      oldLine: '原行',
+      newLine: '新行',
       source: '源内容',
       target: '目标内容',
       fromBranch: '源分支',
       toBranch: '目标分支',
       branchCompareHint:
-        '分别选择分支和正式版本，按源版本到目标版本的方向比较变更。',
+        '分别选择分支及正式版本或草稿，按源内容到目标内容的方向比较变更。',
       searchSourceVersions: '搜索源版本',
       searchTargetVersions: '搜索目标版本',
       sourceVersionPagination: '源版本分页',
       targetVersionPagination: '目标版本分页',
-      compareHint: '自动加载历史比较；只有所选版本对没有记录时才创建新差异。',
+      compareHint:
+        '正式版本比较会保存到历史。包含草稿时，每次点击比较都会读取最新保存的内容快照。',
       noDiffSelected: '运行比较后审阅变更。',
       existingLoaded: '已加载历史差异',
       historyTitle: '历史差异',

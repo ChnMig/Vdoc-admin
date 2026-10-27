@@ -24,6 +24,8 @@ export const vdocRouteSearchSchema = z.object({
   endpoint_id: optionalEntityId,
   from_branch_id: optionalEntityId,
   to_branch_id: optionalEntityId,
+  from_draft_id: optionalEntityId,
+  to_draft_id: optionalEntityId,
   from_version_id: optionalEntityId,
   to_version_id: optionalEntityId,
   diff_id: optionalEntityId,

@@ -11,6 +11,7 @@ import {
   regenerateAISummary,
   sendAIChatMessage,
   type AIChatMessageDTO,
+  type AIChatTarget,
   type AISummaryDTO,
   type AISummaryTarget,
 } from '@/lib/vdoc-api'
@@ -30,10 +31,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { OptionsSelect } from '@/components/options-select'
 
 type AIContextPanelProps = {
-  readonly target?: AISummaryTarget
+  readonly target?: AIChatTarget
   readonly interactive?: boolean
   readonly canRegenerate?: boolean
   readonly presentation?: 'panel' | 'sidebar'
+  readonly mode?: 'both' | 'summary' | 'chat'
 }
 
 export function AIContextPanel({
@@ -41,6 +43,7 @@ export function AIContextPanel({
   interactive = true,
   canRegenerate = interactive,
   presentation = 'panel',
+  mode = 'both',
 }: AIContextPanelProps) {
   const targetKey = targetIdentityKey(target)
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -53,6 +56,7 @@ export function AIContextPanel({
       interactive={interactive}
       canRegenerate={canRegenerate}
       presentation={presentation}
+      mode={mode}
     />
   )
 }
@@ -63,6 +67,7 @@ function AIContextPanelContent({
   interactive = true,
   canRegenerate = interactive,
   presentation = 'panel',
+  mode = 'both',
 }: AIContextPanelProps & { readonly targetKey: string }) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
@@ -78,20 +83,25 @@ function AIContextPanelContent({
     }
   }, [])
 
+  const summaryTarget: AISummaryTarget | undefined =
+    target && target.ownerType !== 'document'
+      ? { ...target, ownerType: target.ownerType }
+      : undefined
   const summaryQuery = useQuery<AISummaryDTO | null>({
-    queryKey: ['ai-summary', target],
+    queryKey: ['ai-summary', summaryTarget],
     refetchInterval: (query) =>
       query.state.data?.status === 'pending' && !query.state.error
         ? 2000
         : false,
-    queryFn: ({ signal }) => getAISummary(target ?? emptyTarget, { signal }),
-    enabled: target !== undefined,
+    queryFn: ({ signal }) =>
+      getAISummary(summaryTarget ?? emptyTarget, { signal }),
+    enabled: summaryTarget !== undefined && mode !== 'chat',
   })
   const chatSessionsQuery = useQuery({
     queryKey: ['ai-chat-sessions', targetKey, target],
     queryFn: ({ signal }) =>
       listAIChatSessions(target ?? emptyTarget, { signal }),
-    enabled: target !== undefined,
+    enabled: target !== undefined && mode !== 'summary',
   })
   const chatSessions = chatSessionsQuery.data?.items ?? []
   const activeSessionId = sessionId || chatSessions[0]?.id || ''
@@ -104,16 +114,18 @@ function AIContextPanelContent({
     ],
     queryFn: ({ signal }) =>
       getAIChatSession(target?.projectId ?? '', activeSessionId, { signal }),
-    enabled: target !== undefined && activeSessionId.length > 0,
+    enabled:
+      target !== undefined && mode !== 'summary' && activeSessionId.length > 0,
   })
   const regenerateMutation = useMutation({
     mutationFn: async (sessionVersion: number) => {
-      if (!target || !canRegenerate) throw new Error('AI summary is read-only.')
+      if (!summaryTarget || !canRegenerate)
+        throw new Error('AI summary is read-only.')
       const ownsSession = () =>
         useAuthStore.getState().auth.sessionVersion === sessionVersion
       if (!mountedRef.current || !ownsSession()) return
       try {
-        const summary = await regenerateAISummary(target)
+        const summary = await regenerateAISummary(summaryTarget)
         if (ownsSession()) return { summary, sessionVersion }
       } catch (error) {
         if (ownsSession()) throw error
@@ -126,8 +138,10 @@ function AIContextPanelContent({
       )
         return
       const { summary } = result
-      queryClient.setQueryData(['ai-summary', target], summary)
-      return queryClient.invalidateQueries({ queryKey: ['ai-summary', target] })
+      queryClient.setQueryData(['ai-summary', summaryTarget], summary)
+      return queryClient.invalidateQueries({
+        queryKey: ['ai-summary', summaryTarget],
+      })
     },
   })
   const sendMutation = useMutation({
@@ -221,145 +235,170 @@ function AIContextPanelContent({
       <CardContent
         className={cn(
           'grid min-w-0 gap-6',
-          sidebar ? 'p-0' : 'p-5 @min-[42rem]/ai:grid-cols-2'
+          sidebar
+            ? 'p-0'
+            : mode === 'both'
+              ? 'p-5 @min-[42rem]/ai:grid-cols-2'
+              : 'p-5'
         )}
       >
-        <section className='grid content-start gap-3'>
-          {!interactive && target && (
-            <Alert>
-              <AlertCircle />
-              <AlertTitle>{t('admin.ai.readOnlyTitle')}</AlertTitle>
-              <AlertDescription>
-                {t('admin.ai.readOnlyDescription')}
-              </AlertDescription>
-            </Alert>
-          )}
-          <div className='flex flex-wrap items-center justify-between gap-2'>
-            <div className='flex items-center gap-2 font-medium'>
-              <Bot className='size-4 text-muted-foreground' />
-              {t('admin.ai.summaryTitle')}
-            </div>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              className={sidebar ? 'h-7 px-2 text-xs' : undefined}
-              disabled={
-                !target ||
-                !canRegenerate ||
-                regenerateMutation.isPending ||
-                summaryQuery.data?.status === 'pending'
-              }
-              onClick={() =>
-                regenerateMutation.mutate(
-                  useAuthStore.getState().auth.sessionVersion
-                )
-              }
-            >
-              {t('admin.ai.regenerateSummary')}
-            </Button>
-          </div>
-          <div
-            role='status'
-            aria-live='polite'
-            className='min-h-32 rounded-md border bg-[var(--surface-control)] p-4 text-sm leading-6 text-muted-foreground'
-          >
-            {summaryContent(summaryQuery.data, summaryQuery.isLoading, t)}
-          </div>
-          <AIRequestError
-            error={regenerateMutation.error ?? summaryQuery.error ?? undefined}
-          />
-        </section>
-        <section className='grid content-start gap-3'>
-          <div className='flex items-center gap-2 font-medium'>
-            <MessageSquare className='size-4 text-muted-foreground' />
-            {t('admin.ai.chatTitle')}
-          </div>
-          {chatSessions.length > 0 && (
-            <div className='grid gap-2'>
-              <Label htmlFor='ai-chat-session'>
-                {t('admin.ai.chatSession')}
-              </Label>
-              <OptionsSelect
-                id='ai-chat-session'
-                value={activeSessionId}
-                onChange={setSessionId}
-                options={chatSessions.map((session) => ({
-                  value: session.id,
-                  label: session.title || session.id,
-                }))}
-              />
-            </div>
-          )}
-          <div className='grid max-h-56 gap-2 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-sm'>
-            {visibleMessages.length ? (
-              visibleMessages.map((message) => (
-                <p key={message.id}>
-                  <span className='font-medium'>{message.role}: </span>
-                  {message.content}
-                </p>
-              ))
-            ) : (
-              <p className='text-muted-foreground'>
-                {t('admin.ai.noMessages')}
-              </p>
+        {mode !== 'chat' && (
+          <section className='grid content-start gap-3'>
+            {!interactive && target && (
+              <Alert>
+                <AlertCircle />
+                <AlertTitle>{t('admin.ai.readOnlyTitle')}</AlertTitle>
+                <AlertDescription>
+                  {t(
+                    mode === 'summary'
+                      ? 'admin.ai.summaryReadOnlyDescription'
+                      : 'admin.ai.readOnlyDescription'
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
-          </div>
-          <form
-            key={targetKey}
-            className='grid gap-2'
-            onSubmit={(event) => {
-              event.preventDefault()
-              const form = event.currentTarget
-              const formData = new FormData(form)
-              const content = String(formData.get('message') ?? '').trim()
-              if (content.length === 0 || sendLockedRef.current) return
-              sendLockedRef.current = true
-              sendMutation.mutate(
-                {
-                  content,
-                  sessionVersion: useAuthStore.getState().auth.sessionVersion,
-                },
-                {
-                  onSuccess: (result) => {
-                    if (
-                      result &&
-                      mountedRef.current &&
-                      useAuthStore.getState().auth.sessionVersion ===
-                        result.sessionVersion
-                    )
-                      form.reset()
-                  },
-                  onSettled: () => {
-                    sendLockedRef.current = false
-                  },
+            <div className='flex flex-wrap items-center justify-between gap-2'>
+              <div className='flex items-center gap-2 font-medium'>
+                <Bot className='size-4 text-muted-foreground' />
+                {t('admin.ai.summaryTitle')}
+              </div>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                className={sidebar ? 'h-7 px-2 text-xs' : undefined}
+                disabled={
+                  !target ||
+                  !canRegenerate ||
+                  regenerateMutation.isPending ||
+                  summaryQuery.data?.status === 'pending'
                 }
-              )
-            }}
-          >
-            <Label htmlFor='ai-chat-message'>{t('admin.ai.chatMessage')}</Label>
-            <Textarea
-              id='ai-chat-message'
-              name='message'
-              className='min-h-20'
-              disabled={!target || !interactive || sendMutation.isPending}
-            />
-            <Button
-              type='submit'
-              disabled={!target || !interactive || sendMutation.isPending}
+                onClick={() =>
+                  regenerateMutation.mutate(
+                    useAuthStore.getState().auth.sessionVersion
+                  )
+                }
+              >
+                {t('admin.ai.regenerateSummary')}
+              </Button>
+            </div>
+            <div
+              role='status'
+              aria-live='polite'
+              className='min-h-32 rounded-md border bg-[var(--surface-control)] p-4 text-sm leading-6 text-muted-foreground'
             >
-              {t('admin.ai.sendMessage')}
-            </Button>
-          </form>
-          <AIRequestError
-            error={
-              sendMutation.error ??
-              chatSessionsQuery.error ??
-              chatQuery.error ??
-              undefined
-            }
-          />
-        </section>
+              {summaryContent(summaryQuery.data, summaryQuery.isLoading, t)}
+            </div>
+            <AIRequestError
+              error={
+                regenerateMutation.error ?? summaryQuery.error ?? undefined
+              }
+            />
+          </section>
+        )}
+        {mode !== 'summary' && (
+          <section className='grid content-start gap-3'>
+            <div className='flex items-center gap-2 font-medium'>
+              <MessageSquare className='size-4 text-muted-foreground' />
+              {t('admin.ai.chatTitle')}
+            </div>
+            {mode === 'chat' && !interactive && target && (
+              <Alert>
+                <AlertCircle />
+                <AlertTitle>{t('admin.ai.readOnlyTitle')}</AlertTitle>
+                <AlertDescription>
+                  {t('admin.ai.readOnlyDescription')}
+                </AlertDescription>
+              </Alert>
+            )}
+            {chatSessions.length > 0 && (
+              <div className='grid gap-2'>
+                <Label htmlFor='ai-chat-session'>
+                  {t('admin.ai.chatSession')}
+                </Label>
+                <OptionsSelect
+                  id='ai-chat-session'
+                  value={activeSessionId}
+                  onChange={setSessionId}
+                  options={chatSessions.map((session) => ({
+                    value: session.id,
+                    label: session.title || session.id,
+                  }))}
+                />
+              </div>
+            )}
+            <div className='grid max-h-56 gap-2 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-sm'>
+              {visibleMessages.length ? (
+                visibleMessages.map((message) => (
+                  <p key={message.id}>
+                    <span className='font-medium'>{message.role}: </span>
+                    {message.content}
+                  </p>
+                ))
+              ) : (
+                <p className='text-muted-foreground'>
+                  {t('admin.ai.noMessages')}
+                </p>
+              )}
+            </div>
+            <form
+              key={targetKey}
+              className='grid gap-2'
+              onSubmit={(event) => {
+                event.preventDefault()
+                const form = event.currentTarget
+                const formData = new FormData(form)
+                const content = String(formData.get('message') ?? '').trim()
+                if (content.length === 0 || sendLockedRef.current) return
+                sendLockedRef.current = true
+                sendMutation.mutate(
+                  {
+                    content,
+                    sessionVersion: useAuthStore.getState().auth.sessionVersion,
+                  },
+                  {
+                    onSuccess: (result) => {
+                      if (
+                        result &&
+                        mountedRef.current &&
+                        useAuthStore.getState().auth.sessionVersion ===
+                          result.sessionVersion
+                      )
+                        form.reset()
+                    },
+                    onSettled: () => {
+                      sendLockedRef.current = false
+                    },
+                  }
+                )
+              }}
+            >
+              <Label htmlFor='ai-chat-message'>
+                {t('admin.ai.chatMessage')}
+              </Label>
+              <Textarea
+                id='ai-chat-message'
+                name='message'
+                className='min-h-20'
+                disabled={!target || !interactive || sendMutation.isPending}
+              />
+              <Button
+                type='submit'
+                disabled={!target || !interactive || sendMutation.isPending}
+              >
+                {t('admin.ai.sendMessage')}
+              </Button>
+            </form>
+            <AIRequestError
+              error={
+                sendMutation.error ??
+                chatSessionsQuery.error ??
+                chatQuery.error ??
+                undefined
+              }
+            />
+          </section>
+        )}
       </CardContent>
     </Container>
   )
@@ -394,7 +433,7 @@ const emptyTarget: AISummaryTarget = {
   ownerId: '',
 }
 
-function targetIdentityKey(target: AISummaryTarget | undefined) {
+function targetIdentityKey(target: AIChatTarget | undefined) {
   if (target === undefined) return ''
   return JSON.stringify([
     target.projectId,
@@ -445,7 +484,7 @@ function summaryStatusLabel(
 }
 
 async function ensureSession(
-  target: AISummaryTarget,
+  target: AIChatTarget,
   sessionId: string,
   setSessionId: (sessionId: string) => void,
   sessionCreationRef: MutableRefObject<Promise<string> | null>,

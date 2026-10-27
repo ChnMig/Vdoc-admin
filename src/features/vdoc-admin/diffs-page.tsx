@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -10,6 +18,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import {
   compareDiff,
   getDiff,
+  getDraftContent,
+  getVersionContent,
   listBranches,
   listDiffs,
   listProjectMembers,
@@ -56,8 +66,18 @@ import {
   entityOptionLabel,
 } from './page-utils'
 import { QueryPagination } from './query-pagination'
+import { useDraftChoices } from './use-draft-choices'
 import { useVersionChoices } from './use-version-choices'
 import { useWorkspaceEmbedding } from './workspace-embedding'
+
+const SourceDiffViewer = lazy(() => import('./source-diff-viewer'))
+
+type SourceComparison = {
+  context: string
+  before: string
+  after: string
+  capturedAt: string
+}
 
 type DiffFilter = 'all' | 'breaking' | 'mustHandle' | 'high'
 
@@ -92,6 +112,8 @@ export function DiffsPage({
       endpoint_id: undefined,
       from_branch_id: undefined,
       to_branch_id: undefined,
+      from_draft_id: undefined,
+      to_draft_id: undefined,
       from_version_id: undefined,
       to_version_id: undefined,
       diff_id: undefined,
@@ -116,6 +138,8 @@ export function DiffsPage({
         endpoint_id: undefined,
         from_branch_id: undefined,
         to_branch_id: undefined,
+        from_draft_id: undefined,
+        to_draft_id: undefined,
         from_version_id: undefined,
         to_version_id: undefined,
         diff_id: undefined,
@@ -148,6 +172,16 @@ export function DiffsPage({
     search?.to_version_id,
     onSearchChange !== undefined
   )
+  const [fromDraftId, setFromDraftId] = useRouteControlledString(
+    search?.from_draft_id,
+    onSearchChange !== undefined
+  )
+  const [toDraftId, setToDraftId] = useRouteControlledString(
+    search?.to_draft_id,
+    onSearchChange !== undefined
+  )
+  const [sourceComparison, setSourceComparison] =
+    useState<SourceComparison | null>(null)
   const [diffSearch, setDiffSearch] = useState('')
   const [workspaceView, setWorkspaceView] = useState({
     context: '',
@@ -155,7 +189,7 @@ export function DiffsPage({
   })
   const resultTabTriggerRef = useRef<HTMLButtonElement>(null)
   const [diffFilterValue, setDiffFilterValue] = useState<DiffFilter>('all')
-  const resolveDiffById = Boolean(search?.diff_id)
+  const resolveDiffById = Boolean(search?.diff_id && !fromDraftId && !toDraftId)
   const [historySearch, setHistorySearch] = useState('')
   const debouncedHistorySearch = useDebouncedValue(historySearch.trim())
   const [historyOffset, setHistoryOffset] = usePageOffset(
@@ -195,7 +229,7 @@ export function DiffsPage({
     queryKey: ['diff', projectId, documentId, search?.diff_id],
     queryFn: ({ signal }) =>
       getDiff(projectId, documentId, search!.diff_id!, { signal }),
-    enabled: Boolean(projectId && documentId && search?.diff_id),
+    enabled: Boolean(projectId && documentId && resolveDiffById),
     staleTime: 30_000,
     retry: false,
   })
@@ -254,6 +288,29 @@ export function DiffsPage({
     selectedToBranchId,
     validToBranch
   )
+  const fromDraftChoices = useDraftChoices(
+    projectId,
+    documentId,
+    fromDraftId,
+    selectedFromBranchId,
+    fromChoices.search,
+    validFromBranch
+  )
+  const toDraftChoices = useDraftChoices(
+    projectId,
+    documentId,
+    toDraftId,
+    selectedToBranchId,
+    toChoices.search,
+    validToBranch
+  )
+  const selectedFromDraft = fromDraftChoices.drafts.find(
+    (draft) => draft.id === fromDraftId
+  )
+  const selectedToDraft = toDraftChoices.drafts.find(
+    (draft) => draft.id === toDraftId
+  )
+  const hasDraftSelection = Boolean(fromDraftId || toDraftId)
   const validFromVersionIds = new Set(
     fromChoices.versionOptions.map((option) => option.value)
   )
@@ -264,12 +321,10 @@ export function DiffsPage({
     () => new Map(versionOptions.map((option) => [option.value, option.label])),
     [versionOptions]
   )
-  const requestedFromVersionId = validFromVersionIds.has(fromVersionId)
-    ? fromVersionId
-    : ''
-  const requestedToVersionId = validToVersionIds.has(toVersionId)
-    ? toVersionId
-    : ''
+  const requestedFromVersionId =
+    !fromDraftId && validFromVersionIds.has(fromVersionId) ? fromVersionId : ''
+  const requestedToVersionId =
+    !toDraftId && validToVersionIds.has(toVersionId) ? toVersionId : ''
   const selectedFromVersionId = requestedDiff?.from_version_id
     ? validFromVersionIds.has(requestedDiff.from_version_id)
       ? requestedDiff.from_version_id
@@ -285,6 +340,8 @@ export function DiffsPage({
     documentId,
     selectedFromVersionId,
     selectedToVersionId,
+    fromDraftId,
+    toDraftId,
     search?.diff_id,
   ])
   const activeWorkspaceView =
@@ -307,7 +364,11 @@ export function DiffsPage({
         { signal, page: { page_size: 50, offset: 0, search: '' } }
       ),
     enabled: Boolean(
-      projectId && documentId && selectedFromVersionId && selectedToVersionId
+      projectId &&
+      documentId &&
+      !hasDraftSelection &&
+      selectedFromVersionId &&
+      selectedToVersionId
     ),
   })
   const persistedDiff = comparisonHistoryQuery.data?.items.find(
@@ -367,8 +428,9 @@ export function DiffsPage({
     search?.from_branch_id,
     search?.to_branch_id,
   ])
-  const activeDiffCandidate =
-    search?.diff_id !== undefined
+  const activeDiffCandidate = hasDraftSelection
+    ? null
+    : search?.diff_id !== undefined
       ? (requestedDiff ?? null)
       : diff?.document_id === documentId &&
           diff.from_version_id === selectedFromVersionId &&
@@ -386,6 +448,49 @@ export function DiffsPage({
     activeDiffQuery.data?.document_id === documentId
       ? activeDiffQuery.data
       : undefined
+  const sourceQuery = useQuery({
+    queryKey: [
+      'diff-source',
+      projectId,
+      documentId,
+      activeDiff?.from_version_id,
+      activeDiff?.to_version_id,
+    ],
+    queryFn: async ({ signal }) => {
+      const [before, after] = await Promise.all([
+        getVersionContent(
+          projectId,
+          documentId,
+          activeDiff!.from_version_id!,
+          'raw',
+          { signal }
+        ),
+        getVersionContent(
+          projectId,
+          documentId,
+          activeDiff!.to_version_id!,
+          'raw',
+          { signal }
+        ),
+      ])
+      return { before: before.content, after: after.content }
+    },
+    enabled: Boolean(activeDiff?.from_version_id && activeDiff?.to_version_id),
+  })
+  const displayedSource = hasDraftSelection
+    ? sourceComparison?.context === workspaceContext
+      ? sourceComparison
+      : undefined
+    : sourceQuery.data
+  const sourceLabel = selectedFromDraft
+    ? `${t('admin.fields.draft')} · ${selectedFromDraft.version_name}`
+    : (fromChoices.versions.find(
+        (version) => version.id === selectedFromVersionId
+      )?.version_name ?? '')
+  const targetLabel = selectedToDraft
+    ? `${t('admin.fields.draft')} · ${selectedToDraft.version_name}`
+    : (toChoices.versions.find((version) => version.id === selectedToVersionId)
+        ?.version_name ?? '')
   const invalidFromVersionDeepLink = Boolean(
     versionsQuery.data &&
     !choices.isResolving &&
@@ -460,6 +565,8 @@ export function DiffsPage({
       toBranchId: selectedToBranchId,
       fromVersionId: selectedFromVersionId,
       toVersionId: selectedToVersionId,
+      fromDraftId: selectedFromDraft?.id ?? '',
+      toDraftId: selectedToDraft?.id ?? '',
       diffId: search?.diff_id,
     }),
     [
@@ -470,6 +577,8 @@ export function DiffsPage({
       selectedToBranchId,
       selectedFromVersionId,
       selectedToVersionId,
+      selectedFromDraft?.id,
+      selectedToDraft?.id,
       search?.diff_id,
     ]
   )
@@ -481,12 +590,60 @@ export function DiffsPage({
     }
   }, [comparisonTarget])
   const diffMutation = useMutation({
-    mutationFn: (request: typeof comparisonTarget) =>
-      compareDiff(request.projectId, request.documentId, {
-        from_version_id: request.fromVersionId,
-        to_version_id: request.toVersionId,
-      }),
-    onSuccess: (result, request) => {
+    mutationFn: async (request: typeof comparisonTarget) => {
+      if (request.fromDraftId || request.toDraftId) {
+        const [before, after] = await Promise.all([
+          request.fromDraftId
+            ? getDraftContent(
+                request.projectId,
+                request.documentId,
+                request.fromDraftId,
+                'raw'
+              )
+            : getVersionContent(
+                request.projectId,
+                request.documentId,
+                request.fromVersionId,
+                'raw'
+              ),
+          request.toDraftId
+            ? getDraftContent(
+                request.projectId,
+                request.documentId,
+                request.toDraftId,
+                'raw'
+              )
+            : getVersionContent(
+                request.projectId,
+                request.documentId,
+                request.toVersionId,
+                'raw'
+              ),
+        ])
+        return {
+          kind: 'snapshot' as const,
+          before: before.content,
+          after: after.content,
+          capturedAt: new Date().toISOString(),
+        }
+      }
+      return {
+        kind: 'stored' as const,
+        diff: await compareDiff(request.projectId, request.documentId, {
+          from_version_id: request.fromVersionId,
+          to_version_id: request.toVersionId,
+        }),
+      }
+    },
+    onSuccess: (response, request) => {
+      if (response.kind === 'snapshot') {
+        if (activeComparisonTarget.current === request) {
+          setSourceComparison({ context: workspaceContext, ...response })
+          setWorkspaceView({ context: workspaceContext, value: 'result' })
+        }
+        return
+      }
+      const result = response.diff
       // 切换文档、版本或离开页面后，旧请求只刷新其所属文档的缓存。
       if (activeComparisonTarget.current === request) {
         queryClient.setQueryData(
@@ -510,8 +667,9 @@ export function DiffsPage({
   const clearComparison = () => {
     activeComparisonTarget.current = null
     setDiff(null)
+    setSourceComparison(null)
   }
-  const summary = activeDiff?.summary
+  const summary = !hasDraftSelection ? activeDiff?.summary : undefined
   const searchText = diffSearch.trim().toLowerCase()
   const visibleItems = (activeDiff?.items ?? []).filter((item) => {
     const matchesSearch =
@@ -584,6 +742,8 @@ export function DiffsPage({
             setToBranchId('')
             setFromVersionId('')
             setToVersionId('')
+            setFromDraftId('')
+            setToDraftId('')
             setProjectId(value)
           }}
           placeholder={t('admin.placeholders.selectProject')}
@@ -598,6 +758,8 @@ export function DiffsPage({
             setToBranchId('')
             setFromVersionId('')
             setToVersionId('')
+            setFromDraftId('')
+            setToDraftId('')
             setDocumentId(value)
           }}
           placeholder={t('admin.placeholders.selectDocument')}
@@ -623,8 +785,10 @@ export function DiffsPage({
                 clearComparison()
                 setFromBranchId(value)
                 setFromVersionId('')
+                setFromDraftId('')
                 onSearchChange?.({
                   from_branch_id: value || undefined,
+                  from_draft_id: undefined,
                   from_version_id: undefined,
                   diff_id: undefined,
                 })
@@ -635,20 +799,50 @@ export function DiffsPage({
             />
             <NativeSelect
               label={t('admin.fields.fromVersion')}
-              value={selectedFromVersionId}
+              value={
+                fromDraftId
+                  ? `draft:${fromDraftId}`
+                  : selectedFromVersionId
+                    ? selectedFromVersionId
+                    : ''
+              }
               onChange={(value) => {
                 clearComparison()
-                setFromVersionId(value)
+                const isDraft = value.startsWith('draft:')
+                const id = isDraft ? value.slice('draft:'.length) : value
+                setFromVersionId(isDraft ? '' : id)
+                setFromDraftId(isDraft ? id : '')
                 onSearchChange?.({
-                  from_version_id: value || undefined,
+                  from_draft_id: isDraft ? id : undefined,
+                  from_version_id: isDraft ? undefined : id,
                   diff_id: undefined,
                 })
               }}
-              placeholder={t('admin.placeholders.selectVersion')}
-              options={fromChoices.versionOptions}
+              placeholder={t('admin.diff.selectRevision')}
+              options={[
+                ...fromChoices.versionOptions.map((option) => ({
+                  value: option.value,
+                  label: `${t('admin.workspace.published')} · ${option.label}`,
+                })),
+                ...fromDraftChoices.drafts.map((draft) => ({
+                  value: `draft:${draft.id}`,
+                  label: `${t('admin.fields.draft')} · ${draft.version_name} · ${formatDate(draft.updated_at)}`,
+                })),
+              ]}
               disabled={!validFromBranch || fromChoices.versionsQuery.isLoading}
             />
             <LoadingErrorState state={fromChoices.versionsQuery} />
+            <LoadingErrorState state={fromDraftChoices.draftsQuery} />
+            {fromDraftId &&
+              !fromDraftChoices.isResolving &&
+              fromDraftChoices.draftsQuery.isSuccess &&
+              !selectedFromDraft && (
+                <Alert variant='destructive'>
+                  <AlertDescription>
+                    {t('admin.diff.draftUnavailable')}
+                  </AlertDescription>
+                </Alert>
+              )}
           </fieldset>
           <fieldset className='grid min-w-0 content-start gap-4'>
             <legend className='mb-3 text-sm font-semibold'>
@@ -661,8 +855,10 @@ export function DiffsPage({
                 clearComparison()
                 setToBranchId(value)
                 setToVersionId('')
+                setToDraftId('')
                 onSearchChange?.({
                   to_branch_id: value || undefined,
+                  to_draft_id: undefined,
                   to_version_id: undefined,
                   diff_id: undefined,
                 })
@@ -673,20 +869,50 @@ export function DiffsPage({
             />
             <NativeSelect
               label={t('admin.fields.toVersion')}
-              value={selectedToVersionId}
+              value={
+                toDraftId
+                  ? `draft:${toDraftId}`
+                  : selectedToVersionId
+                    ? selectedToVersionId
+                    : ''
+              }
               onChange={(value) => {
                 clearComparison()
-                setToVersionId(value)
+                const isDraft = value.startsWith('draft:')
+                const id = isDraft ? value.slice('draft:'.length) : value
+                setToVersionId(isDraft ? '' : id)
+                setToDraftId(isDraft ? id : '')
                 onSearchChange?.({
-                  to_version_id: value || undefined,
+                  to_draft_id: isDraft ? id : undefined,
+                  to_version_id: isDraft ? undefined : id,
                   diff_id: undefined,
                 })
               }}
-              placeholder={t('admin.placeholders.selectVersion')}
-              options={toChoices.versionOptions}
+              placeholder={t('admin.diff.selectRevision')}
+              options={[
+                ...toChoices.versionOptions.map((option) => ({
+                  value: option.value,
+                  label: `${t('admin.workspace.published')} · ${option.label}`,
+                })),
+                ...toDraftChoices.drafts.map((draft) => ({
+                  value: `draft:${draft.id}`,
+                  label: `${t('admin.fields.draft')} · ${draft.version_name} · ${formatDate(draft.updated_at)}`,
+                })),
+              ]}
               disabled={!validToBranch || toChoices.versionsQuery.isLoading}
             />
             <LoadingErrorState state={toChoices.versionsQuery} />
+            <LoadingErrorState state={toDraftChoices.draftsQuery} />
+            {toDraftId &&
+              !toDraftChoices.isResolving &&
+              toDraftChoices.draftsQuery.isSuccess &&
+              !selectedToDraft && (
+                <Alert variant='destructive'>
+                  <AlertDescription>
+                    {t('admin.diff.draftUnavailable')}
+                  </AlertDescription>
+                </Alert>
+              )}
           </fieldset>
         </div>
       </section>
@@ -695,13 +921,19 @@ export function DiffsPage({
           <Button
             className='w-fit'
             disabled={
-              !selectedFromVersionId ||
-              !selectedToVersionId ||
-              selectedFromVersionId === selectedToVersionId ||
+              !(selectedFromVersionId || selectedFromDraft) ||
+              !(selectedToVersionId || selectedToDraft) ||
+              (!hasDraftSelection &&
+                selectedFromVersionId === selectedToVersionId) ||
+              Boolean(
+                selectedFromDraft &&
+                selectedToDraft &&
+                selectedFromDraft.id === selectedToDraft.id
+              ) ||
               !activeDocumentContext ||
               !validFromBranch ||
               !validToBranch ||
-              comparisonHistoryQuery.isLoading ||
+              (!hasDraftSelection && comparisonHistoryQuery.isLoading) ||
               Boolean(activeDiffCandidate) ||
               (comparisonIsCurrent && diffMutation.isPending)
             }
@@ -727,18 +959,20 @@ export function DiffsPage({
           <div className='grid min-w-0 gap-5 md:grid-cols-2'>
             {[
               {
+                drafts: fromDraftChoices,
                 choices: fromChoices,
                 id: 'source',
                 label: t('admin.diff.searchSourceVersions'),
                 paginationLabel: t('admin.diff.sourceVersionPagination'),
               },
               {
+                drafts: toDraftChoices,
                 choices: toChoices,
                 id: 'target',
                 label: t('admin.diff.searchTargetVersions'),
                 paginationLabel: t('admin.diff.targetVersionPagination'),
               },
-            ].map(({ choices: side, id, label, paginationLabel }) => (
+            ].map(({ choices: side, drafts, id, label, paginationLabel }) => (
               <div key={id} className='grid min-w-0 content-start gap-3'>
                 <div className='grid gap-2'>
                   <Label htmlFor={`diff-${id}-version-search`}>{label}</Label>
@@ -761,6 +995,20 @@ export function DiffsPage({
                   busy={side.versionsQuery.isFetching}
                   onPrevious={() => side.setOffset(side.offset - 50)}
                   onNext={() => side.setOffset(side.offset + 50)}
+                />
+                <QueryPagination
+                  label={t('admin.diff.draftPagination')}
+                  offset={drafts.offset}
+                  count={drafts.draftsQuery.data?.items.length ?? 0}
+                  total={drafts.draftsQuery.data?.total}
+                  hasMore={
+                    drafts.offset +
+                      (drafts.draftsQuery.data?.items.length ?? 0) <
+                    (drafts.draftsQuery.data?.total ?? 0)
+                  }
+                  busy={drafts.draftsQuery.isFetching}
+                  onPrevious={() => drafts.setOffset(drafts.offset - 50)}
+                  onNext={() => drafts.setOffset(drafts.offset + 50)}
                 />
               </div>
             ))}
@@ -803,66 +1051,113 @@ export function DiffsPage({
               error: requestedDiffQuery.error ?? activeDiffQuery.error,
             }}
           />
-          <CollectionCard
-            title={t('admin.sections.diffResult')}
-            description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
-            count={visibleItems.length}
-          >
-            {summary && (
-              <DiffSummaryCards
-                summary={summary}
-                isTextDiff={
-                  isTextDocumentFormat(summary.document_format) ||
-                  isTextDocumentType(selectedDocument?.document_type)
+          {!hasDraftSelection && activeDiff && (
+            <LoadingErrorState state={sourceQuery} />
+          )}
+          {displayedSource && (
+            <>
+              {hasDraftSelection && (
+                <p className='text-xs text-muted-foreground'>
+                  {t('admin.diff.draftSnapshot', {
+                    time: formatDate(sourceComparison?.capturedAt),
+                  })}
+                </p>
+              )}
+              <Suspense
+                fallback={
+                  <p role='status' className='text-sm text-muted-foreground'>
+                    {t('admin.common.loading')}
+                  </p>
                 }
-              />
-            )}
-            <SelectorGrid>
-              <div className='grid gap-2'>
-                <Label htmlFor='diff-search'>
-                  {t('admin.diff.searchLabel')}
-                </Label>
-                <div className='relative'>
-                  <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-                  <Input
-                    id='diff-search'
-                    value={diffSearch}
-                    onChange={(event) =>
-                      setDiffSearch(event.currentTarget.value)
-                    }
-                    placeholder={t('admin.diff.searchPlaceholder')}
-                    className='ps-9'
-                  />
-                </div>
-              </div>
-              <NativeSelect
-                label={t('admin.diff.filterLabel')}
-                value={diffFilterValue}
-                onChange={(value) => setDiffFilterValue(diffFilter(value))}
-                placeholder={t('admin.diff.filterAll')}
-                options={[
-                  { value: 'all', label: t('admin.diff.filterAll') },
-                  { value: 'breaking', label: t('admin.diff.filterBreaking') },
-                  {
-                    value: 'mustHandle',
-                    label: t('admin.diff.filterMustHandle'),
-                  },
-                  { value: 'high', label: t('admin.diff.filterHigh') },
-                ]}
-              />
-            </SelectorGrid>
-            {visibleItems.length ? (
-              <DiffReviewList
-                items={visibleItems}
-                isTextDiff={
-                  isTextDocumentFormat(summary?.document_format) ||
-                  isTextDocumentType(selectedDocument?.document_type)
-                }
-              />
-            ) : (
-              <EmptyState preset='diffs' />
-            )}
-          </CollectionCard>
+              >
+                <SourceDiffViewer
+                  before={displayedSource.before}
+                  after={displayedSource.after}
+                  fromLabel={sourceLabel}
+                  toLabel={targetLabel}
+                  fileName={selectedDocument?.file_name}
+                />
+              </Suspense>
+            </>
+          )}
+          {!displayedSource && !activeDiff && <EmptyState preset='diffs' />}
+          {activeDiff && (
+            <Collapsible className='grid min-w-0 gap-3'>
+              <CollapsibleTrigger asChild>
+                <Button variant='outline' className='w-fit gap-2'>
+                  {t('admin.diff.semanticReview')}
+                  <ChevronDown className='size-4' />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CollectionCard
+                  title={t('admin.sections.diffResult')}
+                  description={activeDiff?.id ?? t('admin.diff.noDiffSelected')}
+                  count={visibleItems.length}
+                >
+                  {summary && (
+                    <DiffSummaryCards
+                      summary={summary}
+                      isTextDiff={
+                        isTextDocumentFormat(summary.document_format) ||
+                        isTextDocumentType(selectedDocument?.document_type)
+                      }
+                    />
+                  )}
+                  <SelectorGrid>
+                    <div className='grid gap-2'>
+                      <Label htmlFor='diff-search'>
+                        {t('admin.diff.searchLabel')}
+                      </Label>
+                      <div className='relative'>
+                        <SearchIcon className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+                        <Input
+                          id='diff-search'
+                          value={diffSearch}
+                          onChange={(event) =>
+                            setDiffSearch(event.currentTarget.value)
+                          }
+                          placeholder={t('admin.diff.searchPlaceholder')}
+                          className='ps-9'
+                        />
+                      </div>
+                    </div>
+                    <NativeSelect
+                      label={t('admin.diff.filterLabel')}
+                      value={diffFilterValue}
+                      onChange={(value) =>
+                        setDiffFilterValue(diffFilter(value))
+                      }
+                      placeholder={t('admin.diff.filterAll')}
+                      options={[
+                        { value: 'all', label: t('admin.diff.filterAll') },
+                        {
+                          value: 'breaking',
+                          label: t('admin.diff.filterBreaking'),
+                        },
+                        {
+                          value: 'mustHandle',
+                          label: t('admin.diff.filterMustHandle'),
+                        },
+                        { value: 'high', label: t('admin.diff.filterHigh') },
+                      ]}
+                    />
+                  </SelectorGrid>
+                  {visibleItems.length ? (
+                    <DiffReviewList
+                      items={visibleItems}
+                      isTextDiff={
+                        isTextDocumentFormat(summary?.document_format) ||
+                        isTextDocumentType(selectedDocument?.document_type)
+                      }
+                    />
+                  ) : (
+                    <EmptyState preset='diffs' />
+                  )}
+                </CollectionCard>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </TabsContent>
         <TabsContent value='history' className='grid min-w-0 gap-4'>
           <LoadingErrorState
@@ -925,6 +1220,8 @@ export function DiffsPage({
                           activeComparisonTarget.current = null
                           setFromBranchId('')
                           setToBranchId('')
+                          setFromDraftId('')
+                          setToDraftId('')
                           setFromVersionId(item.from_version_id ?? '')
                           setToVersionId(item.to_version_id ?? '')
                           setDiff(item)
@@ -936,6 +1233,8 @@ export function DiffsPage({
                           onSearchChange?.({
                             from_branch_id: undefined,
                             to_branch_id: undefined,
+                            from_draft_id: undefined,
+                            to_draft_id: undefined,
                             from_version_id: item.from_version_id || undefined,
                             to_version_id: item.to_version_id || undefined,
                             diff_id: item.id,

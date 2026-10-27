@@ -1,4 +1,4 @@
-import type { AISummaryTarget, DocumentDTO } from '@/lib/vdoc-api'
+import type { AISummaryTarget, AIChatTarget, DocumentDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
 import { AIContextPanel } from './ai-panels'
@@ -10,12 +10,14 @@ export function DocumentWorkspaceAI({
   selection,
   interactive,
   canRegenerate,
+  summaryInteractive = interactive,
 }: {
   projectId: string
   document: DocumentDTO
   selection: DocumentReadingSelection
   interactive: boolean
   canRegenerate: boolean
+  summaryInteractive?: boolean
 }) {
   const { t } = useLanguage()
   const revision =
@@ -37,6 +39,13 @@ export function DocumentWorkspaceAI({
           ownerId: revision.id,
         }
       : undefined
+
+  const chatTarget: AIChatTarget = {
+    projectId,
+    documentId: document.id,
+    ownerType: 'document',
+    ownerId: document.id,
+  }
 
   return (
     <section
@@ -64,35 +73,33 @@ export function DocumentWorkspaceAI({
         )}
       </div>
       {selection.pending ? (
-        <p role='status' className='py-8 text-sm text-muted-foreground'>
+        <p role='status' className='py-4 text-sm text-muted-foreground'>
           {t('admin.common.loading')}
         </p>
-      ) : !target ? (
-        <p
-          role='status'
-          className='py-8 text-sm leading-6 text-muted-foreground'
-        >
-          {t(
-            invalid
-              ? 'admin.workspace.readerUnavailable'
-              : 'admin.workspace.aiNoContext'
-          )}
-        </p>
-      ) : (
+      ) : target ? (
         <AIContextPanel
-          key={JSON.stringify([
-            projectId,
-            document.id,
-            selection.branchId,
-            target.ownerType,
-            target.ownerId,
-          ])}
           target={target}
-          interactive={interactive}
+          interactive={summaryInteractive}
           canRegenerate={canRegenerate}
           presentation='sidebar'
+          mode='summary'
         />
+      ) : (
+        <p role='status' className='text-sm text-muted-foreground'>
+          {t('admin.workspace.aiNoContext')}
+        </p>
       )}
+      <div className='grid min-w-0 gap-3 border-t pt-4'>
+        <p className='text-xs leading-5 text-muted-foreground'>
+          {t('admin.workspace.documentChatDescription')}
+        </p>
+        <AIContextPanel
+          target={chatTarget}
+          interactive={interactive}
+          presentation='sidebar'
+          mode='chat'
+        />
+      </div>
     </section>
   )
 }
