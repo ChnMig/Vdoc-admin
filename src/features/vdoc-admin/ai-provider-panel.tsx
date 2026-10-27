@@ -1,8 +1,8 @@
-import { useRef } from 'react'
-import { AI_PROVIDER_API_MODES } from '@/lib/vdoc-api'
+import { useRef, useState } from 'react'
 import { useLanguage } from '@/context/language-provider'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { AIAPIKeyField } from './ai-api-key-field'
 import { AIModelField } from './ai-model-field'
 import {
   AINumberField,
@@ -22,6 +22,7 @@ import {
   providerPayload,
   providerPayloadIsBlank,
 } from './ai-settings-utils'
+import { AITemperatureField } from './ai-temperature-field'
 
 export function AIProviderPanel({
   scope,
@@ -39,6 +40,8 @@ export function AIProviderPanel({
   const saveLockedRef = useRef(false)
   const testLockedRef = useRef(false)
   const formRef = useRef<HTMLFormElement>(null)
+  const [formRevision, setFormRevision] = useState(0)
+  const formKey = `${providerFormKey(scope, provider, projectId)}:${formRevision}`
   const disabled =
     readOnly || (scope === 'project' && (projectId ?? '').length === 0)
   const tuning = {
@@ -85,13 +88,19 @@ export function AIProviderPanel({
       </div>
       <form
         ref={formRef}
-        key={providerFormKey(scope, provider, projectId)}
+        key={formKey}
         className='grid gap-4'
         onSubmit={(event) => {
           event.preventDefault()
           if (saveLockedRef.current) return
           saveLockedRef.current = true
-          void onSave(providerPayload(new FormData(event.currentTarget)))
+          const submittedForm = event.currentTarget
+          void onSave(providerPayload(new FormData(submittedForm)))
+            .then(() => {
+              if (formRef.current === submittedForm) {
+                setFormRevision((revision) => revision + 1)
+              }
+            })
             .catch(() => undefined)
             .finally(() => {
               saveLockedRef.current = false
@@ -116,8 +125,27 @@ export function AIProviderPanel({
             disabled={disabled}
             required
           />
+          <AIAPIKeyField
+            key={`${formKey}:key`}
+            id={`${scope}-ai-provider-api-key`}
+            scope={scope}
+            projectId={projectId}
+            saved={provider?.api_key_set ?? false}
+            disabled={disabled}
+            onChange={onTestPayloadChange}
+          />
+          <AINativeSelect
+            id={`${scope}-ai-provider-api-mode`}
+            label={t('admin.ai.apiMode')}
+            name='api_mode'
+            value={provider?.api_mode ?? 'responses'}
+            disabled={disabled}
+            placeholder={t('admin.ai.apiModePlaceholder')}
+            options={providerApiModeOptions(t)}
+            required
+          />
           <AIModelField
-            key={providerFormKey(scope, provider, projectId)}
+            key={`${formKey}:model`}
             id={`${scope}-ai-provider-model`}
             scope={scope}
             projectId={projectId}
@@ -125,30 +153,6 @@ export function AIProviderPanel({
             defaultValue={provider?.model ?? ''}
             disabled={disabled}
             onModelChange={onTestPayloadChange}
-          />
-          <AINativeSelect
-            id={`${scope}-ai-provider-api-mode`}
-            label={t('admin.ai.apiMode')}
-            name='api_mode'
-            value={provider?.api_mode ?? AI_PROVIDER_API_MODES[0]}
-            disabled={disabled}
-            placeholder={t('admin.ai.apiModePlaceholder')}
-            options={providerApiModeOptions(t)}
-            required
-          />
-          <AITextField
-            id={`${scope}-ai-provider-api-key`}
-            label={
-              scope === 'system'
-                ? t('admin.ai.systemApiKey')
-                : t('admin.ai.projectApiKey')
-            }
-            name='api_key'
-            type='password'
-            defaultValue=''
-            disabled={disabled}
-            placeholder={t('admin.ai.apiKeyPlaceholder')}
-            required={!provider?.api_key_set}
           />
           <AINativeSelect
             id={`${scope}-ai-provider-enabled`}
@@ -164,15 +168,12 @@ export function AIProviderPanel({
           <legend className='pe-3 text-sm font-medium'>
             {t('admin.ai.tuningTitle')}
           </legend>
-          <AINumberField
+          <AITemperatureField
+            key={`${formKey}:temperature`}
             id={`${scope}-ai-provider-temperature`}
-            label={t('admin.ai.temperature')}
-            name='temperature'
             defaultValue={tuning.temperature}
             disabled={disabled}
-            min={0}
-            max={2}
-            step={0.1}
+            onChange={onTestPayloadChange}
           />
           <AINumberField
             id={`${scope}-ai-provider-timeout-ms`}

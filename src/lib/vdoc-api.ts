@@ -201,6 +201,8 @@ export type AuditLogDTO = {
   actor_type: number
   actor_user_id?: string
   actor_token_id?: string
+  actor_email?: string
+  project_name?: string
   action: string
   resource_type: string
   resource_id?: string
@@ -215,6 +217,7 @@ export type AuditLogDTO = {
 
 export type AuditLogQuery = {
   project_id?: string
+  actor?: string
   action?: string
   resource_type?: string
   resource_id?: string
@@ -1287,6 +1290,29 @@ export function getDiffSummary(
 export function getSystemAIProvider(options?: RequestOptions) {
   return unwrapEnvelope<AIProviderDTO>(
     vdocApi.get('/api/v1/private/ai/provider', { signal: options?.signal })
+  )
+}
+
+export function revealSystemAIProviderKey(options?: RequestOptions) {
+  return unwrapEnvelope<{ api_key: string }>(
+    vdocApi.post('/api/v1/private/ai/provider/key/reveal', undefined, {
+      signal: options?.signal,
+    })
+  )
+}
+
+export function revealProjectAIProviderKey(
+  projectId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<{ api_key: string }>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/provider/key/reveal`,
+      undefined,
+      {
+        signal: options?.signal,
+      }
+    )
   )
 }
 

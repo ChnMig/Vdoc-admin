@@ -1,6 +1,5 @@
 import type { TFunction } from '@/lib/i18n'
 import {
-  AI_PROVIDER_API_MODES,
   isAIProviderAPIMode,
   type AIProviderAPIMode,
   type AIProviderDTO,
@@ -65,10 +64,10 @@ export function enabledOptions(t: TFunction): readonly SelectOption[] {
 export function providerApiModeOptions(t: TFunction): readonly SelectOption[] {
   return [
     {
-      value: AI_PROVIDER_API_MODES[0],
-      label: t('admin.ai.apiModeChatCompletions'),
+      value: 'responses',
+      label: t('admin.ai.apiModeResponses'),
     },
-    { value: AI_PROVIDER_API_MODES[1], label: t('admin.ai.apiModeResponses') },
+    { value: 'chat_completions', label: t('admin.ai.apiModeChatCompletions') },
   ]
 }
 
@@ -119,6 +118,8 @@ export function providerFormKey(
     provider?.base_url ?? '',
     provider?.model ?? '',
     provider?.api_mode ?? '',
+    provider?.id ?? '',
+    provider?.api_key_set ? (provider.api_key_last4 ?? 'set') : 'unset',
     provider?.temperature ?? '',
     provider?.timeout_ms ?? '',
     provider?.max_output_tokens ?? '',
@@ -150,5 +151,5 @@ function optionalNumberField(formData: FormData, key: string) {
 
 function providerApiMode(formData: FormData): AIProviderAPIMode {
   const value = fieldValue(formData, 'api_mode')
-  return isAIProviderAPIMode(value) ? value : AI_PROVIDER_API_MODES[0]
+  return isAIProviderAPIMode(value) ? value : 'responses'
 }

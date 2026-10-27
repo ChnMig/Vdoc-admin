@@ -71,7 +71,9 @@ export function AIModelField({
       const target = event.target
       if (
         !(target instanceof HTMLInputElement) ||
-        !['base_url', 'api_key', 'timeout_ms'].includes(target.name)
+        !['base_url', 'api_key', 'api_key_display', 'timeout_ms'].includes(
+          target.name
+        )
       )
         return
       generation.current++

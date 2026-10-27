@@ -21,6 +21,12 @@ import {
 } from '@/components/ui/table'
 import { DateTimePickerField } from '@/components/date-time-picker'
 import {
+  AUDIT_ACTION_LABELS,
+  AUDIT_RESOURCE_LABELS,
+  auditActionLabel,
+  auditResourceLabel,
+} from './audit-enums'
+import {
   PageChrome,
   NativeSelect,
   TextField,
@@ -66,14 +72,16 @@ export function AuditPage() {
   )
   const [action, setAction] = useState('')
   const [resourceType, setResourceType] = useState('')
+  const [actor, setActor] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const filters = useDebouncedValue(
-    JSON.stringify({ action, resourceType, from, to })
+    JSON.stringify({ action, resourceType, actor, from, to })
   )
   const queryFilters: {
     action: string
     resourceType: string
+    actor: string
     from: string
     to: string
   } = JSON.parse(filters)
@@ -88,6 +96,7 @@ export function AuditPage() {
         {
           project_id: projectId || undefined,
           action: queryFilters.action || undefined,
+          actor: queryFilters.actor || undefined,
           resource_type: queryFilters.resourceType || undefined,
           from: queryFilters.from
             ? new Date(queryFilters.from).toISOString()
@@ -110,13 +119,14 @@ export function AuditPage() {
         description={t('admin.audit.description')}
         count={auditQuery.data?.total ?? 0}
         actions={
-          (action || resourceType || from || to) && (
+          (action || resourceType || actor || from || to) && (
             <Button
               size='sm'
               variant='outline'
               onClick={() => {
                 setAction('')
                 setResourceType('')
+                setActor('')
                 setFrom('')
                 setTo('')
               }}
@@ -146,24 +156,40 @@ export function AuditPage() {
               }
               options={projectOptions}
             />
-            <TextField
+            <NativeSelect
               id='audit-action'
               label={t('admin.audit.action')}
               name='audit_action'
               placeholder={t('admin.audit.actionPlaceholder')}
               value={action}
               onChange={setAction}
+              options={Object.keys(AUDIT_ACTION_LABELS).map((value) => ({
+                value,
+                label: auditActionLabel(value, t),
+              }))}
             />
-            <TextField
+            <NativeSelect
               id='audit-resource-type'
               label={t('admin.audit.resourceType')}
               name='audit_resource_type'
               placeholder={t('admin.audit.resourceTypePlaceholder')}
               value={resourceType}
               onChange={setResourceType}
+              options={Object.keys(AUDIT_RESOURCE_LABELS).map((value) => ({
+                value,
+                label: auditResourceLabel(value, t),
+              }))}
             />
           </div>
-          <div className='grid max-w-2xl min-w-0 gap-4 @sm/audit-filters:grid-cols-2'>
+          <div className='grid min-w-0 gap-4 @sm/audit-filters:grid-cols-2 @xl/audit-filters:grid-cols-3'>
+            <TextField
+              id='audit-actor'
+              name='audit_actor'
+              label={t('admin.audit.actor')}
+              placeholder={t('admin.audit.actorPlaceholder')}
+              value={actor}
+              onChange={setActor}
+            />
             <DateTimePickerField
               id='audit-from'
               name='audit_from'
@@ -243,15 +269,31 @@ function AuditLogTable({ logs }: { logs: AuditLogDTO[] }) {
             <TableCell className='text-xs whitespace-nowrap'>
               {formatDate(log.created_at)}
             </TableCell>
-            <TableCell className='font-mono text-xs'>{log.action}</TableCell>
+            <TableCell className='text-sm' title={log.action}>
+              {auditActionLabel(log.action, t)}
+            </TableCell>
             <TableCell
-              className='max-w-44 truncate font-mono text-xs'
+              className='max-w-64 text-sm break-words'
               title={log.actor_user_id ?? log.actor_token_id ?? undefined}
             >
-              {log.actor_user_id ?? log.actor_token_id ?? '-'}
+              {log.actor_email ||
+                t(
+                  log.actor_type === 3
+                    ? 'admin.audit.systemActor'
+                    : log.actor_type === 4
+                      ? 'admin.audit.anonymousActor'
+                      : 'admin.audit.unknownActor'
+                )}
+              {log.actor_type === 2 && (
+                <div className='text-xs text-muted-foreground'>
+                  {t('admin.audit.mcpActor')}
+                </div>
+              )}
             </TableCell>
             <TableCell className='max-w-56'>
-              <div className='font-mono text-xs'>{log.resource_type}</div>
+              <div className='text-sm' title={log.resource_type}>
+                {auditResourceLabel(log.resource_type, t)}
+              </div>
               <div
                 className='truncate font-mono text-xs text-muted-foreground'
                 title={log.resource_id ?? log.document_id ?? undefined}
@@ -260,14 +302,23 @@ function AuditLogTable({ logs }: { logs: AuditLogDTO[] }) {
               </div>
             </TableCell>
             <TableCell
-              className='max-w-40 truncate font-mono text-xs'
+              className='max-w-52 text-sm break-words'
               title={log.project_id ?? undefined}
             >
-              {log.project_id ?? '-'}
+              {log.project_name ||
+                t(
+                  log.project_id
+                    ? 'admin.audit.unknownProject'
+                    : 'admin.audit.systemProject'
+                )}
             </TableCell>
             <TableCell>
               <StatusBadge muted={log.metadata.result !== 'success'}>
-                {log.metadata.result ?? t('admin.common.unknown')}
+                {log.metadata.result === 'success'
+                  ? t('admin.ai.providerTestSuccess')
+                  : ['failed', 'failure'].includes(log.metadata.result)
+                    ? t('admin.ai.providerTestError')
+                    : (log.metadata.result ?? t('admin.common.unknown'))}
               </StatusBadge>
             </TableCell>
           </TableRow>

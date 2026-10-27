@@ -71,8 +71,13 @@ for (const width of [1280, 390]) {
           [
             {
               id: `audit-${requests.length}`,
+              actor_type: 1,
+              actor_user_id: 'opaque-user-id',
+              actor_email: 'operator@example.test',
               action: `${query.project_id ?? 'global'}.${query.cursor ? 'older' : 'latest'}`,
               project_id: query.project_id,
+              project_name:
+                query.project_id === 'project-b' ? 'Project B' : 'Project A',
               resource_type: 'document',
               metadata: { result: 'success' },
               created_at: '2026-09-30T00:00:00Z',
@@ -91,12 +96,34 @@ for (const width of [1280, 390]) {
     await expect.poll(() => requests.at(-1)?.cursor).toBe('older-page')
     await selectOption(selector, '')
     await expect(selector).toHaveAttribute('value', '')
-    await expect(page.getByText('global.latest', { exact: true })).toBeVisible()
+    await expect(
+      page.getByTitle('global.latest', { exact: true })
+    ).toBeVisible()
+    await expect(
+      page.getByText('operator@example.test', { exact: true })
+    ).toBeVisible()
+    await expect(page.getByText('opaque-user-id', { exact: true })).toHaveCount(
+      0
+    )
     await expect(
       page.getByRole('button', { name: 'Previous', exact: true })
     ).toBeDisabled()
-    await page.getByLabel('Action', { exact: true }).fill('document.updated')
-    await expect.poll(() => requests.at(-1)?.action).toBe('document.updated')
+    await selectOption(
+      page.getByLabel('Action', { exact: true }),
+      'document.update'
+    )
+    await expect.poll(() => requests.at(-1)?.action).toBe('document.update')
+    await selectOption(
+      page.getByLabel('Resource type', { exact: true }),
+      'document'
+    )
+    await page
+      .getByLabel('Actor', { exact: true })
+      .fill('operator@example.test')
+    await expect
+      .poll(() => requests.at(-1)?.actor)
+      .toBe('operator@example.test')
+    expect(requests.at(-1)?.resource_type).toBe('document')
     expect(requests.at(-1)?.project_id).toBeUndefined()
     await expect(selector).toHaveAttribute('value', '')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
@@ -106,13 +133,16 @@ for (const width of [1280, 390]) {
     await expect.poll(() => requests.at(-1)?.project_id).toBe('project-b')
     expect(requests.at(-1)?.cursor).toBeUndefined()
     await expect(selector).toHaveAttribute('value', 'project-b')
+    await expect(page.locator('td[title="project-b"]')).toHaveText('Project B')
     await writeFile(
       testInfo.outputPath('audit-requests.json'),
       JSON.stringify({ width, requests }, null, 2)
     )
+    await expect(page.getByRole('listbox')).toHaveCount(0)
     await page.screenshot({
       path: testInfo.outputPath(`audit-${width}.png`),
       fullPage: true,
+      animations: 'disabled',
     })
   })
 }

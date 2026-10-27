@@ -345,13 +345,20 @@ test('desktop AI docks beside reading and retains conversation, input and DOM ac
   )
   const reader = page.locator('[data-document-reading-pane]')
   await expect(reader).toBeVisible()
-  const [readingBounds, panelBounds] = await Promise.all([
-    reader.boundingBox(),
-    dialog.boundingBox(),
-  ])
-  expect(panelBounds!.x).toBeGreaterThanOrEqual(
-    readingBounds!.x + readingBounds!.width - 1
-  )
+  // 动画中的两块区域必须在同一帧测量，避免混用不同布局帧。
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const reading = document
+          .querySelector('[data-document-reading-pane]')!
+          .getBoundingClientRect()
+        const panel = document
+          .querySelector('dialog[open]')!
+          .getBoundingClientRect()
+        return panel.left - reading.right
+      })
+    )
+    .toBeGreaterThanOrEqual(-1)
   const input = page.getByLabel('AI chat message', { exact: true })
   const inputNode = await input.elementHandle()
   await input.fill('Explain this historical release.')

@@ -93,8 +93,10 @@ export function AINumberField({
   readonly step: number
 }) {
   return (
-    <div className='grid min-w-0 gap-2'>
-      <Label htmlFor={id ?? name}>{label}</Label>
+    <div className='grid min-w-0 content-start gap-2'>
+      <Label htmlFor={id ?? name} className='min-h-6'>
+        {label}
+      </Label>
       <Input
         id={id ?? name}
         name={name}

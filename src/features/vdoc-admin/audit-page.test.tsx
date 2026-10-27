@@ -1,13 +1,7 @@
 import type { ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { selectOption } from '@/test/select-option'
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
@@ -88,17 +82,58 @@ async function selectAllProjects() {
 }
 
 describe('AuditPage project scope', () => {
+  it('renders enum labels and human names, and filters actors on the server', async () => {
+    api.listAuditLogs.mockResolvedValue({
+      items: [
+        {
+          id: 'audit-test',
+          actor_type: 2,
+          actor_user_id: 'opaque-user-id',
+          actor_token_id: 'opaque-token-id',
+          actor_email: 'writer@example.test',
+          project_id: 'project-a',
+          project_name: 'Project A',
+          action: 'document.create',
+          resource_type: 'document',
+          resource_id: 'doc-123',
+          metadata: { result: 'success' },
+          created_at: '2026-10-27T12:00:00Z',
+        },
+      ],
+      total: 1,
+    })
+    const { screen } = await selectAllProjects()
+    expect(await screen.findByText('writer@example.test')).toBeInTheDocument()
+    expect(screen.getByText('Create document')).toHaveAttribute(
+      'title',
+      'document.create'
+    )
+    expect(
+      screen.getByText('Document', { selector: 'div[title]' })
+    ).toHaveAttribute('title', 'document')
+    expect(screen.queryByText('opaque-user-id')).not.toBeInTheDocument()
+    await selectOption(screen.getByLabelText('Resource type'), 'document')
+    await userEvent.type(screen.getByLabelText('Actor'), 'writer@example.test')
+    await waitFor(() =>
+      expect(api.listAuditLogs).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          actor: 'writer@example.test',
+          resource_type: 'document',
+        }),
+        expect.anything()
+      )
+    )
+  })
+
   it('keeps an explicit global selection after refreshing projects and filters', async () => {
     const { screen, selector } = await selectAllProjects()
     await act(() => client.invalidateQueries({ queryKey: ['projects'] }))
-    fireEvent.change(screen.getByLabelText('Action'), {
-      target: { value: 'document.updated' },
-    })
+    await selectOption(screen.getByLabelText('Action'), 'document.update')
     await waitFor(() =>
       expect(api.listAuditLogs).toHaveBeenLastCalledWith(
         expect.objectContaining({
           project_id: undefined,
-          action: 'document.updated',
+          action: 'document.update',
         }),
         expect.anything()
       )

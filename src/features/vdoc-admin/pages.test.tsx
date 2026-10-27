@@ -2469,7 +2469,9 @@ describe('SettingsPage AI settings', () => {
     expect(
       await screen.findByText('Key set: yes · last4: 1234')
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('System API key')).toHaveDisplayValue('')
+    expect(screen.getByLabelText('System API key')).toHaveDisplayValue(
+      '••••••••'
+    )
     expect(screen.queryByDisplayValue('sk-live-secret')).not.toBeInTheDocument()
     const systemProviderEnabled = screen.getAllByLabelText('Enabled')[0]
     if (!systemProviderEnabled) {
@@ -2510,8 +2512,7 @@ describe('SettingsPage AI settings', () => {
     expect(systemTemperature).toHaveDisplayValue('0.4')
     expect(systemTimeout).toHaveDisplayValue('45000')
     expect(systemMaxTokens).toHaveDisplayValue('2048')
-    await user.clear(systemTemperature)
-    await user.type(systemTemperature, '0.6')
+    fireEvent.change(systemTemperature, { target: { value: '0.6' } })
     await user.clear(systemTimeout)
     await user.type(systemTimeout, '60000')
     await user.clear(systemMaxTokens)
@@ -5418,20 +5419,29 @@ describe('AuditPage cursor navigation', () => {
     )
     const user = userEvent.setup()
     const screen = renderPage(<AuditPage />)
-    expect(await screen.findByText('new.event')).toBeInTheDocument()
+    expect(await screen.findByTitle('new.event')).toHaveTextContent(
+      'Other action'
+    )
     await user.click(screen.getByRole('button', { name: 'Next' }))
-    expect(await screen.findByText('old.event')).toBeInTheDocument()
+    expect(await screen.findByTitle('old.event')).toHaveTextContent(
+      'Other action'
+    )
     expect(apiMocks.listAuditLogs).toHaveBeenLastCalledWith(
       expect.objectContaining({ cursor: 'opaque-cursor', limit: 50 }),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     await user.click(screen.getByRole('button', { name: 'Previous' }))
-    expect(await screen.findByText('new.event')).toBeInTheDocument()
+    expect(await screen.findByTitle('new.event')).toHaveTextContent(
+      'Other action'
+    )
     await user.click(screen.getByRole('button', { name: 'Next' }))
-    await user.type(screen.getByLabelText('Action'), 'review')
+    await selectOption(screen.getByLabelText('Action'), 'contract_draft.review')
     await waitFor(() =>
       expect(apiMocks.listAuditLogs).toHaveBeenLastCalledWith(
-        expect.objectContaining({ cursor: undefined, action: 'review' }),
+        expect.objectContaining({
+          cursor: undefined,
+          action: 'contract_draft.review',
+        }),
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     )

@@ -8,7 +8,7 @@ const projectPath = `${root}/projects/${projectId}/ai/provider`
 const provider = {
   id: 'model-discovery-provider',
   name: 'Example provider',
-  base_url: 'https://models.example.test',
+  base_url: 'https://models.example.test/gateway/v1',
   model: 'saved-model',
   api_mode: 'responses',
   api_key_set: true,
@@ -44,6 +44,7 @@ async function fixture(page: Page) {
     requests: [] as { path: string; body: Record<string, unknown> }[],
     saves: [] as { path: string; body: Record<string, unknown> }[],
     failNext: false,
+    reveals: 0,
   }
   const providers = {
     [systemPath]: { ...provider, scope: 'system' },
@@ -85,6 +86,10 @@ async function fixture(page: Page) {
         models: ['remote-alpha', 'remote-beta', 'saved-model'],
       })
     }
+    if (path.endsWith('/ai/provider/key/reveal')) {
+      state.reveals++
+      return reply(route, { api_key: 'synthetic-saved-key' })
+    }
     if (providers[path]) {
       if (request.method() === 'PUT') {
         const body = request.postDataJSON()
@@ -120,6 +125,39 @@ for (const width of [1280, 390]) {
     await page.getByRole('tab', { name: 'AI', exact: true }).click()
     const model = page.getByRole('textbox', { name: 'Model', exact: true })
     await expect(model).toHaveValue('saved-model')
+    const apiKey = page.getByLabel('System API key', { exact: true })
+    await expect(apiKey).toHaveValue('••••••••')
+    await expect(apiKey).toHaveAttribute('type', 'password')
+    expect(state.reveals).toBe(0)
+    expect(
+      await apiKey.evaluate((key) =>
+        Boolean(
+          key.compareDocumentPosition(
+            document.querySelector('#system-ai-provider-model')!
+          ) & Node.DOCUMENT_POSITION_FOLLOWING
+        )
+      )
+    ).toBe(true)
+    await page
+      .getByRole('button', { name: 'Show API key', exact: true })
+      .click()
+    await expect(apiKey).toHaveValue('synthetic-saved-key')
+    await expect(apiKey).toHaveAttribute('type', 'text')
+    await page
+      .getByRole('button', { name: 'Hide API key', exact: true })
+      .click()
+    await expect(apiKey).toHaveValue('••••••••')
+    const temperature = page.getByRole('slider', {
+      name: 'Temperature',
+      exact: true,
+    })
+    await temperature.focus()
+    await temperature.press('Home')
+    await expect(temperature).toHaveValue('0')
+    await temperature.press('ArrowRight')
+    await expect(temperature).toHaveValue('0.1')
+    await page.getByRole('button', { name: 'Reset temperature to 0.2' }).click()
+    await expect(temperature).toHaveValue('0.2')
     await page.getByRole('button', { name: 'Browse provider models' }).click()
     const search = page.getByRole('combobox', { name: 'Search models' })
     await search.fill('remote-beta')
@@ -141,7 +179,11 @@ for (const width of [1280, 390]) {
         () => document.documentElement.scrollWidth <= innerWidth
       )
     ).toBe(true)
-    await page.screenshot({ path: info.outputPath(`models-${width}.png`) })
+    await page.screenshot({
+      path: info.outputPath(`models-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    })
     await search.press('ArrowDown')
     await search.press('Enter')
     await expect(model).toHaveValue('remote-beta')
@@ -158,6 +200,12 @@ for (const width of [1280, 390]) {
     await expect.poll(() => state.saves.length).toBe(1)
     expect(state.saves[0].body.model).toBe('my-custom-model')
     expect(state.saves[0].body.api_key).toBeUndefined()
+    expect(state.saves[0].body.temperature).toBe(0.2)
+    await page.screenshot({
+      path: info.outputPath(`provider-form-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    })
 
     await page
       .getByRole('tab', { name: 'Project override', exact: true })

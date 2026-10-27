@@ -16,6 +16,8 @@ import { AISettingsPanel } from './ai-settings'
 const apiMocks = vi.hoisted(() => ({
   getProjectAIProvider: vi.fn(),
   getSystemAIProvider: vi.fn(),
+  revealSystemAIProviderKey: vi.fn(),
+  revealProjectAIProviderKey: vi.fn(),
   listSystemAIProviderModels: vi.fn(),
   listProjectAIProviderModels: vi.fn(),
   listProjectAIPrompts: vi.fn(),
@@ -158,6 +160,82 @@ describe('AISettingsPanel project boundaries', () => {
     apiMocks.listProjectMembers.mockResolvedValue({ items: [], total: 0 })
   })
 
+  it('reveals a saved key only on request and never submits it as a replacement', async () => {
+    apiMocks.revealSystemAIProviderKey.mockResolvedValue({
+      api_key: 'synthetic-saved-secret',
+    })
+    apiMocks.updateSystemAIProvider.mockResolvedValue(provider('system'))
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const key = await screen.findByLabelText('System API key')
+    expect(key).toHaveValue('••••••••')
+    expect(key).toHaveAttribute('type', 'password')
+    expect(apiMocks.revealSystemAIProviderKey).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Show API key' }))
+    await waitFor(() => expect(key).toHaveValue('synthetic-saved-secret'))
+    expect(key).toHaveAttribute('type', 'text')
+    await user.click(
+      screen.getByRole('button', { name: 'Browse provider models' })
+    )
+    await screen.findByRole('option', { name: 'remote-system-model' })
+    expect(apiMocks.listSystemAIProviderModels).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ api_key: expect.anything() }),
+      expect.anything()
+    )
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Hide API key' }))
+    expect(key).toHaveValue('••••••••')
+    await user.click(
+      screen.getByRole('button', { name: 'Save system provider' })
+    )
+    await waitFor(() =>
+      expect(apiMocks.updateSystemAIProvider).toHaveBeenCalled()
+    )
+    expect(
+      apiMocks.updateSystemAIProvider.mock.calls[0][0].api_key
+    ).toBeUndefined()
+  })
+
+  it('aborts a pending key reveal when replacing credentials', async () => {
+    const pending = deferred<{ api_key: string }>()
+    apiMocks.revealSystemAIProviderKey.mockReturnValueOnce(pending.promise)
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const key = await screen.findByLabelText('System API key')
+    await user.click(screen.getByRole('button', { name: 'Show API key' }))
+    const signal = apiMocks.revealSystemAIProviderKey.mock.calls[0][0]
+      .signal as AbortSignal
+    await user.click(screen.getByRole('button', { name: 'Replace key' }))
+    expect(signal.aborted).toBe(true)
+    await user.type(key, 'new-synthetic-key')
+    await act(async () =>
+      pending.resolve({ api_key: 'stale-synthetic-secret' })
+    )
+    expect(key).toHaveValue('new-synthetic-key')
+    expect(key).toHaveAttribute('type', 'password')
+  })
+
+  it('uses Responses for new configuration and resets temperature without submitting', async () => {
+    apiMocks.getSystemAIProvider.mockResolvedValue({
+      api_key_set: false,
+      enabled: false,
+    })
+    const user = userEvent.setup()
+    const screen = await renderSettings(superAdmin, 'system')
+    const slider = await screen.findByRole('slider', { name: 'Temperature' })
+    expect(screen.getByLabelText('API mode')).toHaveValue('responses')
+    expect(slider).toHaveValue('0.2')
+    fireEvent.change(slider, { target: { value: '0' } })
+    expect(slider).toHaveValue('0')
+    fireEvent.change(slider, { target: { value: '1.3' } })
+    await user.click(
+      screen.getByRole('button', { name: 'Reset temperature to 0.2' })
+    )
+    expect(slider).toHaveValue('0.2')
+    expect(apiMocks.updateSystemAIProvider).not.toHaveBeenCalled()
+    expect(apiMocks.testSystemAIProvider).not.toHaveBeenCalled()
+  })
+
   it('loads remote models with saved credentials and still saves a manually entered model', async () => {
     const user = userEvent.setup()
     const screen = await renderSettings(superAdmin, 'system')
@@ -251,6 +329,7 @@ describe('AISettingsPanel project boundaries', () => {
     const url = screen.getByRole('textbox', { name: 'Base URL' })
     await user.clear(url)
     await user.type(url, 'https://new-provider.example')
+    await user.click(screen.getByRole('button', { name: 'Replace key' }))
     await user.type(screen.getByLabelText('System API key'), 'new-test-key')
     expect(signal.aborted).toBe(true)
     await act(async () => old.resolve({ models: ['stale-old-provider-model'] }))
