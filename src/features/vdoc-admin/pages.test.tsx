@@ -2394,7 +2394,7 @@ describe('SettingsPage AI settings', () => {
       'aria-selected',
       'true'
     )
-    expect(screen.getByLabelText('Current password')).toBeVisible()
+    expect(await screen.findByLabelText('Current password')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Change password' })
     ).toBeVisible()

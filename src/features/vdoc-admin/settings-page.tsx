@@ -15,7 +15,12 @@ import { Main } from '@/components/layout/main'
 import { OptionsSelect } from '@/components/options-select'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { ChangePasswordPanel } from './change-password-panel'
+
+const ChangePasswordPanel = lazy(() =>
+  import('./change-password-panel').then(({ ChangePasswordPanel }) => ({
+    default: ChangePasswordPanel,
+  }))
+)
 
 const AISettingsPanel = lazy(() =>
   import('./ai-settings').then(({ AISettingsPanel }) => ({
@@ -117,7 +122,20 @@ export function SettingsPage() {
                         </dl>
                       </SettingsSection>
                       <div className='py-6'>
-                        {identity && <ChangePasswordPanel embedded />}
+                        {identity && (
+                          <Suspense
+                            fallback={
+                              <p
+                                role='status'
+                                className='text-sm text-muted-foreground'
+                              >
+                                {t('admin.common.loading')}
+                              </p>
+                            }
+                          >
+                            <ChangePasswordPanel embedded />
+                          </Suspense>
+                        )}
                       </div>
                     </div>
                   )}
