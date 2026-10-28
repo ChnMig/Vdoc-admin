@@ -8,12 +8,21 @@ import type {
 export type ProviderScope = 'system' | 'project'
 
 type ProviderTuningDefaults = Required<
-  Pick<AIProviderPayload, 'temperature' | 'timeout_ms' | 'max_output_tokens'>
+  Pick<
+    AIProviderPayload,
+    | 'temperature'
+    | 'timeout_ms'
+    | 'first_response_timeout_ms'
+    | 'idle_timeout_ms'
+    | 'max_output_tokens'
+  >
 >
 
 export const AI_PROVIDER_DEFAULT_TUNING = {
   temperature: 0.2,
-  timeout_ms: 30000,
+  timeout_ms: 600000,
+  first_response_timeout_ms: 180000,
+  idle_timeout_ms: 120000,
   max_output_tokens: 1000,
 } as const satisfies ProviderTuningDefaults
 

@@ -504,6 +504,8 @@ export type AIProviderTuning = {
   readonly stream?: boolean
   readonly temperature?: number
   readonly timeout_ms?: number
+  readonly first_response_timeout_ms?: number
+  readonly idle_timeout_ms?: number
   readonly max_output_tokens?: number
 }
 
@@ -538,6 +540,8 @@ export type AIProviderModelsPayload = {
   readonly base_url: string
   readonly api_key?: string
   readonly timeout_ms?: number
+  readonly first_response_timeout_ms?: number
+  readonly idle_timeout_ms?: number
 }
 
 export type AIProviderModelsDTO = {
@@ -674,7 +678,13 @@ vdocApi.interceptors.request.use(
       config.method !== 'get' &&
       (config.url?.includes('/ai/') || config.url?.includes('/ai-summary/'))
     )
-      config.timeout = 160_000
+      config.timeout =
+        config.method === 'post' &&
+        (/\/ai\/provider\/(test|models)$/.test(config.url ?? '') ||
+          /\/ai\/chat-sessions\/[^/]+\/messages$/.test(config.url ?? '') ||
+          /\/ai-summary\/regenerate$/.test(config.url ?? ''))
+          ? 0
+          : 160_000
     const token = useAuthStore.getState().auth.accessToken
     if (token) {
       config.headers.Authorization = token

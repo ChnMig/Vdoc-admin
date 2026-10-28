@@ -23,6 +23,7 @@ import {
   providerPayloadIsBlank,
 } from './ai-settings-utils'
 import { AITemperatureField } from './ai-temperature-field'
+import { AITimeoutField } from './ai-timeout-field'
 
 export function AIProviderPanel({
   scope,
@@ -47,7 +48,6 @@ export function AIProviderPanel({
   const tuning = {
     temperature:
       provider?.temperature ?? AI_PROVIDER_DEFAULT_TUNING.temperature,
-    timeoutMs: provider?.timeout_ms ?? AI_PROVIDER_DEFAULT_TUNING.timeout_ms,
     maxOutputTokens:
       provider?.max_output_tokens ??
       AI_PROVIDER_DEFAULT_TUNING.max_output_tokens,
@@ -179,7 +179,7 @@ export function AIProviderPanel({
             {t('admin.ai.responseModeDescription')}
           </p>
         </div>
-        <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
+        <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-2'>
           <legend className='pe-3 text-sm font-medium'>
             {t('admin.ai.tuningTitle')}
           </legend>
@@ -191,16 +191,6 @@ export function AIProviderPanel({
             onChange={onTestPayloadChange}
           />
           <AINumberField
-            id={`${scope}-ai-provider-timeout-ms`}
-            label={t('admin.ai.timeoutMs')}
-            name='timeout_ms'
-            defaultValue={tuning.timeoutMs}
-            disabled={disabled}
-            min={1000}
-            max={120000}
-            step={1000}
-          />
-          <AINumberField
             id={`${scope}-ai-provider-max-output-tokens`}
             label={t('admin.ai.maxOutputTokens')}
             name='max_output_tokens'
@@ -210,6 +200,39 @@ export function AIProviderPanel({
             max={32000}
             step={1}
           />
+        </fieldset>
+        <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
+          <legend className='pe-3 text-sm font-medium'>
+            {t('admin.ai.timeoutSettings')}
+          </legend>
+          <p className='text-sm leading-6 text-muted-foreground @xl/provider-panel:col-span-3'>
+            {t('admin.ai.timeoutSettingsHint')}
+          </p>
+          {(
+            [
+              ['timeout_ms', 'timeoutMs', 'totalTimeoutHint'],
+              [
+                'first_response_timeout_ms',
+                'firstResponseTimeoutMs',
+                'firstResponseTimeoutHint',
+              ],
+              ['idle_timeout_ms', 'idleTimeoutMs', 'idleTimeoutHint'],
+            ] as const
+          ).map(([name, label, hint]) => (
+            <AITimeoutField
+              key={`${formKey}:${name}`}
+              id={`${scope}-ai-provider-${name.replace(/_/g, '-')}`}
+              name={name}
+              label={t(`admin.ai.${label}`)}
+              hint={t(`admin.ai.${hint}`)}
+              defaultValue={
+                provider?.[name] ?? AI_PROVIDER_DEFAULT_TUNING[name]
+              }
+              fallbackValue={AI_PROVIDER_DEFAULT_TUNING[name]}
+              disabled={disabled}
+              onChange={onTestPayloadChange}
+            />
+          ))}
         </fieldset>
         <div className='flex flex-wrap gap-2 border-t pt-4'>
           <Button type='submit' disabled={disabled || pending}>

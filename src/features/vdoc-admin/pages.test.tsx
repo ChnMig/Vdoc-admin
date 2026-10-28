@@ -2509,8 +2509,9 @@ describe('SettingsPage AI settings', () => {
     }
     const systemTemperature =
       within(systemProviderForm).getByLabelText('Temperature')
-    const systemTimeout =
-      within(systemProviderForm).getByLabelText('Timeout (ms)')
+    const systemTimeout = within(systemProviderForm).getByLabelText(
+      'Total generation time (ms)'
+    )
     const systemMaxTokens =
       within(systemProviderForm).getByLabelText('Max output tokens')
     expect(systemTemperature).toHaveDisplayValue('0.4')
@@ -2533,6 +2534,8 @@ describe('SettingsPage AI settings', () => {
         temperature: 0.6,
         stream: true,
         timeout_ms: 60000,
+        first_response_timeout_ms: 180000,
+        idle_timeout_ms: 120000,
         max_output_tokens: 4096,
         enabled: false,
       })
@@ -2779,8 +2782,8 @@ describe('SettingsPage AI settings', () => {
       within(projectProviderForm).getByLabelText('Temperature')
     ).toHaveDisplayValue('0.2')
     expect(
-      within(projectProviderForm).getByLabelText('Timeout (ms)')
-    ).toHaveDisplayValue('30000')
+      within(projectProviderForm).getByLabelText('Total generation time (ms)')
+    ).toHaveDisplayValue('600000')
     expect(
       within(projectProviderForm).getByLabelText('Max output tokens')
     ).toHaveDisplayValue('1000')
@@ -5342,6 +5345,8 @@ const systemProviderFixture = {
   api_mode: 'chat_completions',
   temperature: 0.4,
   timeout_ms: 45000,
+  first_response_timeout_ms: 180000,
+  idle_timeout_ms: 120000,
   max_output_tokens: 2048,
   api_key_set: true,
   api_key_last4: '1234',

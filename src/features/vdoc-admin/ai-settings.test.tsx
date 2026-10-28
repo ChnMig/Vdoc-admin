@@ -86,6 +86,8 @@ function provider(projectId: string): AIProviderDTO {
     enabled: true,
     temperature: 0.2,
     timeout_ms: 30000,
+    first_response_timeout_ms: 180000,
+    idle_timeout_ms: 120000,
     max_output_tokens: 1000,
   }
 }
@@ -292,7 +294,12 @@ describe('AISettingsPanel project boundaries', () => {
     expect(model).toHaveValue('remote-system-model')
     expect(model).toHaveFocus()
     expect(apiMocks.listSystemAIProviderModels).toHaveBeenCalledWith(
-      { base_url: 'https://api.openai.example', timeout_ms: 30000 },
+      {
+        base_url: 'https://api.openai.example',
+        timeout_ms: 30000,
+        first_response_timeout_ms: 180000,
+        idle_timeout_ms: 120000,
+      },
       { signal: expect.any(AbortSignal) }
     )
     expect(apiMocks.updateSystemAIProvider).not.toHaveBeenCalled()
@@ -346,7 +353,12 @@ describe('AISettingsPanel project boundaries', () => {
     expect(model).toHaveValue('gpt-test')
     expect(apiMocks.listProjectAIProviderModels).toHaveBeenCalledWith(
       activeProject.id,
-      { base_url: 'https://api.openai.example', timeout_ms: 30000 },
+      {
+        base_url: 'https://api.openai.example',
+        timeout_ms: 30000,
+        first_response_timeout_ms: 180000,
+        idle_timeout_ms: 120000,
+      },
       { signal: expect.any(AbortSignal) }
     )
     expect(apiMocks.listSystemAIProviderModels).not.toHaveBeenCalled()
@@ -388,6 +400,8 @@ describe('AISettingsPanel project boundaries', () => {
         base_url: 'https://new-provider.example',
         api_key: 'new-test-key',
         timeout_ms: 30000,
+        first_response_timeout_ms: 180000,
+        idle_timeout_ms: 120000,
       },
       { signal: expect.any(AbortSignal) }
     )
@@ -624,6 +638,8 @@ describe('AISettingsPanel project boundaries', () => {
       enabled: false,
       temperature: 0.2,
       timeout_ms: 30000,
+      first_response_timeout_ms: 180000,
+      idle_timeout_ms: 120000,
       max_output_tokens: 1000,
     })
     apiMocks.testProjectAIProvider.mockResolvedValue({
@@ -663,6 +679,8 @@ describe('AISettingsPanel project boundaries', () => {
       enabled: false,
       temperature: 0.2,
       timeout_ms: 30000,
+      first_response_timeout_ms: 180000,
+      idle_timeout_ms: 120000,
       max_output_tokens: 1000,
     })
     const screen = await renderSettings(superAdmin)

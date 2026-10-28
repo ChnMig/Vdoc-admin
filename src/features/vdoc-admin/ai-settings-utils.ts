@@ -34,6 +34,11 @@ export function providerPayload(formData: FormData): AIProviderPayload {
   const apiKey = fieldValue(formData, 'api_key')
   const temperature = optionalNumberField(formData, 'temperature')
   const timeoutMs = optionalNumberField(formData, 'timeout_ms')
+  const firstResponseTimeoutMs = optionalNumberField(
+    formData,
+    'first_response_timeout_ms'
+  )
+  const idleTimeoutMs = optionalNumberField(formData, 'idle_timeout_ms')
   const maxOutputTokens = optionalNumberField(formData, 'max_output_tokens')
 
   return {
@@ -41,6 +46,10 @@ export function providerPayload(formData: FormData): AIProviderPayload {
     ...(apiKey.length > 0 ? { api_key: apiKey } : {}),
     ...(temperature === undefined ? {} : { temperature }),
     ...(timeoutMs === undefined ? {} : { timeout_ms: timeoutMs }),
+    ...(firstResponseTimeoutMs === undefined
+      ? {}
+      : { first_response_timeout_ms: firstResponseTimeoutMs }),
+    ...(idleTimeoutMs === undefined ? {} : { idle_timeout_ms: idleTimeoutMs }),
     ...(maxOutputTokens === undefined
       ? {}
       : { max_output_tokens: maxOutputTokens }),
@@ -124,6 +133,8 @@ export function providerFormKey(
     provider?.api_key_set ? (provider.api_key_last4 ?? 'set') : 'unset',
     provider?.temperature ?? '',
     provider?.timeout_ms ?? '',
+    provider?.first_response_timeout_ms ?? '',
+    provider?.idle_timeout_ms ?? '',
     provider?.max_output_tokens ?? '',
     provider?.enabled ? 'enabled' : 'disabled',
   ].join(':')

@@ -58,10 +58,18 @@ export function AIModelField({
     const data = new FormData(formRef.current ?? undefined)
     const apiKey = String(data.get('api_key') ?? '').trim()
     const timeout = String(data.get('timeout_ms') ?? '').trim()
+    const firstResponse = String(
+      data.get('first_response_timeout_ms') ?? ''
+    ).trim()
+    const idle = String(data.get('idle_timeout_ms') ?? '').trim()
     return {
       base_url: String(data.get('base_url') ?? '').trim(),
       ...(apiKey ? { api_key: apiKey } : {}),
       ...(timeout ? { timeout_ms: Number(timeout) } : {}),
+      ...(firstResponse
+        ? { first_response_timeout_ms: Number(firstResponse) }
+        : {}),
+      ...(idle ? { idle_timeout_ms: Number(idle) } : {}),
     }
   }
 
@@ -71,9 +79,14 @@ export function AIModelField({
       const target = event.target
       if (
         !(target instanceof HTMLInputElement) ||
-        !['base_url', 'api_key', 'api_key_display', 'timeout_ms'].includes(
-          target.name
-        )
+        ![
+          'base_url',
+          'api_key',
+          'api_key_display',
+          'timeout_ms',
+          'first_response_timeout_ms',
+          'idle_timeout_ms',
+        ].includes(target.name)
       )
         return
       generation.current++

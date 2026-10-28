@@ -26,7 +26,7 @@ describe('providerPayload', () => {
       stream: true,
       enabled: false,
       temperature: 0,
-      timeout_ms: 30000,
+      timeout_ms: 600000,
       max_output_tokens: 1000,
     })
   })
@@ -58,7 +58,9 @@ describe('providerPayload', () => {
   it('exposes backend-aligned provider tuning defaults for UI fields', () => {
     expect(AI_PROVIDER_DEFAULT_TUNING).toEqual({
       temperature: 0.2,
-      timeout_ms: 30000,
+      timeout_ms: 600000,
+      first_response_timeout_ms: 180000,
+      idle_timeout_ms: 120000,
       max_output_tokens: 1000,
     })
   })

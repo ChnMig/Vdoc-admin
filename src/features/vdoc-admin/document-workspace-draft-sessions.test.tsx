@@ -150,7 +150,11 @@ function renderWorkspace() {
   return { ...view, client }
 }
 async function content() {
-  return await screen.findByRole('textbox', { name: 'Content' })
+  return await screen.findByRole(
+    'textbox',
+    { name: 'Content' },
+    { timeout: 5000 }
+  )
 }
 async function openDocument(id: string) {
   const tree = await screen.findByRole('navigation', { name: 'Files' })

@@ -997,7 +997,19 @@ const en = {
 
       enabled: 'Enabled',
       temperature: 'Temperature',
-      timeoutMs: 'Timeout (ms)',
+      timeoutMs: 'Total generation time (ms)',
+      firstResponseTimeoutMs: 'First response (ms)',
+      idleTimeoutMs: 'Response idle time (ms)',
+      timeoutSettings: 'Request time limits',
+      unlimitedTimeout: 'Unlimited',
+      timeoutSettingsHint:
+        'Each limit can be disabled independently. Unlimited total time still follows the first-response and idle limits.',
+      totalTimeoutHint:
+        'Maximum time for the complete request. Default: 10 minutes.',
+      firstResponseTimeoutHint:
+        'Wait for the first response body data, including connection time. Default: 3 minutes.',
+      idleTimeoutHint:
+        'Maximum gap between response data. Streaming data and heartbeats restart this timer. Default: 2 minutes.',
       maxOutputTokens: 'Max output tokens',
       saveSystemProvider: 'Save system provider',
       saveProjectProvider: 'Save project provider',
@@ -2669,7 +2681,18 @@ const zhCN = {
 
       enabled: '启用',
       temperature: '温度',
-      timeoutMs: '超时（毫秒）',
+      timeoutMs: '生成总时长（毫秒）',
+      firstResponseTimeoutMs: '首次响应（毫秒）',
+      idleTimeoutMs: '响应空闲（毫秒）',
+      timeoutSettings: '请求时限',
+      unlimitedTimeout: '无限制',
+      timeoutSettingsHint:
+        '三项均可单独关闭。总时长设为无限制后，首次响应和空闲时限仍会生效。',
+      totalTimeoutHint: '整次请求的最长时间，默认 10 分钟。',
+      firstResponseTimeoutHint:
+        '从发起请求到收到首个响应体数据，包含连接时间，默认 3 分钟。',
+      idleTimeoutHint:
+        '收到数据后，连续无新数据的等待上限；流式数据和心跳会续期，默认 2 分钟。',
       maxOutputTokens: '最大输出 token 数',
       saveSystemProvider: '保存系统提供商',
       saveProjectProvider: '保存项目提供商',

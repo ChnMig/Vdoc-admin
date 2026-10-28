@@ -122,6 +122,7 @@ for (const width of [1280, 390]) {
     ])
     const state = await fixture(page)
     await page.goto('/settings')
+    await expect(page.getByText('Super admin', { exact: true })).toBeVisible()
     await page.getByRole('tab', { name: 'AI', exact: true }).click()
     const model = page.getByRole('textbox', { name: 'Model', exact: true })
     await expect(model).toHaveValue('saved-model')
@@ -174,7 +175,12 @@ for (const width of [1280, 390]) {
     expect(state.requests).toEqual([
       {
         path: `${systemPath}/models`,
-        body: { base_url: provider.base_url, timeout_ms: 30000 },
+        body: {
+          base_url: provider.base_url,
+          timeout_ms: 30000,
+          first_response_timeout_ms: 180000,
+          idle_timeout_ms: 120000,
+        },
       },
     ])
     await expect(model).toHaveValue('saved-model')
@@ -214,6 +220,38 @@ for (const width of [1280, 390]) {
     await expect(responseMode).toHaveText('Non-streaming')
     await page.screenshot({
       path: info.outputPath(`provider-form-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    })
+
+    const limits = page.getByRole('group', {
+      name: 'Request time limits',
+      exact: true,
+    })
+    const unlimited = limits.getByRole('switch', {
+      name: 'Unlimited',
+      exact: true,
+    })
+    await expect(unlimited).toHaveCount(3)
+    for (let index = 0; index < 3; index++) await unlimited.nth(index).click()
+    await page.getByRole('button', { name: 'Save system provider' }).click()
+    await expect.poll(() => state.saves.length).toBe(2)
+    expect(state.saves[1].body).toMatchObject({
+      timeout_ms: 0,
+      first_response_timeout_ms: 0,
+      idle_timeout_ms: 0,
+    })
+    await expect(
+      limits.getByLabel('Total generation time (ms)', { exact: true })
+    ).toBeDisabled()
+    await expect(
+      limits.getByLabel('First response (ms)', { exact: true })
+    ).toBeDisabled()
+    await expect(
+      limits.getByLabel('Response idle time (ms)', { exact: true })
+    ).toBeDisabled()
+    await page.screenshot({
+      path: info.outputPath(`provider-timeouts-unlimited-${width}.png`),
       fullPage: true,
       animations: 'disabled',
     })

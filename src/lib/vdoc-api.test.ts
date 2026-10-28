@@ -491,6 +491,31 @@ describe('vdoc-api', () => {
     )
   })
 
+  it.each([
+    '/api/v1/private/ai/provider/test',
+    '/api/v1/private/projects/p/ai/provider/test',
+    '/api/v1/private/ai/provider/models',
+    '/api/v1/private/projects/p/ai/chat-sessions/s/messages',
+    '/api/v1/private/projects/p/documents/d/versions/v/ai-summary/regenerate',
+  ])(
+    'allows provider-controlled duration for %s while preserving abort signals',
+    async (url) => {
+      const requests: InternalAxiosRequestConfig[] = []
+      vdocApi.defaults.adapter = jsonEnvelopeAdapter(requests, {
+        code: 200,
+        status: 'OK',
+        timestamp: 1,
+        detail: null,
+      })
+      const controller = new AbortController()
+      await vdocApi.post(url, {}, { signal: controller.signal })
+      expect(requests[0]?.timeout).toBe(0)
+      expect(requests[0]?.signal).toBe(controller.signal)
+      await vdocApi.get('/api/v1/private/projects')
+      expect(requests[1]?.timeout).toBe(35000)
+    }
+  )
+
   it('reads masked system AI providers without exposing raw API keys', async () => {
     const requests: InternalAxiosRequestConfig[] = []
     const provider: AIProviderDTO = {
