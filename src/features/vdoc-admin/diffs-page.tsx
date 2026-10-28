@@ -964,6 +964,7 @@ export function DiffsPage({
                 id: 'source',
                 label: t('admin.diff.searchSourceVersions'),
                 paginationLabel: t('admin.diff.sourceVersionPagination'),
+                draftPaginationLabel: t('admin.diff.sourceDraftPagination'),
               },
               {
                 drafts: toDraftChoices,
@@ -971,47 +972,62 @@ export function DiffsPage({
                 id: 'target',
                 label: t('admin.diff.searchTargetVersions'),
                 paginationLabel: t('admin.diff.targetVersionPagination'),
+                draftPaginationLabel: t('admin.diff.targetDraftPagination'),
               },
-            ].map(({ choices: side, drafts, id, label, paginationLabel }) => (
-              <div key={id} className='grid min-w-0 content-start gap-3'>
-                <div className='grid gap-2'>
-                  <Label htmlFor={`diff-${id}-version-search`}>{label}</Label>
-                  <Input
-                    id={`diff-${id}-version-search`}
-                    value={side.search}
-                    onChange={(event) => side.setSearch(event.target.value)}
-                    placeholder={t('admin.fields.versionName')}
+            ].map(
+              ({
+                choices: side,
+                drafts,
+                id,
+                label,
+                paginationLabel,
+                draftPaginationLabel,
+              }) => (
+                <div key={id} className='grid min-w-0 content-start gap-3'>
+                  <div className='grid gap-2'>
+                    <Label htmlFor={`diff-${id}-version-search`}>{label}</Label>
+                    <Input
+                      id={`diff-${id}-version-search`}
+                      value={side.search}
+                      onChange={(event) => side.setSearch(event.target.value)}
+                      placeholder={t('admin.fields.versionName')}
+                    />
+                  </div>
+                  <QueryPagination
+                    label={paginationLabel}
+                    itemLabel={t('admin.diff.publishedVersions')}
+                    hideSinglePageControls
+                    offset={side.offset}
+                    count={side.versionsQuery.data?.items.length ?? 0}
+                    total={side.versionsQuery.data?.total}
+                    hasMore={
+                      side.offset +
+                        (side.versionsQuery.data?.items.length ?? 0) <
+                      (side.versionsQuery.data?.total ?? 0)
+                    }
+                    busy={side.versionsQuery.isFetching}
+                    onPrevious={() => side.setOffset(side.offset - 50)}
+                    onNext={() => side.setOffset(side.offset + 50)}
+                  />
+                  <QueryPagination
+                    label={draftPaginationLabel}
+                    itemLabel={t('admin.diff.drafts')}
+                    hideSinglePageControls
+                    offset={drafts.offset}
+                    count={drafts.draftsQuery.data?.items.length ?? 0}
+                    total={drafts.draftsQuery.data?.total}
+                    hasMore={
+                      drafts.offset +
+                        (drafts.draftsQuery.data?.items.length ?? 0) <
+                      (drafts.draftsQuery.data?.total ?? 0)
+                    }
+                    busy={drafts.draftsQuery.isFetching}
+                    onPrevious={() => drafts.setOffset(drafts.offset - 50)}
+                    onNext={() => drafts.setOffset(drafts.offset + 50)}
                   />
                 </div>
-                <QueryPagination
-                  label={paginationLabel}
-                  offset={side.offset}
-                  count={side.versionsQuery.data?.items.length ?? 0}
-                  total={side.versionsQuery.data?.total}
-                  hasMore={
-                    side.offset + (side.versionsQuery.data?.items.length ?? 0) <
-                    (side.versionsQuery.data?.total ?? 0)
-                  }
-                  busy={side.versionsQuery.isFetching}
-                  onPrevious={() => side.setOffset(side.offset - 50)}
-                  onNext={() => side.setOffset(side.offset + 50)}
-                />
-                <QueryPagination
-                  label={t('admin.diff.draftPagination')}
-                  offset={drafts.offset}
-                  count={drafts.draftsQuery.data?.items.length ?? 0}
-                  total={drafts.draftsQuery.data?.total}
-                  hasMore={
-                    drafts.offset +
-                      (drafts.draftsQuery.data?.items.length ?? 0) <
-                    (drafts.draftsQuery.data?.total ?? 0)
-                  }
-                  busy={drafts.draftsQuery.isFetching}
-                  onPrevious={() => drafts.setOffset(drafts.offset - 50)}
-                  onNext={() => drafts.setOffset(drafts.offset + 50)}
-                />
-              </div>
-            ))}
+              )
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>

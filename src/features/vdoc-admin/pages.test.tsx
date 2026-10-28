@@ -3732,6 +3732,18 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     ).not.toBeInTheDocument()
     const searchToggle = screen.getByRole('button', { name: 'Search versions' })
     await user.click(searchToggle)
+    const sourcePages = screen.getByRole('navigation', {
+      name: 'Source version pages',
+    })
+    const sourceDraftPages = screen.getByRole('navigation', {
+      name: 'Source draft pages',
+    })
+    expect(within(sourcePages).getByText('Published versions')).toBeVisible()
+    expect(within(sourceDraftPages).getByText('Drafts')).toBeVisible()
+    expect(within(sourcePages).queryByRole('button')).not.toBeInTheDocument()
+    expect(
+      within(sourceDraftPages).queryByRole('button')
+    ).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('Search source versions'), 'v0')
     expect(screen.getByLabelText('Search target versions')).toHaveValue('')
     await waitFor(() =>
@@ -3756,6 +3768,97 @@ describe('DraftsPage and DiffsPage AI panels', () => {
     )
     await user.click(searchToggle)
     expect(screen.getByLabelText('Search source versions')).toHaveValue('v0')
+  })
+
+  it('pages published and draft comparison choices independently while keeping selected revisions', async () => {
+    const user = userEvent.setup()
+    const versions = [
+      fromVersionFixture,
+      markdownVersionFixture,
+      ...Array.from({ length: 49 }, (_, index) => ({
+        ...markdownVersionFixture,
+        id: `extra-version-${index}`,
+        version_name: `v-extra-${index}`,
+      })),
+    ]
+    const drafts = Array.from({ length: 51 }, (_, index) => ({
+      ...draftFixture,
+      id: `extra-draft-${index}`,
+      version_name: `draft-extra-${index}`,
+    }))
+    apiMocks.listVersions.mockImplementation(
+      async (_project, _document, _branch, options) => ({
+        items: versions.slice(options.page.offset, options.page.offset + 50),
+        total: versions.length,
+      })
+    )
+    apiMocks.listDrafts.mockImplementation(
+      async (_project, _document, _branch, options) => ({
+        items: drafts.slice(options.page.offset, options.page.offset + 50),
+        total: drafts.length,
+      })
+    )
+    apiMocks.getVersion.mockImplementation(async (_project, _document, id) => {
+      const version = versions.find((version) => version.id === id)
+      if (!version) throw new Error('Version not found')
+      return version
+    })
+    const screen = renderPage(
+      <DiffsPage
+        search={{
+          project_id: projectFixture.id,
+          document_id: markdownDocumentFixture.id,
+          from_version_id: fromVersionFixture.id,
+          to_version_id: markdownVersionFixture.id,
+        }}
+      />
+    )
+    await waitFor(() =>
+      expect(screen.getByLabelText('From version')).toHaveValue(
+        fromVersionFixture.id
+      )
+    )
+    await user.click(screen.getByRole('button', { name: 'Search versions' }))
+    const sourcePages = screen.getByRole('navigation', {
+      name: 'Source version pages',
+    })
+    const sourceDraftPages = screen.getByRole('navigation', {
+      name: 'Source draft pages',
+    })
+    const targetPages = screen.getByRole('navigation', {
+      name: 'Target version pages',
+    })
+    await user.click(within(sourcePages).getByRole('button', { name: 'Next' }))
+    await waitFor(() =>
+      expect(within(sourcePages).getByRole('status')).toHaveTextContent('51–51')
+    )
+    expect(within(sourceDraftPages).getByRole('status')).toHaveTextContent(
+      '1–50'
+    )
+    expect(within(targetPages).getByRole('status')).toHaveTextContent('1–50')
+    await user.click(
+      within(sourceDraftPages).getByRole('button', { name: 'Next' })
+    )
+    await waitFor(() =>
+      expect(within(sourceDraftPages).getByRole('status')).toHaveTextContent(
+        '51–51'
+      )
+    )
+    expect(screen.getByLabelText('From version')).toHaveValue(
+      fromVersionFixture.id
+    )
+    expect(screen.getByLabelText('To version')).toHaveValue(
+      markdownVersionFixture.id
+    )
+    await user.click(
+      within(sourcePages).getByRole('button', { name: 'Previous' })
+    )
+    await waitFor(() =>
+      expect(within(sourcePages).getByRole('status')).toHaveTextContent('1–50')
+    )
+    expect(within(sourceDraftPages).getByRole('status')).toHaveTextContent(
+      '51–51'
+    )
   })
 
   it('maps all backend change types and localizes backend diff messages', async () => {

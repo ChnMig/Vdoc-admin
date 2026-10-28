@@ -353,6 +353,39 @@ for (const width of [1440, 1920, 390]) {
       page.getByRole('combobox', { name: 'To version', exact: true })
     ).toBeVisible()
     await capture(page, 'tools-diffs', width)
+    await page
+      .getByRole('button', { name: 'Search versions', exact: true })
+      .click()
+    const sourcePages = page.getByRole('navigation', {
+      name: 'Source version pages',
+    })
+    const sourceDraftPages = page.getByRole('navigation', {
+      name: 'Source draft pages',
+    })
+    await expect(
+      sourcePages.getByText('Published versions', { exact: true })
+    ).toBeVisible()
+    await expect(
+      sourceDraftPages.getByText('Drafts', { exact: true })
+    ).toBeVisible()
+    await expect(sourcePages.getByRole('button')).toHaveCount(0)
+    await expect(sourceDraftPages.getByRole('button')).toHaveCount(0)
+    await expect(
+      page.getByRole('navigation', { name: 'Target draft pages' })
+    ).toBeVisible()
+    await assertNoPageOverflow(page)
+    await page
+      .getByLabel('Search source versions')
+      .locator('..')
+      .locator('..')
+      .locator('..')
+      .screenshot({
+        path: test.info().outputPath(`diff-search-${width}.png`),
+        animations: 'disabled',
+      })
+    await page
+      .getByRole('button', { name: 'Search versions', exact: true })
+      .click()
     await openTool(page, 'Document AI')
     await expect(
       page.getByText(`Summary for exact revision ${historicalId}.`, {

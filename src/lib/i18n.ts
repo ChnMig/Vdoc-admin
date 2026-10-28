@@ -1206,7 +1206,10 @@ const en = {
       selectRevision: 'Select a version or draft',
       draftUnavailable:
         'This draft is unavailable in the selected branch. Select another revision.',
-      draftPagination: 'Draft pages',
+      publishedVersions: 'Published versions',
+      drafts: 'Drafts',
+      sourceDraftPagination: 'Source draft pages',
+      targetDraftPagination: 'Target draft pages',
       draftSnapshot:
         'Draft content snapshot · {time}. Compare again to include newly saved changes.',
       downloadBefore: 'Download source',
@@ -2876,7 +2879,10 @@ const zhCN = {
       comparisonContext: '版本比较',
       selectRevision: '选择版本或草稿',
       draftUnavailable: '所选分支下的草稿不可用，请选择其他版本或草稿。',
-      draftPagination: '草稿分页',
+      publishedVersions: '正式版本',
+      drafts: '草稿',
+      sourceDraftPagination: '源草稿分页',
+      targetDraftPagination: '目标草稿分页',
       draftSnapshot: '草稿内容快照 · {time}。再次比较可读取最新保存的改动。',
       downloadBefore: '下载源内容',
       downloadAfter: '下载目标内容',
