@@ -441,7 +441,11 @@ it.each(
         expect(api.sendAIChatMessage).toHaveBeenCalledWith(
           target.projectId,
           'session-a',
-          'Private Alice prompt'
+          'Private Alice prompt',
+          expect.objectContaining({
+            signal: expect.any(AbortSignal),
+            onDelta: expect.any(Function),
+          })
         )
         expect(
           await view.findByText('Private Alice response')
@@ -450,7 +454,12 @@ it.each(
       } else {
         if (stage === 'creation')
           expect(api.sendAIChatMessage).not.toHaveBeenCalled()
-        else expect(api.sendAIChatMessage).toHaveBeenCalledOnce()
+        else {
+          expect(api.sendAIChatMessage).toHaveBeenCalledOnce()
+          expect(api.sendAIChatMessage.mock.calls[0][3].signal.aborted).toBe(
+            true
+          )
+        }
         expect(invalidate).not.toHaveBeenCalled()
         expect(
           view.queryByText('Private Alice response')

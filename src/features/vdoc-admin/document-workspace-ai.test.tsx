@@ -169,7 +169,11 @@ describe('document workspace AI context', () => {
     expect(api.sendAIChatMessage).toHaveBeenCalledWith(
       'project-1',
       'draft-chat',
-      'Question about the draft'
+      'Question about the draft',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onDelta: expect.any(Function),
+      })
     )
   })
 

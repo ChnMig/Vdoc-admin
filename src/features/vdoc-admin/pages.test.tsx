@@ -2181,7 +2181,11 @@ describe('VersionsPage', () => {
     expect(sendAIChatMessage).toHaveBeenCalledWith(
       'project-1',
       'session-version',
-      'What changed?'
+      'What changed?',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onDelta: expect.any(Function),
+      })
     )
   })
 
@@ -2527,6 +2531,7 @@ describe('SettingsPage AI settings', () => {
         model: 'gpt-4.1',
         api_mode: 'responses',
         temperature: 0.6,
+        stream: true,
         timeout_ms: 60000,
         max_output_tokens: 4096,
         enabled: false,

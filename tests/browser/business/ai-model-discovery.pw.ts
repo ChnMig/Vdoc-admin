@@ -94,7 +94,7 @@ async function fixture(page: Page) {
       if (request.method() === 'PUT') {
         const body = request.postDataJSON()
         state.saves.push({ path, body })
-        providers[path] = { ...providers[path], model: body.model }
+        providers[path] = { ...providers[path], ...body }
       }
       return reply(route, providers[path])
     }
@@ -125,6 +125,15 @@ for (const width of [1280, 390]) {
     await page.getByRole('tab', { name: 'AI', exact: true }).click()
     const model = page.getByRole('textbox', { name: 'Model', exact: true })
     await expect(model).toHaveValue('saved-model')
+    const responseMode = page.getByRole('combobox', {
+      name: 'Response mode',
+      exact: true,
+    })
+    await expect(responseMode).toHaveText('Streaming (default)')
+    await responseMode.click()
+    await page
+      .getByRole('option', { name: 'Non-streaming', exact: true })
+      .click()
     const apiKey = page.getByLabel('System API key', { exact: true })
     await expect(apiKey).toHaveValue('••••••••')
     await expect(apiKey).toHaveAttribute('type', 'password')
@@ -201,6 +210,8 @@ for (const width of [1280, 390]) {
     expect(state.saves[0].body.model).toBe('my-custom-model')
     expect(state.saves[0].body.api_key).toBeUndefined()
     expect(state.saves[0].body.temperature).toBe(0.2)
+    expect(state.saves[0].body.stream).toBe(false)
+    await expect(responseMode).toHaveText('Non-streaming')
     await page.screenshot({
       path: info.outputPath(`provider-form-${width}.png`),
       fullPage: true,

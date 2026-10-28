@@ -890,6 +890,14 @@ const en = {
         'Publish a version on one active source branch and keep a different active target branch before creating a promotion draft.',
     },
     ai: {
+      responseMode: 'Response mode',
+      streaming: 'Streaming (default)',
+      nonStreaming: 'Non-streaming',
+      responseModeDescription:
+        'Streaming shows answers as they arrive. Non-streaming waits for the complete answer. Applies to provider tests, summaries and chat.',
+      generating: 'Generating answer…',
+      userRole: 'You',
+      assistantRole: 'AI',
       tuningTitle: 'Generation settings',
       badge: 'AI',
       panelTitle: 'AI summary and chat',
@@ -2560,6 +2568,14 @@ const zhCN = {
         '请先在有效源分支发布版本，并保留另一个不同的有效目标分支，再创建晋级草稿。',
     },
     ai: {
+      responseMode: '响应方式',
+      streaming: '流式（默认）',
+      nonStreaming: '非流式',
+      responseModeDescription:
+        '流式会逐步显示回答，非流式等待完整回答后显示。适用于提供商测试、摘要生成和聊天。',
+      generating: '正在生成回答…',
+      userRole: '你',
+      assistantRole: 'AI',
       tuningTitle: '生成参数',
       badge: 'AI',
       panelTitle: 'AI 摘要和聊天',

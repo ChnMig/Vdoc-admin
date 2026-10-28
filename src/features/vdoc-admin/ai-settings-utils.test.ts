@@ -23,6 +23,7 @@ describe('providerPayload', () => {
       base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'responses',
+      stream: true,
       enabled: false,
       temperature: 0,
       timeout_ms: 30000,
@@ -45,6 +46,7 @@ describe('providerPayload', () => {
       base_url: 'https://api.openai.example',
       model: 'gpt-test',
       api_mode: 'responses',
+      stream: true,
       enabled: true,
     })
     expect(payload).not.toHaveProperty('api_key')

@@ -28,6 +28,7 @@ export function providerPayload(formData: FormData): AIProviderPayload {
     base_url: fieldValue(formData, 'base_url'),
     model: fieldValue(formData, 'model'),
     api_mode: providerApiMode(formData),
+    stream: fieldValue(formData, 'stream') !== 'false',
     enabled: fieldValue(formData, 'enabled') === 'true',
   }
   const apiKey = fieldValue(formData, 'api_key')
@@ -118,6 +119,7 @@ export function providerFormKey(
     provider?.base_url ?? '',
     provider?.model ?? '',
     provider?.api_mode ?? '',
+    String(provider?.stream ?? true),
     provider?.id ?? '',
     provider?.api_key_set ? (provider.api_key_last4 ?? 'set') : 'unset',
     provider?.temperature ?? '',

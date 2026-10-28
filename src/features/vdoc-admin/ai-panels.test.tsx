@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -224,7 +224,11 @@ describe('AIContextPanel', () => {
       expect(sendAIChatMessage).toHaveBeenCalledWith(
         'project-1',
         'session-version-1',
-        'Target A'
+        'Target A',
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          onDelta: expect.any(Function),
+        })
       )
     )
     expect(createAIChatSession).toHaveBeenCalledWith('project-1', {
@@ -259,12 +263,17 @@ describe('AIContextPanel', () => {
     expect(sendAIChatMessage).toHaveBeenLastCalledWith(
       'project-1',
       'session-version-2',
-      'Target B'
+      'Target B',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onDelta: expect.any(Function),
+      })
     )
     expect(sendAIChatMessage).not.toHaveBeenCalledWith(
       'project-1',
       'session-version-1',
-      'Target B'
+      'Target B',
+      expect.anything()
     )
   })
 
@@ -338,6 +347,67 @@ describe('AIContextPanel', () => {
     await waitFor(() => expect(message).toHaveValue(''))
   })
 
+  it('shows streamed text before completion and replaces it with the saved answer', async () => {
+    const completion = deferred<AIChatMessageDTO>()
+    apiMocks.sendAIChatMessage.mockReturnValueOnce(completion.promise)
+    const screen = renderPanel(targetA)
+    const input = await screen.findByLabelText('AI chat message')
+    fireEvent.change(input, { target: { value: 'Explain the document' } })
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() =>
+      expect(apiMocks.sendAIChatMessage).toHaveBeenCalledOnce()
+    )
+    const options = apiMocks.sendAIChatMessage.mock.calls[0][3]
+    act(() => options.onDelta('First streamed fragment'))
+    expect(screen.getByText(/First streamed fragment/)).toBeInTheDocument()
+    expect(screen.getByText('Generating answer…')).toHaveAttribute(
+      'role',
+      'status'
+    )
+    expect(input).toHaveValue('Explain the document')
+    const message = messageForSession('session-version-1', 'Final saved answer')
+    chatMessagesBySession.set(message.session_id, [message])
+    await act(async () => completion.resolve(message))
+    expect(await screen.findByText(/Final saved answer/)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/First streamed fragment/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Generating answer…')).not.toBeInTheDocument()
+    await waitFor(() => expect(input).toHaveValue(''))
+  })
+
+  it('discards incomplete streamed text and keeps the prompt for retry', async () => {
+    let reject!: (error: Error) => void
+    apiMocks.sendAIChatMessage.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail
+        })
+    )
+    const screen = renderPanel(targetA)
+    const input = await screen.findByLabelText('AI chat message')
+    fireEvent.change(input, { target: { value: 'Retry this prompt' } })
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() =>
+      expect(apiMocks.sendAIChatMessage).toHaveBeenCalledOnce()
+    )
+    act(() =>
+      apiMocks.sendAIChatMessage.mock.calls[0][3].onDelta('Incomplete answer')
+    )
+    expect(screen.getByText(/Incomplete answer/)).toBeInTheDocument()
+    await act(async () =>
+      reject(new Error('Connection interrupted. Please retry.'))
+    )
+    expect(
+      await screen.findByText('Connection interrupted. Please retry.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Incomplete answer/)).not.toBeInTheDocument()
+    expect(input).toHaveValue('Retry this prompt')
+    expect(
+      screen.getByRole('button', { name: 'Send AI message' })
+    ).toBeEnabled()
+  })
+
   it('coalesces rapid first-message submissions into one session and one send', async () => {
     const sessionCreation = deferred<AIChatSessionDTO>()
     apiMocks.createAIChatSession.mockReturnValueOnce(sessionCreation.promise)
@@ -369,7 +439,11 @@ describe('AIContextPanel', () => {
     expect(apiMocks.sendAIChatMessage).toHaveBeenCalledWith(
       'project-1',
       'session-version-1',
-      'Only send once'
+      'Only send once',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onDelta: expect.any(Function),
+      })
     )
   })
 

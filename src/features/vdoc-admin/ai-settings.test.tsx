@@ -196,6 +196,49 @@ describe('AISettingsPanel project boundaries', () => {
     ).toBeUndefined()
   })
 
+  it.each(['system', 'project'] as const)(
+    'defaults %s to streaming and preserves an explicitly saved non-streaming mode',
+    async (scope) => {
+      const update =
+        scope === 'system'
+          ? apiMocks.updateSystemAIProvider
+          : apiMocks.updateProjectAIProvider
+      update.mockResolvedValue({ ...provider(scope), stream: false })
+      const screen = await renderSettings(superAdmin, scope)
+      const mode = await screen.findByRole('combobox', {
+        name: 'Response mode',
+      })
+      expect(mode).toHaveTextContent('Streaming (default)')
+      await selectOption(mode, 'false')
+      await userEvent.click(
+        screen.getByRole('button', {
+          name:
+            scope === 'system'
+              ? 'Save system provider'
+              : 'Save project provider',
+        })
+      )
+      await waitFor(() => expect(update).toHaveBeenCalledOnce())
+      const payload = update.mock.calls[0][scope === 'system' ? 0 : 1]
+      expect(payload.stream).toBe(false)
+      screen.unmount()
+      if (scope === 'system')
+        apiMocks.getSystemAIProvider.mockResolvedValue({
+          ...provider(scope),
+          stream: false,
+        })
+      else
+        apiMocks.getProjectAIProvider.mockResolvedValue({
+          ...provider(scope),
+          stream: false,
+        })
+      const reopened = await renderSettings(superAdmin, scope)
+      expect(
+        await reopened.findByRole('combobox', { name: 'Response mode' })
+      ).toHaveTextContent('Non-streaming')
+    }
+  )
+
   it('aborts a pending key reveal when replacing credentials', async () => {
     const pending = deferred<{ api_key: string }>()
     apiMocks.revealSystemAIProviderKey.mockReturnValueOnce(pending.promise)

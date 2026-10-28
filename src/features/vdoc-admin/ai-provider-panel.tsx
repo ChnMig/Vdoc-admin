@@ -163,6 +163,21 @@ export function AIProviderPanel({
             placeholder={t('admin.statuses.enabled')}
             options={enabledOptions(t)}
           />
+          <AINativeSelect
+            id={`${scope}-ai-provider-stream`}
+            label={t('admin.ai.responseMode')}
+            name='stream'
+            value={String(provider?.stream ?? true)}
+            disabled={disabled}
+            placeholder={t('admin.ai.streaming')}
+            options={[
+              { value: 'true', label: t('admin.ai.streaming') },
+              { value: 'false', label: t('admin.ai.nonStreaming') },
+            ]}
+          />
+          <p className='self-center text-sm leading-6 text-muted-foreground'>
+            {t('admin.ai.responseModeDescription')}
+          </p>
         </div>
         <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>
           <legend className='pe-3 text-sm font-medium'>

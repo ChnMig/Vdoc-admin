@@ -73,6 +73,12 @@ function AIContextPanelContent({
   const queryClient = useQueryClient()
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<readonly AIChatMessageDTO[]>([])
+  const [pendingReply, setPendingReply] = useState<{
+    sessionId: string
+    question: string
+    answer: string
+  } | null>(null)
+  const sendControllerRef = useRef<AbortController | null>(null)
   const sessionCreationRef = useRef<Promise<string> | null>(null)
   const sendLockedRef = useRef(false)
   const mountedRef = useRef(false)
@@ -80,6 +86,7 @@ function AIContextPanelContent({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      sendControllerRef.current?.abort()
     }
   }, [])
 
@@ -167,11 +174,37 @@ function AIContextPanelContent({
         )
         // Session creation can outlive the originating page or account.
         if (!ownsSubmission()) return
-        const message = await sendAIChatMessage(
-          target.projectId,
-          targetSessionId,
-          content
-        )
+        const controller = new AbortController()
+        sendControllerRef.current = controller
+        setPendingReply({
+          sessionId: targetSessionId,
+          question: content,
+          answer: '',
+        })
+        let message: AIChatMessageDTO
+        try {
+          message = await sendAIChatMessage(
+            target.projectId,
+            targetSessionId,
+            content,
+            {
+              signal: controller.signal,
+              onDelta: (delta) => {
+                if (ownsSubmission()) {
+                  setPendingReply((current) =>
+                    current?.sessionId === targetSessionId
+                      ? { ...current, answer: current.answer + delta }
+                      : current
+                  )
+                }
+              },
+            }
+          )
+        } finally {
+          if (sendControllerRef.current === controller)
+            sendControllerRef.current = null
+          if (ownsSubmission()) setPendingReply(null)
+        }
         if (!ownsSubmission()) return
         return { message, sessionId: targetSessionId, sessionVersion }
       } catch (error) {
@@ -318,6 +351,7 @@ function AIContextPanelContent({
                 </Label>
                 <OptionsSelect
                   id='ai-chat-session'
+                  disabled={sendMutation.isPending}
                   value={activeSessionId}
                   onChange={setSessionId}
                   options={chatSessions.map((session) => ({
@@ -330,15 +364,47 @@ function AIContextPanelContent({
             <div className='grid max-h-56 gap-2 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-sm'>
               {visibleMessages.length ? (
                 visibleMessages.map((message) => (
-                  <p key={message.id}>
-                    <span className='font-medium'>{message.role}: </span>
+                  <p
+                    key={message.id}
+                    className='break-words whitespace-pre-wrap'
+                  >
+                    <span className='font-medium'>
+                      {message.role === 'user'
+                        ? t('admin.ai.userRole')
+                        : t('admin.ai.assistantRole')}
+                      :{' '}
+                    </span>
                     {message.content}
                   </p>
                 ))
-              ) : (
+              ) : !pendingReply ? (
                 <p className='text-muted-foreground'>
                   {t('admin.ai.noMessages')}
                 </p>
+              ) : null}
+              {pendingReply?.sessionId === activeSessionId && (
+                <>
+                  <p className='break-words whitespace-pre-wrap'>
+                    <span className='font-medium'>
+                      {t('admin.ai.userRole')}:{' '}
+                    </span>
+                    {pendingReply.question}
+                  </p>
+                  <div aria-busy='true'>
+                    <p className='break-words whitespace-pre-wrap'>
+                      <span className='font-medium'>
+                        {t('admin.ai.assistantRole')}:{' '}
+                      </span>
+                      {pendingReply.answer}
+                    </p>
+                    <p
+                      role='status'
+                      className='mt-2 text-xs text-muted-foreground'
+                    >
+                      {t('admin.ai.generating')}
+                    </p>
+                  </div>
+                </>
               )}
             </div>
             <form
