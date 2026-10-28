@@ -37,12 +37,13 @@ describe('streaming AI chat API', () => {
     )
     const onDelta = vi.fn()
     const signal = new AbortController().signal
-    await expect(
-      sendAIChatMessage('project-1', 'session-1', 'Explain', {
-        signal,
-        onDelta,
-      })
-    ).resolves.toEqual(message)
+    const request = sendAIChatMessage('project-1', 'session-1', 'Explain', {
+      signal,
+      onDelta,
+    })
+    // Request interceptors must capture this session before any async boundary.
+    expect(post).toHaveBeenCalledTimes(1)
+    await expect(request).resolves.toEqual(message)
     expect(onDelta.mock.calls).toEqual([['你好 '], ['world']])
     expect(post).toHaveBeenCalledWith(
       '/api/v1/private/projects/project-1/ai/chat-sessions/session-1/messages',
