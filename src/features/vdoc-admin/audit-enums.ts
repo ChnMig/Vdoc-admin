@@ -50,6 +50,8 @@ export const AUDIT_ACTION_LABELS = {
   'ai.prompt.upsert': 'admin.audit.actions.ai_prompt_upsert',
   'ai.chat.create': 'admin.audit.actions.ai_chat_create',
   'ai.chat.message': 'admin.audit.actions.ai_chat_message',
+  'ai.chat.update': 'admin.audit.actions.ai_chat_update',
+  'ai.chat.title': 'admin.audit.actions.ai_chat_title',
   'ai.summary.regenerate': 'admin.audit.actions.ai_summary_regenerate',
   'document_share.create': 'admin.audit.actions.document_share_create',
   'document_share.reveal': 'admin.audit.actions.document_share_reveal',

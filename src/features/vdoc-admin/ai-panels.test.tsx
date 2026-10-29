@@ -476,7 +476,11 @@ describe('AIContextPanel', () => {
     })
     const screen = renderPanel(targetA)
 
-    expect(await screen.findByText('Earlier discussion')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Earlier discussion', {
+        selector: '[data-chat-title]',
+      })
+    ).toBeInTheDocument()
     expect(
       await screen.findByText('answer for version-1: Recovered history')
     ).toBeInTheDocument()
@@ -522,7 +526,9 @@ describe('AIContextPanel', () => {
         queryKey: ['ai-chat-sessions'],
       })
     })
-    expect(screen.getByText('Current discussion')).toBeInTheDocument()
+    expect(
+      screen.getByText('Current discussion', { selector: '[data-chat-title]' })
+    ).toBeInTheDocument()
     expect(input).toHaveValue('Unsent follow-up')
     expect(
       screen.queryByText('answer for version-2: Different answer')

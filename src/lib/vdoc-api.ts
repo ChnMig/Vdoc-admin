@@ -598,11 +598,15 @@ export type AISummaryTarget = {
   readonly ownerId: string
 }
 
+export type AIReasoningEffort =
+  '' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
 export type AIChatSessionPayload = {
   readonly document_id: string
   readonly context_type: AIChatContextType
   readonly context_id: string
   readonly title?: string
+  readonly reasoning_effort?: AIReasoningEffort
 }
 
 export type AIChatSessionDTO = {
@@ -612,6 +616,8 @@ export type AIChatSessionDTO = {
   readonly context_type: AIChatContextType
   readonly context_id: string
   readonly title: string
+  readonly title_generated?: boolean
+  readonly reasoning_effort?: AIReasoningEffort
   readonly created_by: string
   readonly created_at: string
   readonly updated_at: string
@@ -1488,6 +1494,35 @@ export function listAIChatSessions(
           context_id: target.ownerId,
         },
       }
+    )
+  )
+}
+
+export function updateAIChatReasoning(
+  projectId: string,
+  sessionId: string,
+  effort: AIReasoningEffort,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<AIChatSessionDTO>(
+    vdocApi.patch(
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}`,
+      { reasoning_effort: effort },
+      { signal: options?.signal }
+    )
+  )
+}
+
+export function generateAIChatTitle(
+  projectId: string,
+  sessionId: string,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<AIChatSessionDTO>(
+    vdocApi.post(
+      `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/title`,
+      {},
+      { signal: options?.signal }
     )
   )
 }

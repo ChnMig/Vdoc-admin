@@ -13,6 +13,158 @@ const png =
 const answer =
   '## Comparison\n\n**Reviewed facts**\n\n- Published content is reviewed.\n- Saved drafts can still change.\n\n```ts\nconst revision = "2.4.0"\n```\n\n| Source | State |\n| --- | --- |\n| 2.4.0 | Published |\n\n[Reference](https://example.test/docs)'
 
+test('reasoning persists per conversation and new-chat default; title failure preserves the answer', async ({
+  page,
+}) => {
+  await installWorkspace(page)
+  const api = await installConversations(page)
+  await openDocument(page)
+  await openTool(page, 'Document AI')
+  const reasoning = page.getByRole('combobox', {
+    name: 'Reasoning',
+    exact: true,
+  })
+  await expect(reasoning).toHaveAttribute('value', 'default')
+  await reasoning.click()
+  await page
+    .getByRole('option', { name: 'Reasoning: high', exact: true })
+    .click()
+  await expect(reasoning).toHaveAttribute('value', 'high')
+  expect(api.sessions[0].reasoning_effort).toBe('high')
+  await page.reload()
+  await openTool(page, 'Document AI')
+  await expect(reasoning).toHaveAttribute('value', 'high')
+  await page
+    .getByRole('button', { name: 'New conversation', exact: true })
+    .click()
+  await expect(reasoning).toHaveAttribute('value', 'high')
+  api.failNextTitle()
+  const input = page.getByRole('textbox', {
+    name: 'AI chat message',
+    exact: true,
+  })
+  await input.fill('Provisional title remains readable')
+  await input.press('Enter')
+  await expect(
+    page.getByRole('heading', { name: 'Comparison', exact: true })
+  ).toBeVisible()
+  await expect.poll(api.titleCalls).toBe(1)
+  expect(api.sessions[0]).toMatchObject({
+    title: 'Provisional title remains readable',
+    reasoning_effort: 'high',
+    title_generated: false,
+  })
+  api.failNextSettings()
+  await reasoning.click()
+  await page
+    .getByRole('option', { name: 'Reasoning: off', exact: true })
+    .click()
+  await expect(page.getByRole('alert')).toContainText('Settings unavailable')
+  await expect(reasoning).toHaveAttribute('value', 'high')
+  await reasoning.click()
+  await page
+    .getByRole('option', { name: 'Reasoning: off', exact: true })
+    .click()
+  await expect(reasoning).toHaveAttribute('value', 'none')
+  await input.fill('Follow up on the document')
+  await input.press('Enter')
+  await expect.poll(api.titleCalls).toBe(2)
+  await expect(
+    page
+      .locator('[data-chat-title]')
+      .filter({ hasText: 'Document integration and revisions' })
+  ).toBeVisible()
+  await page
+    .getByRole('button', { name: 'New conversation', exact: true })
+    .click()
+  await expect(reasoning).toHaveAttribute('value', 'none')
+  await reasoning.click()
+  await page
+    .getByRole('option', { name: 'Reasoning: default', exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: 'New conversation', exact: true })
+    .click()
+  await expect(reasoning).toHaveAttribute('value', 'default')
+})
+
+for (const viewport of [
+  { width: 1440, height: 640 },
+  { width: 390, height: 640 },
+]) {
+  test(`chat keeps composer and menus inside the viewport at ${viewport.width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize(viewport)
+    await installWorkspace(page)
+    const api = await installConversations(page)
+    api.messages.set('earlier-discussion', [
+      {
+        id: 'long-user',
+        session_id: 'earlier-discussion',
+        role: 'user',
+        content: '请帮我分析这份文档的发布流程。',
+        created_at: '2026-10-29T00:00:00Z',
+      },
+      {
+        id: 'long-answer',
+        session_id: 'earlier-discussion',
+        role: 'assistant',
+        content: `${answer}\n\n${'Long explanation with document facts.\n\n'.repeat(50)}`,
+        created_at: '2026-10-29T00:01:00Z',
+      },
+    ])
+    await openDocument(page)
+    await openTool(page, 'Document AI')
+    const avatar = page.locator('[data-chat-avatar]').first()
+    await expect(avatar).toBeHidden()
+    await page
+      .getByRole('button', { name: 'Expand AI workspace', exact: true })
+      .click()
+    const panel = page.getByRole('dialog', { name: 'Document AI', exact: true })
+    if (viewport.width > 600) await expect(avatar).toBeVisible()
+    else await expect(avatar).toBeHidden()
+    await expect(panel.locator('time').first()).toHaveAttribute(
+      'datetime',
+      '2026-10-29T00:00:00Z'
+    )
+    const input = page.getByRole('textbox', {
+      name: 'AI chat message',
+      exact: true,
+    })
+    await input.fill('A long draft\n'.repeat(25))
+    for (const name of ['Reasoning', 'Send shortcut']) {
+      await page.getByRole('combobox', { name, exact: true }).click()
+      const menu = page.getByRole('listbox')
+      await expect(menu).toBeVisible()
+      const bounds = await menu.boundingBox()
+      const dialog = await panel.boundingBox()
+      expect(bounds!.y).toBeGreaterThanOrEqual(dialog!.y)
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(
+        dialog!.y + dialog!.height + 1
+      )
+      await page.keyboard.press('Escape')
+    }
+    const geometry = await panel.evaluate((dialog) => {
+      const form = dialog.querySelector('form')!.getBoundingClientRect()
+      const transcript = dialog.querySelector('[role=log]')!
+      return {
+        outerOverflow: dialog.scrollHeight - dialog.clientHeight,
+        transcriptOverflow: transcript.scrollHeight - transcript.clientHeight,
+        composerBottom: form.bottom,
+        bottom: dialog.getBoundingClientRect().bottom,
+      }
+    })
+    expect(geometry.outerOverflow).toBeLessThanOrEqual(1)
+    expect(geometry.transcriptOverflow).toBeGreaterThan(0)
+    expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.bottom)
+    await page.screenshot({
+      path: info.outputPath(`ai-chat-short-${viewport.width}.png`),
+      animations: 'disabled',
+    })
+  })
+}
+
 async function installConversations(page: Page) {
   let count = 0
   const requests: Array<{ content: string; attachments?: unknown[] }> = []
@@ -21,6 +173,8 @@ async function installConversations(page: Page) {
     {
       id: 'earlier-discussion',
       title: 'Earlier integration discussion',
+      title_generated: true,
+      reasoning_effort: '',
       project_id: projectId,
       document_id: documentId,
       context_type: 'document',
@@ -40,13 +194,54 @@ async function installConversations(page: Page) {
     },
   ])
   let failNext = false
+  let failNextTitle = false
+  let failNextSettings = false
+  let titleCalls = 0
   await page.route(
-    /\/ai\/chat-sessions(?:\/[^/?]+(?:\/messages)?)?(?:\?.*)?$/,
+    /\/ai\/chat-sessions(?:\/[^/?]+(?:\/(?:messages|title))?)?(?:\?.*)?$/,
     async (route) => {
       const request = route.request()
       const url = new URL(request.url())
       let detail: unknown
-      if (url.pathname.endsWith('/messages')) {
+      if (url.pathname.endsWith('/title')) {
+        titleCalls++
+        if (failNextTitle) {
+          failNextTitle = false
+          return route.fulfill({
+            json: {
+              code: 503,
+              status: 'FAILED_PRECONDITION',
+              description: 'Title unavailable',
+              detail: null,
+              timestamp: 1,
+            },
+          })
+        }
+        const session = sessions.find(
+          (item) => item.id === url.pathname.split('/').at(-2)
+        )!
+        session.title = 'Document integration and revisions'
+        session.title_generated = true
+        detail = session
+      } else if (request.method() === 'PATCH') {
+        if (failNextSettings) {
+          failNextSettings = false
+          return route.fulfill({
+            json: {
+              code: 503,
+              status: 'FAILED_PRECONDITION',
+              description: 'Settings unavailable',
+              detail: null,
+              timestamp: 1,
+            },
+          })
+        }
+        const session = sessions.find(
+          (item) => item.id === url.pathname.split('/').at(-1)
+        )!
+        session.reasoning_effort = request.postDataJSON().reasoning_effort
+        detail = session
+      } else if (url.pathname.endsWith('/messages')) {
         const sessionId = url.pathname.split('/').at(-2)!
         const payload = request.postDataJSON()
         requests.push(payload)
@@ -88,6 +283,7 @@ async function installConversations(page: Page) {
             ...sessions[0],
             ...request.postDataJSON(),
             id: `conversation-${++count}`,
+            title_generated: false,
             updated_at: '2026-10-29T00:00:00Z',
           }
           sessions.unshift(session)
@@ -115,6 +311,15 @@ async function installConversations(page: Page) {
   )
   return {
     requests,
+    sessions,
+    messages,
+    titleCalls: () => titleCalls,
+    failNextTitle: () => {
+      failNextTitle = true
+    },
+    failNextSettings: () => {
+      failNextSettings = true
+    },
     failNext: () => {
       failNext = true
     },
@@ -295,7 +500,7 @@ for (const width of [1440, 390]) {
         .lastElementChild!.getBoundingClientRect()
       const assistant = document
         .querySelector('[data-chat-role=assistant]')!
-        .lastElementChild!.previousElementSibling!.getBoundingClientRect()
+        .lastElementChild!.getBoundingClientRect()
       return { user: user.x, assistant: assistant.x }
     })
     expect(positions.user).toBeGreaterThanOrEqual(positions.assistant)
@@ -325,7 +530,7 @@ for (const width of [1440, 390]) {
       .getByRole('button', { name: 'Chat history', exact: true })
       .click()
     await page
-      .getByRole('button', { name: /Explain the uploaded context/ })
+      .getByRole('button', { name: /Document integration and revisions/ })
       .click()
     await expect(input).toHaveValue(
       'Unsent question in the first new conversation'

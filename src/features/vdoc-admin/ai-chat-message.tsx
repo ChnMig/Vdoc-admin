@@ -1,5 +1,13 @@
 import { memo, useRef, useState, type ComponentPropsWithoutRef } from 'react'
-import { Check, Copy, Download, FileText, X } from 'lucide-react'
+import {
+  Bot,
+  UserRound,
+  Check,
+  Copy,
+  Download,
+  FileText,
+  X,
+} from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { toast } from 'sonner'
@@ -245,55 +253,94 @@ export const AIChatMessage = memo(function AIChatMessage({
   message,
   pending = false,
 }: {
-  message: Pick<AIChatMessageDTO, 'role' | 'content' | 'attachments'>
+  message: Pick<AIChatMessageDTO, 'role' | 'content' | 'attachments'> &
+    Partial<Pick<AIChatMessageDTO, 'created_at'>>
   pending?: boolean
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const user = message.role === 'user'
+  const timestamp =
+    message.created_at && !Number.isNaN(Date.parse(message.created_at))
+      ? new Date(message.created_at)
+      : null
+  const role = user ? t('admin.ai.userRole') : t('admin.ai.assistantRole')
   return (
     <article
       data-chat-role={message.role}
       className={cn(
-        'flex min-w-0 flex-col gap-1.5',
-        user ? 'items-end' : 'items-start'
+        'flex min-w-0 items-start gap-2.5',
+        user && 'flex-row-reverse'
       )}
-      aria-label={user ? t('admin.ai.userRole') : t('admin.ai.assistantRole')}
+      aria-label={role}
     >
-      <span className='text-xs font-medium text-muted-foreground'>
-        {user ? t('admin.ai.userRole') : t('admin.ai.assistantRole')}
+      <span
+        data-chat-avatar
+        className='hidden size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground @min-[36rem]/ai:flex'
+        aria-hidden
+      >
+        {user ? <UserRound className='size-4' /> : <Bot className='size-4' />}
       </span>
       <div
         className={cn(
-          'grid max-w-[95%] min-w-0 gap-2 rounded-xl px-3 py-2.5 text-sm leading-6',
-          user
-            ? 'rounded-se-sm bg-primary text-primary-foreground'
-            : 'w-full rounded-ss-sm bg-muted/60 text-foreground'
+          'flex max-w-[min(94%,100ch)] min-w-0 flex-col gap-1.5',
+          user ? 'items-end' : 'w-full items-start'
         )}
-        aria-busy={pending || undefined}
       >
-        {!!message.attachments?.length && (
-          <ChatAttachmentList attachments={message.attachments} />
-        )}
-        {message.content &&
-          (user ? (
-            <p className='[overflow-wrap:anywhere] whitespace-pre-wrap'>
-              {message.content}
+        <div
+          className={cn(
+            'flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-muted-foreground',
+            user && 'flex-row-reverse'
+          )}
+        >
+          <span className='font-medium'>{role}</span>
+          {timestamp && (
+            <time
+              dateTime={message.created_at}
+              title={timestamp.toLocaleString(language)}
+              className='text-[0.6875rem] tabular-nums'
+            >
+              {timestamp.toLocaleString(language, {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </time>
+          )}
+        </div>
+        <div
+          className={cn(
+            'grid max-w-full min-w-0 gap-2 rounded-xl px-3.5 py-2.5 text-sm leading-6',
+            user
+              ? 'rounded-se-sm bg-primary text-primary-foreground'
+              : 'w-full rounded-ss-sm bg-muted/60 text-foreground'
+          )}
+          aria-busy={pending || undefined}
+        >
+          {!!message.attachments?.length && (
+            <ChatAttachmentList attachments={message.attachments} />
+          )}
+          {message.content &&
+            (user ? (
+              <p className='[overflow-wrap:anywhere] whitespace-pre-wrap'>
+                {message.content}
+              </p>
+            ) : (
+              <AIChatMarkdown content={message.content} />
+            ))}
+          {pending && (
+            <p role='status' className='text-xs text-muted-foreground'>
+              {t('admin.ai.generating')}
             </p>
-          ) : (
-            <AIChatMarkdown content={message.content} />
-          ))}
-        {pending && (
-          <p role='status' className='text-xs text-muted-foreground'>
-            {t('admin.ai.generating')}
-          </p>
+          )}
+        </div>
+        {!user && !pending && message.content && (
+          <ChatCopyButton
+            content={message.content}
+            label={t('admin.ai.copyMessage')}
+          />
         )}
       </div>
-      {!user && !pending && message.content && (
-        <ChatCopyButton
-          content={message.content}
-          label={t('admin.ai.copyMessage')}
-        />
-      )}
     </article>
   )
 })

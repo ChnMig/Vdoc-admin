@@ -28,6 +28,7 @@ type OptionsSelectProps = Pick<
   readonly required?: boolean
   readonly fallbackToFirstOption?: boolean
   readonly onChange?: (value: string) => void
+  readonly side?: 'top' | 'bottom'
 }
 
 export function OptionsSelect({
@@ -40,6 +41,7 @@ export function OptionsSelect({
   required = false,
   fallbackToFirstOption = true,
   onChange,
+  side = 'bottom',
   className,
   'aria-describedby': describedBy,
   'aria-invalid': ariaInvalid,
@@ -146,6 +148,9 @@ export function OptionsSelect({
         </SelectTrigger>
         <SelectContent
           container={portalContainer}
+          side={side}
+          collisionBoundary={portalContainer ?? undefined}
+          collisionPadding={8}
           className='w-(--radix-select-trigger-width) max-w-[calc(100vw-2rem)]'
           onEscapeKeyDown={(event) => {
             if (!portalContainer) return
