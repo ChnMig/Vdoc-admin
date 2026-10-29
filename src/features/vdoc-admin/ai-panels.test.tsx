@@ -72,6 +72,7 @@ function renderPanel(
 
   return {
     ...screen,
+    queryClient,
     rerenderTarget: (nextTarget: AISummaryTarget) =>
       screen.rerender(elementForTarget(nextTarget)),
   }
@@ -231,12 +232,16 @@ describe('AIContextPanel', () => {
         })
       )
     )
-    expect(createAIChatSession).toHaveBeenCalledWith('project-1', {
-      document_id: 'document-1',
-      context_type: 'version',
-      context_id: 'version-1',
-      title: 'AI chat for version version-1',
-    })
+    expect(createAIChatSession).toHaveBeenCalledWith(
+      'project-1',
+      {
+        document_id: 'document-1',
+        context_type: 'version',
+        context_id: 'version-1',
+        title: 'Target A',
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(
       await screen.findByText('answer for version-1: Target A')
     ).toBeInTheDocument()
@@ -253,12 +258,16 @@ describe('AIContextPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Send AI message' }))
 
     await waitFor(() =>
-      expect(createAIChatSession).toHaveBeenCalledWith('project-1', {
-        document_id: 'document-1',
-        context_type: 'version',
-        context_id: 'version-2',
-        title: 'AI chat for version version-2',
-      })
+      expect(createAIChatSession).toHaveBeenCalledWith(
+        'project-1',
+        {
+          document_id: 'document-1',
+          context_type: 'version',
+          context_id: 'version-2',
+          title: 'Target B',
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     )
     expect(sendAIChatMessage).toHaveBeenLastCalledWith(
       'project-1',
@@ -334,6 +343,7 @@ describe('AIContextPanel', () => {
       )
     const screen = renderPanel(targetA)
     const message = await screen.findByLabelText('AI chat message')
+    await waitFor(() => expect(message).toBeEnabled())
 
     await user.type(message, 'Please keep this prompt')
     await user.click(screen.getByRole('button', { name: 'Send AI message' }))
@@ -352,6 +362,7 @@ describe('AIContextPanel', () => {
     apiMocks.sendAIChatMessage.mockReturnValueOnce(completion.promise)
     const screen = renderPanel(targetA)
     const input = await screen.findByLabelText('AI chat message')
+    await waitFor(() => expect(input).toBeEnabled())
     fireEvent.change(input, { target: { value: 'Explain the document' } })
     fireEvent.submit(input.closest('form')!)
     await waitFor(() =>
@@ -386,6 +397,7 @@ describe('AIContextPanel', () => {
     )
     const screen = renderPanel(targetA)
     const input = await screen.findByLabelText('AI chat message')
+    await waitFor(() => expect(input).toBeEnabled())
     fireEvent.change(input, { target: { value: 'Retry this prompt' } })
     fireEvent.submit(input.closest('form')!)
     await waitFor(() =>
@@ -413,6 +425,7 @@ describe('AIContextPanel', () => {
     apiMocks.createAIChatSession.mockReturnValueOnce(sessionCreation.promise)
     const screen = renderPanel(targetA)
     const message = await screen.findByLabelText('AI chat message')
+    await waitFor(() => expect(message).toBeEnabled())
     fireEvent.change(message, { target: { value: 'Only send once' } })
     const form = message.closest('form')
     if (!form) throw new Error('missing chat form')
@@ -472,6 +485,48 @@ describe('AIContextPanel', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
     expect(apiMocks.createAIChatSession).not.toHaveBeenCalled()
+  })
+
+  it('keeps the active conversation and its draft when history refreshes in a new order', async () => {
+    const first = chatSessionFor('project-1', {
+      document_id: 'document-1',
+      context_type: 'version',
+      context_id: 'version-1',
+      title: 'Current discussion',
+    })
+    const newer = {
+      ...first,
+      id: 'session-version-2',
+      title: 'Newer discussion',
+    }
+    chatMessagesBySession.set(first.id, [
+      messageForSession(first.id, 'Current answer'),
+    ])
+    chatMessagesBySession.set(newer.id, [
+      messageForSession(newer.id, 'Different answer'),
+    ])
+    apiMocks.listAIChatSessions.mockResolvedValue({ items: [first], total: 1 })
+    const screen = renderPanel(targetA)
+    expect(
+      await screen.findByText('answer for version-1: Current answer')
+    ).toBeInTheDocument()
+    const input = screen.getByRole('textbox', { name: 'AI chat message' })
+    fireEvent.change(input, { target: { value: 'Unsent follow-up' } })
+
+    apiMocks.listAIChatSessions.mockResolvedValue({
+      items: [newer, first],
+      total: 2,
+    })
+    await act(async () => {
+      await screen.queryClient.invalidateQueries({
+        queryKey: ['ai-chat-sessions'],
+      })
+    })
+    expect(screen.getByText('Current discussion')).toBeInTheDocument()
+    expect(input).toHaveValue('Unsent follow-up')
+    expect(
+      screen.queryByText('answer for version-2: Different answer')
+    ).not.toBeInTheDocument()
   })
 
   it('keeps archived AI history readable and disables new work', async () => {

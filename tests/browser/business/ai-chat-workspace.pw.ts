@@ -1,0 +1,447 @@
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test, type Page } from '@playwright/test'
+import {
+  installWorkspace,
+  openDocument,
+  openTool,
+  projectId,
+  documentId,
+} from '../support/document-workspace'
+
+const png =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG3sAAAAASUVORK5CYII='
+const answer =
+  '## Comparison\n\n**Reviewed facts**\n\n- Published content is reviewed.\n- Saved drafts can still change.\n\n```ts\nconst revision = "2.4.0"\n```\n\n| Source | State |\n| --- | --- |\n| 2.4.0 | Published |\n\n[Reference](https://example.test/docs)'
+
+async function installConversations(page: Page) {
+  let count = 0
+  const requests: Array<{ content: string; attachments?: unknown[] }> = []
+  const messages = new Map<string, unknown[]>()
+  const sessions = [
+    {
+      id: 'earlier-discussion',
+      title: 'Earlier integration discussion',
+      project_id: projectId,
+      document_id: documentId,
+      context_type: 'document',
+      context_id: documentId,
+      created_by: 'workspace-admin',
+      created_at: '2026-10-28T00:00:00Z',
+      updated_at: '2026-10-28T00:00:00Z',
+    },
+  ]
+  messages.set('earlier-discussion', [
+    {
+      id: 'earlier-answer',
+      session_id: 'earlier-discussion',
+      role: 'assistant',
+      content: 'Earlier saved answer',
+      created_at: '2026-10-28T00:00:00Z',
+    },
+  ])
+  let failNext = false
+  await page.route(
+    /\/ai\/chat-sessions(?:\/[^/?]+(?:\/messages)?)?(?:\?.*)?$/,
+    async (route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      let detail: unknown
+      if (url.pathname.endsWith('/messages')) {
+        const sessionId = url.pathname.split('/').at(-2)!
+        const payload = request.postDataJSON()
+        requests.push(payload)
+        if (failNext) {
+          failNext = false
+          return route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+              code: 503,
+              status: 'FAILED_PRECONDITION',
+              description: 'Temporary provider failure',
+              detail: null,
+              timestamp: 1,
+            }),
+          })
+        }
+        const reply = {
+          id: `answer-${requests.length}`,
+          session_id: sessionId,
+          role: 'assistant',
+          content: answer,
+          created_at: '2026-10-29T00:00:00Z',
+        }
+        messages.set(sessionId, [
+          ...(messages.get(sessionId) ?? []),
+          {
+            ...reply,
+            id: `user-${requests.length}`,
+            role: 'user',
+            content: payload.content,
+            attachments: payload.attachments,
+          },
+          reply,
+        ])
+        detail = reply
+      } else if (url.pathname.endsWith('/chat-sessions')) {
+        if (request.method() === 'POST') {
+          const session = {
+            ...sessions[0],
+            ...request.postDataJSON(),
+            id: `conversation-${++count}`,
+            updated_at: '2026-10-29T00:00:00Z',
+          }
+          sessions.unshift(session)
+          messages.set(session.id, [])
+          detail = session
+        } else detail = sessions
+      } else {
+        const id = url.pathname.split('/').at(-1)!
+        detail = {
+          session: sessions.find((session) => session.id === id),
+          messages: messages.get(id) ?? [],
+        }
+      }
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 200,
+          status: 'OK',
+          detail,
+          total: sessions.length,
+          timestamp: 1,
+        }),
+      })
+    }
+  )
+  return {
+    requests,
+    failNext: () => {
+      failNext = true
+    },
+  }
+}
+
+for (const width of [1440, 390]) {
+  test(`chat supports shortcuts, files, history, markdown and expansion at ${width}px`, async ({
+    page,
+    context,
+    baseURL,
+  }, info) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.setViewportSize({ width, height: 900 })
+    await context.addCookies([
+      {
+        name: 'vite-ui-theme',
+        value: width === 390 ? 'dark' : 'light',
+        url: baseURL!,
+      },
+    ])
+    await installWorkspace(page)
+    const api = await installConversations(page)
+    await openDocument(page)
+    await openTool(page, 'Document AI')
+    await expect(
+      page.getByText('Earlier saved answer', { exact: true })
+    ).toBeVisible()
+    const input = page.getByRole('textbox', {
+      name: 'AI chat message',
+      exact: true,
+    })
+    const send = page.getByRole('button', {
+      name: 'Send AI message',
+      exact: true,
+    })
+    await expect(send).toBeDisabled()
+    await page
+      .getByRole('button', { name: 'New conversation', exact: true })
+      .click()
+    await expect(
+      page.getByText('Earlier saved answer', { exact: true })
+    ).toHaveCount(0)
+    await input.fill('Explain the uploaded context')
+    await input.press('Shift+Enter')
+    await expect(input).toHaveValue('Explain the uploaded context\n')
+    expect(api.requests).toHaveLength(0)
+    await input.evaluate((element) => {
+      element.dispatchEvent(
+        new CompositionEvent('compositionstart', { bubbles: true })
+      )
+      element.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          isComposing: true,
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+      element.dispatchEvent(
+        new CompositionEvent('compositionend', { bubbles: true })
+      )
+    })
+    expect(api.requests).toHaveLength(0)
+    await page
+      .getByRole('combobox', { name: 'Send shortcut', exact: true })
+      .click()
+    await page
+      .getByRole('option', { name: 'Ctrl / ⌘ + Enter', exact: true })
+      .click()
+    await input.press('Enter')
+    expect(api.requests).toHaveLength(0)
+    await expect(input).toHaveValue('Explain the uploaded context\n\n')
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'notes.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# Extra context\nAn exact attached fact.'),
+    })
+    await expect(
+      page.getByRole('button', { name: 'Remove notes.md', exact: true })
+    ).toBeVisible()
+    await input.evaluate((element, data) => {
+      const transfer = new DataTransfer()
+      transfer.items.add(
+        new File(
+          [Uint8Array.from(atob(data), (char) => char.charCodeAt(0))],
+          'screenshot.png',
+          { type: 'image/png' }
+        )
+      )
+      element.dispatchEvent(
+        new ClipboardEvent('paste', {
+          clipboardData: transfer,
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    }, png)
+    await expect(
+      page.getByRole('img', { name: 'screenshot.png', exact: true })
+    ).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Preview screenshot.png', exact: true })
+      .click()
+    await expect(
+      page.getByRole('dialog', { name: 'Preview screenshot.png', exact: true })
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(
+      page.getByRole('dialog', { name: 'Preview screenshot.png', exact: true })
+    ).toBeHidden()
+    await expect(
+      page.getByRole('dialog', { name: 'Document AI', exact: true })
+    ).toBeVisible()
+    await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
+    await expect(input).toBeHidden()
+    await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
+    await expect(input).toHaveValue('Explain the uploaded context\n\n')
+    await expect(
+      page.getByRole('button', { name: 'Remove screenshot.png', exact: true })
+    ).toBeVisible()
+    const panel = page.getByRole('dialog', { name: 'Document AI', exact: true })
+    const before = await panel.boundingBox()
+    await page
+      .getByRole('button', { name: 'Expand AI workspace', exact: true })
+      .click()
+    await expect(panel).toHaveAttribute('aria-modal', 'true')
+    if (width > 1280)
+      await expect
+        .poll(async () => (await panel.boundingBox())!.width)
+        .toBeGreaterThan(before!.width * 2)
+    await expect(input).toHaveValue('Explain the uploaded context\n\n')
+    // The select's popup must stay usable inside the native modal top layer.
+    await page
+      .getByRole('combobox', { name: 'Send shortcut', exact: true })
+      .click()
+    await page.keyboard.press('Escape')
+    await expect(panel).toBeVisible()
+    await input.press('Control+Enter')
+    await expect(input).toHaveValue('')
+    expect(api.requests).toHaveLength(1)
+    expect(api.requests[0].attachments).toHaveLength(2)
+    expect(api.requests[0].attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'notes.md',
+          media_type: 'text/plain',
+          data: Buffer.from(
+            '# Extra context\nAn exact attached fact.'
+          ).toString('base64'),
+        }),
+        expect.objectContaining({
+          name: 'screenshot.png',
+          media_type: 'image/png',
+          data: png,
+        }),
+      ])
+    )
+    await expect(
+      page.getByRole('heading', { name: 'Comparison', exact: true })
+    ).toBeVisible()
+    await expect(page.locator('[data-chat-role=assistant] strong')).toHaveText(
+      'Reviewed facts'
+    )
+    await expect(page.getByRole('table')).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Copy code', exact: true })
+    ).toBeVisible()
+    const accessibility = await new AxeBuilder({ page })
+      .include('dialog.document-assistant-panel')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze()
+    expect(accessibility.violations).toEqual([])
+    const positions = await page.evaluate(() => {
+      const user = document
+        .querySelector('[data-chat-role=user]')!
+        .lastElementChild!.getBoundingClientRect()
+      const assistant = document
+        .querySelector('[data-chat-role=assistant]')!
+        .lastElementChild!.previousElementSibling!.getBoundingClientRect()
+      return { user: user.x, assistant: assistant.x }
+    })
+    expect(positions.user).toBeGreaterThanOrEqual(positions.assistant)
+    await page.screenshot({
+      path: info.outputPath(`ai-chat-expanded-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    })
+    await page
+      .getByRole('button', { name: 'Collapse AI workspace', exact: true })
+      .click()
+    await input.fill('Unsent question in the first new conversation')
+    await page
+      .getByRole('button', { name: 'Chat history', exact: true })
+      .click()
+    await page
+      .getByRole('textbox', { name: 'Search conversations', exact: true })
+      .fill('Earlier')
+    await page
+      .getByRole('button', { name: /Earlier integration discussion/ })
+      .click()
+    await expect(
+      page.getByText('Earlier saved answer', { exact: true })
+    ).toBeVisible()
+    await expect(input).toHaveValue('')
+    await page
+      .getByRole('button', { name: 'Chat history', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: /Explain the uploaded context/ })
+      .click()
+    await expect(input).toHaveValue(
+      'Unsent question in the first new conversation'
+    )
+    await page
+      .getByRole('button', { name: 'New conversation', exact: true })
+      .click()
+    await expect(input).toHaveValue('')
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'not-supported.exe',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('binary'),
+    })
+    await expect(page.getByRole('alert')).toContainText('Choose PNG')
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'reference.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\nTest reference'),
+    })
+    await expect(
+      page.getByRole('button', { name: 'Remove reference.pdf', exact: true })
+    ).toBeVisible()
+    api.failNext()
+    await send.click()
+    await expect(page.getByRole('alert')).toContainText(
+      'Your message and attachments are kept'
+    )
+    await expect(
+      page.getByRole('button', { name: 'Remove reference.pdf', exact: true })
+    ).toBeVisible()
+    await send.click()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(input).toBeEnabled()
+    await expect(
+      page.getByRole('button', { name: 'Remove reference.pdf', exact: true })
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('link', { name: 'Download reference.pdf', exact: true })
+    ).toBeVisible()
+    expect(api.requests.at(-1)).toMatchObject({
+      content: '',
+      attachments: [expect.objectContaining({ name: 'reference.pdf' })],
+    })
+    await input.fill('Keep through closing and reopening')
+    await page
+      .getByRole('button', { name: 'Close document AI', exact: true })
+      .click()
+    await openTool(page, 'Document AI')
+    await expect(input).toHaveValue('Keep through closing and reopening')
+    await expect(
+      page.getByRole('combobox', { name: 'Send shortcut', exact: true })
+    ).toHaveAttribute('value', 'modifier')
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      )
+    ).toBe(true)
+    await page.reload()
+    await openTool(page, 'Document AI')
+    await expect(
+      page.getByRole('combobox', { name: 'Send shortcut', exact: true })
+    ).toHaveAttribute('value', 'modifier')
+    expect(errors).toEqual([])
+  })
+}
+
+test('Chinese chat stays usable in a short mobile viewport and rejects invalid files', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 667 })
+  await installWorkspace(page, 'zh-CN')
+  const api = await installConversations(page)
+  await page.goto(
+    `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}`
+  )
+  await page.getByRole('button', { name: '文档 AI', exact: true }).click()
+  await page.getByRole('button', { name: '新建对话', exact: true }).click()
+  const input = page.getByRole('textbox', { name: 'AI 聊天消息', exact: true })
+  await input.fill('这份文档有哪些重点？')
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'broken.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from([0xff, 0xfe]),
+  })
+  await expect(page.getByRole('alert')).toContainText('UTF-8')
+  await expect(input).toHaveValue('这份文档有哪些重点？')
+  await page.locator('input[type=file]').setInputFiles(
+    Array.from({ length: 5 }, (_, index) => ({
+      name: `${index}.txt`,
+      mimeType: 'text/plain',
+      buffer: Buffer.from('text'),
+    }))
+  )
+  await expect(page.getByRole('alert')).toContainText('最多添加 4 个附件')
+  await page.locator('input[type=file]').setInputFiles({
+    name: '太大.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.alloc(101 * 1024, 'a'),
+  })
+  await expect(page.getByRole('alert')).toContainText('100 KB')
+  await input.press('Enter')
+  await expect(input).toHaveValue('')
+  expect(api.requests).toHaveLength(1)
+  const bounds = await input.boundingBox()
+  expect(bounds!.y + bounds!.height).toBeLessThan(667)
+  await expect(
+    page.getByRole('button', { name: '发送 AI 消息', exact: true })
+  ).toBeInViewport()
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth
+    )
+  ).toBe(true)
+  await page.screenshot({
+    path: info.outputPath('ai-chat-chinese-mobile.png'),
+    fullPage: true,
+    animations: 'disabled',
+  })
+})

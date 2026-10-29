@@ -617,11 +617,18 @@ export type AIChatSessionDTO = {
   readonly updated_at: string
 }
 
+export type AIChatAttachmentDTO = {
+  readonly name: string
+  readonly media_type: string
+  readonly data: string
+}
+
 export type AIChatMessageDTO = {
   readonly id: string
   readonly session_id: string
   readonly role: 'user' | 'assistant'
   readonly content: string
+  readonly attachments?: readonly AIChatAttachmentDTO[]
   readonly provider_id?: string
   readonly created_at: string
 }
@@ -1455,13 +1462,14 @@ export function regenerateAISummary(target: AISummaryTarget) {
 
 export function createAIChatSession(
   projectId: string,
-  payload: AIChatSessionPayload
+  payload: AIChatSessionPayload,
+  options?: RequestOptions
 ) {
+  const path = `/api/v1/private/projects/${projectId}/ai/chat-sessions`
   return unwrapEnvelope<AIChatSessionDTO>(
-    vdocApi.post(
-      `/api/v1/private/projects/${projectId}/ai/chat-sessions`,
-      payload
-    )
+    options
+      ? vdocApi.post(path, payload, { signal: options.signal })
+      : vdocApi.post(path, payload)
   )
 }
 
@@ -1501,7 +1509,10 @@ export function sendAIChatMessage(
   projectId: string,
   sessionId: string,
   content: string,
-  options?: RequestOptions & { onDelta?: (delta: string) => void }
+  options?: RequestOptions & {
+    onDelta?: (delta: string) => void
+    attachments?: readonly AIChatAttachmentDTO[]
+  }
 ) {
   if (options?.onDelta) {
     return sendStreamingAIChatMessage(projectId, sessionId, content, options)
@@ -1509,7 +1520,12 @@ export function sendAIChatMessage(
   return unwrapEnvelope<AIChatMessageDTO>(
     vdocApi.post(
       `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/messages`,
-      { content },
+      {
+        content,
+        ...(options?.attachments?.length
+          ? { attachments: options.attachments }
+          : {}),
+      },
       { signal: options?.signal }
     )
   )
@@ -1523,11 +1539,19 @@ async function sendStreamingAIChatMessage(
   projectId: string,
   sessionId: string,
   content: string,
-  options: RequestOptions & { onDelta?: (delta: string) => void }
+  options: RequestOptions & {
+    onDelta?: (delta: string) => void
+    attachments?: readonly AIChatAttachmentDTO[]
+  }
 ) {
   const response = await vdocApi.post<ReadableStream<Uint8Array>>(
     `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/messages`,
-    { content },
+    {
+      content,
+      ...(options.attachments?.length
+        ? { attachments: options.attachments }
+        : {}),
+    },
     {
       adapter: 'fetch',
       responseType: 'stream',

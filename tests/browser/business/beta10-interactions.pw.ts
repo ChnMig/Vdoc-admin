@@ -531,7 +531,7 @@ test('reduced motion removes spatial transitions while retaining tool navigation
   expect(api.unexpected).toEqual([])
 })
 
-test('mobile AI history select stays interactive inside the native dialog', async ({
+test('mobile AI history and send shortcut stay interactive inside the native dialog', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 1000 })
@@ -541,19 +541,27 @@ test('mobile AI history select stays interactive inside the native dialog', asyn
   await openDocument(page)
   await openTool(page, 'Document AI')
   const dialog = page.getByRole('dialog', { name: 'Document AI', exact: true })
-  const historySelect = dialog.getByRole('combobox', {
+  const historyButton = dialog.getByRole('button', {
     name: 'Chat history',
     exact: true,
   })
-  await expect(historySelect).toHaveAttribute('value', 'chat-history-policy')
-  await historySelect.click()
   await expect(
-    page.getByRole('option', { name: 'Release upgrade plan', exact: true })
+    dialog.getByText('Reviewed integration policy', { exact: true })
   ).toBeVisible()
-  await page
-    .getByRole('option', { name: 'Release upgrade plan', exact: true })
-    .click()
-  await expect(historySelect).toHaveAttribute('value', 'chat-history-upgrade')
+  await historyButton.click()
+  await dialog
+    .getByRole('textbox', { name: 'Search conversations', exact: true })
+    .fill('Release')
+  await expect(
+    dialog.getByRole('button', { name: /Release upgrade plan/ })
+  ).toBeVisible()
+  await expect(
+    dialog.getByRole('button', { name: /Reviewed integration policy/ })
+  ).toHaveCount(0)
+  await dialog.getByRole('button', { name: /Release upgrade plan/ }).click()
+  await expect(
+    dialog.getByText('Release upgrade plan', { exact: true })
+  ).toBeVisible()
   await expect
     .poll(() =>
       api.requests.some((request) =>
@@ -561,7 +569,16 @@ test('mobile AI history select stays interactive inside the native dialog', asyn
       )
     )
     .toBe(true)
-  await historySelect.click()
+  await historyButton.click()
+  await dialog
+    .getByRole('button', { name: 'Back to conversation', exact: true })
+    .click()
+  await dialog
+    .getByRole('combobox', { name: 'Send shortcut', exact: true })
+    .click()
+  await expect(
+    page.getByRole('option', { name: 'Enter to send', exact: true })
+  ).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('listbox')).toHaveCount(0)
   await expect(dialog).toBeVisible()

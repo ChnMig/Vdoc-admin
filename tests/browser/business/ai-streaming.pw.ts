@@ -102,6 +102,62 @@ for (const width of [1280, 390]) {
       expect(requestHeaders.accept).toBe('text/event-stream, application/json')
       expect(requestHeaders.authorization).toBe('synthetic-workspace-session')
       expect(pending?.writableEnded).toBe(false)
+      await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
+      await expect(input).toBeHidden()
+      await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
+      await expect(
+        page.getByText('Generating answer…', { exact: true })
+      ).toBeVisible()
+      const transcript = await page
+        .getByRole('log', { name: 'Conversation messages', exact: true })
+        .boundingBox()
+      expect(transcript!.height).toBeGreaterThan(300)
+      const log = page.getByRole('log', {
+        name: 'Conversation messages',
+        exact: true,
+      })
+      pending!.write(
+        `event: delta\ndata: ${JSON.stringify({ delta: Array.from({ length: 60 }, (_, index) => `\n\nParagraph ${index}: a longer streamed answer remains inside the transcript.`).join('') })}\n\n`
+      )
+      await expect
+        .poll(() =>
+          log.evaluate((node) => node.scrollHeight > node.clientHeight)
+        )
+        .toBe(true)
+      await expect
+        .poll(() =>
+          log.evaluate(
+            (node) => node.scrollHeight - node.scrollTop - node.clientHeight
+          )
+        )
+        .toBeLessThan(80)
+      await log.evaluate((node) => {
+        node.scrollTop = 0
+        node.dispatchEvent(new Event('scroll'))
+      })
+      await expect(
+        page.getByRole('button', { name: 'Latest message', exact: true })
+      ).toBeVisible()
+      pending!.write(
+        'event: delta\ndata: {"delta":"\\n\\nA new fragment must not pull the reader away from earlier text."}\n\n'
+      )
+      await expect(
+        page.getByText(
+          'A new fragment must not pull the reader away from earlier text.',
+          { exact: true }
+        )
+      ).toBeAttached()
+      expect(await log.evaluate((node) => node.scrollTop)).toBeLessThan(20)
+      await page
+        .getByRole('button', { name: 'Latest message', exact: true })
+        .click()
+      await expect
+        .poll(() =>
+          log.evaluate(
+            (node) => node.scrollHeight - node.scrollTop - node.clientHeight
+          )
+        )
+        .toBeLessThan(80)
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth
@@ -137,6 +193,21 @@ for (const width of [1280, 390]) {
         })
       ).toBeVisible()
       await expect(input).toHaveValue('')
+      mode = 'stream'
+      await input.fill('Stop this request and keep my input.')
+      await page
+        .getByRole('button', { name: 'Send AI message', exact: true })
+        .click()
+      await expect(
+        page.getByText('Generating answer…', { exact: true })
+      ).toBeVisible()
+      await page
+        .getByRole('button', { name: 'Stop generating', exact: true })
+        .click()
+      await expect(
+        page.getByText('Generating answer…', { exact: true })
+      ).toHaveCount(0)
+      await expect(input).toHaveValue('Stop this request and keep my input.')
       expect(errors).toEqual([])
     } finally {
       pending?.destroy()

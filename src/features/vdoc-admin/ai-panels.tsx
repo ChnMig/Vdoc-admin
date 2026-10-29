@@ -1,16 +1,11 @@
-import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Bot, MessageSquare } from 'lucide-react'
+import { AlertCircle, Bot } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import {
-  createAIChatSession,
-  getAIChatSession,
   getAISummary,
-  listAIChatSessions,
   regenerateAISummary,
-  sendAIChatMessage,
-  type AIChatMessageDTO,
   type AIChatTarget,
   type AISummaryDTO,
   type AISummaryTarget,
@@ -26,9 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { OptionsSelect } from '@/components/options-select'
+import { AIChatMarkdown } from './ai-chat-message'
+import { AIChatPanel } from './ai-chat-panel'
 
 type AIContextPanelProps = {
   readonly target?: AIChatTarget
@@ -71,22 +65,11 @@ function AIContextPanelContent({
 }: AIContextPanelProps & { readonly targetKey: string }) {
   const { t } = useLanguage()
   const queryClient = useQueryClient()
-  const [sessionId, setSessionId] = useState('')
-  const [messages, setMessages] = useState<readonly AIChatMessageDTO[]>([])
-  const [pendingReply, setPendingReply] = useState<{
-    sessionId: string
-    question: string
-    answer: string
-  } | null>(null)
-  const sendControllerRef = useRef<AbortController | null>(null)
-  const sessionCreationRef = useRef<Promise<string> | null>(null)
-  const sendLockedRef = useRef(false)
   const mountedRef = useRef(false)
   useLayoutEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      sendControllerRef.current?.abort()
     }
   }, [])
 
@@ -103,26 +86,6 @@ function AIContextPanelContent({
     queryFn: ({ signal }) =>
       getAISummary(summaryTarget ?? emptyTarget, { signal }),
     enabled: summaryTarget !== undefined && mode !== 'chat',
-  })
-  const chatSessionsQuery = useQuery({
-    queryKey: ['ai-chat-sessions', targetKey, target],
-    queryFn: ({ signal }) =>
-      listAIChatSessions(target ?? emptyTarget, { signal }),
-    enabled: target !== undefined && mode !== 'summary',
-  })
-  const chatSessions = chatSessionsQuery.data?.items ?? []
-  const activeSessionId = sessionId || chatSessions[0]?.id || ''
-  const chatQuery = useQuery({
-    queryKey: [
-      'ai-chat-session',
-      targetKey,
-      target?.projectId,
-      activeSessionId,
-    ],
-    queryFn: ({ signal }) =>
-      getAIChatSession(target?.projectId ?? '', activeSessionId, { signal }),
-    enabled:
-      target !== undefined && mode !== 'summary' && activeSessionId.length > 0,
   })
   const regenerateMutation = useMutation({
     mutationFn: async (sessionVersion: number) => {
@@ -151,97 +114,15 @@ function AIContextPanelContent({
       })
     },
   })
-  const sendMutation = useMutation({
-    mutationFn: async ({
-      content,
-      sessionVersion,
-    }: {
-      content: string
-      sessionVersion: number
-    }) => {
-      if (!target || !interactive) throw new Error('AI chat is read-only.')
-      const ownsSubmission = () =>
-        mountedRef.current &&
-        useAuthStore.getState().auth.sessionVersion === sessionVersion
-      if (!ownsSubmission()) return
-      try {
-        const targetSessionId = await ensureSession(
-          target,
-          activeSessionId,
-          setSessionId,
-          sessionCreationRef,
-          ownsSubmission
-        )
-        // Session creation can outlive the originating page or account.
-        if (!ownsSubmission()) return
-        const controller = new AbortController()
-        sendControllerRef.current = controller
-        setPendingReply({
-          sessionId: targetSessionId,
-          question: content,
-          answer: '',
-        })
-        let message: AIChatMessageDTO
-        try {
-          message = await sendAIChatMessage(
-            target.projectId,
-            targetSessionId,
-            content,
-            {
-              signal: controller.signal,
-              onDelta: (delta) => {
-                if (ownsSubmission()) {
-                  setPendingReply((current) =>
-                    current?.sessionId === targetSessionId
-                      ? { ...current, answer: current.answer + delta }
-                      : current
-                  )
-                }
-              },
-            }
-          )
-        } finally {
-          if (sendControllerRef.current === controller)
-            sendControllerRef.current = null
-          if (ownsSubmission()) setPendingReply(null)
-        }
-        if (!ownsSubmission()) return
-        return { message, sessionId: targetSessionId, sessionVersion }
-      } catch (error) {
-        if (ownsSubmission()) throw error
-      }
-    },
-    onSuccess: (result) => {
-      if (
-        !result ||
-        !mountedRef.current ||
-        useAuthStore.getState().auth.sessionVersion !== result.sessionVersion
-      )
-        return
-      const { message, sessionId: targetSessionId } = result
-      setMessages((current) => [...current, message])
-      void queryClient.invalidateQueries({
-        queryKey: [
-          'ai-chat-session',
-          targetKey,
-          target?.projectId,
-          targetSessionId,
-        ],
-      })
-      return queryClient.invalidateQueries({
-        queryKey: ['ai-chat-sessions', targetKey, target],
-      })
-    },
-  })
-  const visibleMessages = mergeChatMessages(
-    chatQuery.data?.messages ?? [],
-    messages.filter((message) => message.session_id === activeSessionId)
-  )
-
   const sidebar = presentation === 'sidebar'
   const Container = sidebar ? 'div' : Card
   return (
-    <Container className='@container/ai min-w-0 overflow-hidden'>
+    <Container
+      className={cn(
+        '@container/ai min-w-0 overflow-hidden',
+        sidebar && mode === 'chat' && 'flex h-full min-h-0 flex-col'
+      )}
+    >
       {!sidebar && (
         <CardHeader className='border-b pb-5'>
           <div className='flex flex-wrap items-start justify-between gap-3'>
@@ -268,6 +149,7 @@ function AIContextPanelContent({
       <CardContent
         className={cn(
           'grid min-w-0 gap-6',
+          sidebar && mode === 'chat' && 'flex min-h-0 flex-1 flex-col',
           sidebar
             ? 'p-0'
             : mode === 'both'
@@ -330,140 +212,12 @@ function AIContextPanelContent({
           </section>
         )}
         {mode !== 'summary' && (
-          <section className='grid content-start gap-3'>
-            <div className='flex items-center gap-2 font-medium'>
-              <MessageSquare className='size-4 text-muted-foreground' />
-              {t('admin.ai.chatTitle')}
-            </div>
-            {mode === 'chat' && !interactive && target && (
-              <Alert>
-                <AlertCircle />
-                <AlertTitle>{t('admin.ai.readOnlyTitle')}</AlertTitle>
-                <AlertDescription>
-                  {t('admin.ai.readOnlyDescription')}
-                </AlertDescription>
-              </Alert>
-            )}
-            {chatSessions.length > 0 && (
-              <div className='grid gap-2'>
-                <Label htmlFor='ai-chat-session'>
-                  {t('admin.ai.chatSession')}
-                </Label>
-                <OptionsSelect
-                  id='ai-chat-session'
-                  disabled={sendMutation.isPending}
-                  value={activeSessionId}
-                  onChange={setSessionId}
-                  options={chatSessions.map((session) => ({
-                    value: session.id,
-                    label: session.title || session.id,
-                  }))}
-                />
-              </div>
-            )}
-            <div className='grid max-h-56 gap-2 overflow-auto rounded-md border bg-[var(--surface-control)] p-3 text-sm'>
-              {visibleMessages.length ? (
-                visibleMessages.map((message) => (
-                  <p
-                    key={message.id}
-                    className='break-words whitespace-pre-wrap'
-                  >
-                    <span className='font-medium'>
-                      {message.role === 'user'
-                        ? t('admin.ai.userRole')
-                        : t('admin.ai.assistantRole')}
-                      :{' '}
-                    </span>
-                    {message.content}
-                  </p>
-                ))
-              ) : !pendingReply ? (
-                <p className='text-muted-foreground'>
-                  {t('admin.ai.noMessages')}
-                </p>
-              ) : null}
-              {pendingReply?.sessionId === activeSessionId && (
-                <>
-                  <p className='break-words whitespace-pre-wrap'>
-                    <span className='font-medium'>
-                      {t('admin.ai.userRole')}:{' '}
-                    </span>
-                    {pendingReply.question}
-                  </p>
-                  <div aria-busy='true'>
-                    <p className='break-words whitespace-pre-wrap'>
-                      <span className='font-medium'>
-                        {t('admin.ai.assistantRole')}:{' '}
-                      </span>
-                      {pendingReply.answer}
-                    </p>
-                    <p
-                      role='status'
-                      className='mt-2 text-xs text-muted-foreground'
-                    >
-                      {t('admin.ai.generating')}
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-            <form
-              key={targetKey}
-              className='grid gap-2'
-              onSubmit={(event) => {
-                event.preventDefault()
-                const form = event.currentTarget
-                const formData = new FormData(form)
-                const content = String(formData.get('message') ?? '').trim()
-                if (content.length === 0 || sendLockedRef.current) return
-                sendLockedRef.current = true
-                sendMutation.mutate(
-                  {
-                    content,
-                    sessionVersion: useAuthStore.getState().auth.sessionVersion,
-                  },
-                  {
-                    onSuccess: (result) => {
-                      if (
-                        result &&
-                        mountedRef.current &&
-                        useAuthStore.getState().auth.sessionVersion ===
-                          result.sessionVersion
-                      )
-                        form.reset()
-                    },
-                    onSettled: () => {
-                      sendLockedRef.current = false
-                    },
-                  }
-                )
-              }}
-            >
-              <Label htmlFor='ai-chat-message'>
-                {t('admin.ai.chatMessage')}
-              </Label>
-              <Textarea
-                id='ai-chat-message'
-                name='message'
-                className='min-h-20'
-                disabled={!target || !interactive || sendMutation.isPending}
-              />
-              <Button
-                type='submit'
-                disabled={!target || !interactive || sendMutation.isPending}
-              >
-                {t('admin.ai.sendMessage')}
-              </Button>
-            </form>
-            <AIRequestError
-              error={
-                sendMutation.error ??
-                chatSessionsQuery.error ??
-                chatQuery.error ??
-                undefined
-              }
-            />
-          </section>
+          <AIChatPanel
+            target={target}
+            targetKey={targetKey}
+            interactive={interactive}
+            fill={sidebar && mode === 'chat'}
+          />
         )}
       </CardContent>
     </Container>
@@ -481,15 +235,6 @@ function AIRequestError({ error }: { readonly error?: Error | null }) {
       <AlertDescription>{error.message}</AlertDescription>
     </Alert>
   )
-}
-
-function mergeChatMessages(
-  persisted: readonly AIChatMessageDTO[],
-  local: readonly AIChatMessageDTO[]
-) {
-  const messages = new Map(persisted.map((message) => [message.id, message]))
-  for (const message of local) messages.set(message.id, message)
-  return [...messages.values()]
 }
 
 const emptyTarget: AISummaryTarget = {
@@ -527,7 +272,11 @@ function summaryContent(
           status: summaryStatusLabel(summary.status, t),
         })}
       </p>
-      <p>{content ?? summary.error_message ?? t('admin.ai.noSummary')}</p>
+      {content ? (
+        <AIChatMarkdown content={content} />
+      ) : (
+        <p>{summary.error_message ?? t('admin.ai.noSummary')}</p>
+      )}
     </div>
   )
 }
@@ -547,33 +296,4 @@ function summaryStatusLabel(
   if (status === 'failed') return t('admin.ai.summaryStatusFailed')
   if (status === 'skipped') return t('admin.ai.summaryStatusSkipped')
   return `${t('admin.common.unknown')} ${status}`
-}
-
-async function ensureSession(
-  target: AIChatTarget,
-  sessionId: string,
-  setSessionId: (sessionId: string) => void,
-  sessionCreationRef: MutableRefObject<Promise<string> | null>,
-  ownsSubmission: () => boolean
-) {
-  if (sessionId.length > 0) return sessionId
-  if (sessionCreationRef.current) return sessionCreationRef.current
-
-  const creation = createAIChatSession(target.projectId, {
-    document_id: target.documentId,
-    context_type: target.ownerType,
-    context_id: target.ownerId,
-    title: `AI chat for ${target.ownerType} ${target.ownerId}`,
-  })
-    .then((session) => {
-      if (ownsSubmission()) setSessionId(session.id)
-      return session.id
-    })
-    .finally(() => {
-      if (sessionCreationRef.current === creation) {
-        sessionCreationRef.current = null
-      }
-    })
-  sessionCreationRef.current = creation
-  return creation
 }

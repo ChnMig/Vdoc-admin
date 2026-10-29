@@ -126,6 +126,9 @@ describe('document workspace AI context', () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     })
+    await waitFor(() =>
+      expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+    )
     await userEvent.type(
       screen.getByLabelText('AI chat message'),
       'Unsent published question'
@@ -159,12 +162,16 @@ describe('document workspace AI context', () => {
       screen.getByRole('button', { name: 'Send AI message' })
     )
     await waitFor(() =>
-      expect(api.createAIChatSession).toHaveBeenCalledWith('project-1', {
-        document_id: 'document-1',
-        context_type: 'document',
-        context_id: 'document-1',
-        title: 'AI chat for document document-1',
-      })
+      expect(api.createAIChatSession).toHaveBeenCalledWith(
+        'project-1',
+        {
+          document_id: 'document-1',
+          context_type: 'document',
+          context_id: 'document-1',
+          title: 'Question about the draft',
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     )
     expect(api.sendAIChatMessage).toHaveBeenCalledWith(
       'project-1',
@@ -206,12 +213,17 @@ describe('document workspace AI context', () => {
         },
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
-      expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+      await waitFor(() =>
+        expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+      )
     }
   )
 
   it('clears unsent chat when moving to a different document', async () => {
     const screen = renderAI(publishedSelection)
+    await waitFor(() =>
+      expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+    )
     await userEvent.type(
       screen.getByLabelText('AI chat message'),
       'Private question about document one'
@@ -235,15 +247,71 @@ describe('document workspace AI context', () => {
     )
   })
 
+  it('separates summary and chat while keeping the draft across tab switches', async () => {
+    const screen = renderAI(publishedSelection)
+    const user = userEvent.setup()
+    const input = screen.getByLabelText('AI chat message')
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'Keep this question')
+    await user.click(screen.getByRole('tab', { name: 'AI summary' }))
+    expect(input).not.toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Regenerate AI summary' })
+    ).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: 'AI chat' }))
+    expect(input).toBeVisible()
+    expect(input).toHaveValue('Keep this question')
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate AI summary' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the stream alive while switching to the summary', async () => {
+    let finish!: (message: unknown) => void
+    api.sendAIChatMessage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const screen = renderAI(publishedSelection)
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('AI chat message')).toBeEnabled()
+    )
+    await user.type(screen.getByLabelText('AI chat message'), 'Question')
+    await user.click(screen.getByRole('button', { name: 'Send AI message' }))
+    await waitFor(() => expect(api.sendAIChatMessage).toHaveBeenCalledOnce())
+    const options = api.sendAIChatMessage.mock.calls[0][3]
+    await user.click(screen.getByRole('tab', { name: 'AI summary' }))
+    expect(options.signal.aborted).toBe(false)
+    await act(async () => {
+      options.onDelta('**Still streaming**')
+    })
+    await user.click(screen.getByRole('tab', { name: 'AI chat' }))
+    expect(screen.getByText('Still streaming').tagName).toBe('STRONG')
+    await act(async () =>
+      finish({
+        id: 'saved',
+        session_id: 'draft-chat',
+        role: 'assistant',
+        content: 'Finished',
+        created_at: '',
+      })
+    )
+    expect(await screen.findByText('Finished')).toBeVisible()
+  })
+
   it('preserves read-only permissions for an exact historical target', async () => {
     const screen = renderAI(publishedSelection, false)
     await waitFor(() => expect(api.getAISummary).toHaveBeenCalledOnce())
     expect(screen.getByLabelText('AI chat message')).toBeDisabled()
     expect(
-      screen.getByRole('button', { name: 'Regenerate AI summary' })
-    ).toBeDisabled()
-    expect(
       screen.getByRole('button', { name: 'Send AI message' })
+    ).toBeDisabled()
+    await userEvent.click(screen.getByRole('tab', { name: 'AI summary' }))
+    expect(
+      screen.getByRole('button', { name: 'Regenerate AI summary' })
     ).toBeDisabled()
   })
 })

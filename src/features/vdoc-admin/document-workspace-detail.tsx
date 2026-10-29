@@ -17,6 +17,8 @@ import {
   GitCompareArrows,
   Link2,
   ListTree,
+  Maximize2,
+  Minimize2,
   Settings2,
   SquarePen,
   X,
@@ -113,6 +115,7 @@ export function DocumentWorkspaceDetail({
   const view = requestedView === 'ai' ? 'content' : requestedView
   const [assistantOpen, setAssistantOpen] = useState(requestedView === 'ai')
   const [assistantVisited, setAssistantVisited] = useState(assistantOpen)
+  const [assistantExpanded, setAssistantExpanded] = useState(false)
   if (assistantOpen && !assistantVisited) setAssistantVisited(true)
   const [previousRequestedView, setPreviousRequestedView] =
     useState(requestedView)
@@ -121,12 +124,13 @@ export function DocumentWorkspaceDetail({
     if (requestedView === 'ai') setAssistantOpen(true)
   }
   const wideLayout = useWideDocumentLayout()
+  const assistantModal = !wideLayout || assistantExpanded
   const [shareOpen, setShareOpen] = useState(false)
   const [outlineOpen, setOutlineOpen] = useState(false)
   const externalModalOpen = useExternalDocumentModal()
   const assistantPresented =
     assistantOpen &&
-    (wideLayout ||
+    (!assistantModal ||
       !(
         externalModalOpen ||
         shareOpen ||
@@ -140,7 +144,7 @@ export function DocumentWorkspaceDetail({
   useLayoutEffect(() => {
     const panel = assistantRef.current
     if (!panel) return
-    if (!assistantPresented || (!wideLayout && hasExternalDocumentModal())) {
+    if (!assistantPresented || (assistantModal && hasExternalDocumentModal())) {
       if (panel.open) panel.close()
       if (restoreAssistantFocus.current) {
         assistantTriggerRef.current?.focus({ preventScroll: true })
@@ -153,10 +157,10 @@ export function DocumentWorkspaceDetail({
       : null
     // Changing modal presentation retains the same dialog and AI subtree.
     if (panel.open) panel.close()
-    if (wideLayout) panel.show()
-    else panel.showModal()
+    if (assistantModal) panel.showModal()
+    else panel.show()
     focused?.focus({ preventScroll: true })
-  }, [assistantPresented, wideLayout])
+  }, [assistantPresented, assistantModal])
   const shareTriggerRef = useRef<HTMLButtonElement>(null)
   const [settingsTab, setSettingsTab] = useState('document')
   const contentRootRef = useRef<HTMLDivElement>(null)
@@ -602,11 +606,14 @@ export function DocumentWorkspaceDetail({
               ref={assistantRef}
               inert={!assistantPresented}
               className='document-assistant-panel bg-card text-foreground'
+              data-expanded={assistantExpanded || undefined}
               aria-labelledby={assistantTitleId}
-              aria-modal={assistantPresented && !wideLayout ? true : undefined}
+              aria-modal={
+                assistantPresented && assistantModal ? true : undefined
+              }
               onKeyDown={(event) => {
                 if (
-                  !wideLayout &&
+                  assistantModal &&
                   event.key === 'Tab' &&
                   !event.defaultPrevented
                 ) {
@@ -637,7 +644,7 @@ export function DocumentWorkspaceDetail({
                   }
                 }
                 if (
-                  wideLayout &&
+                  !assistantModal &&
                   event.key === 'Escape' &&
                   !event.defaultPrevented
                 ) {
@@ -650,7 +657,8 @@ export function DocumentWorkspaceDetail({
                 closeAssistant()
               }}
               onClick={(event) => {
-                if (wideLayout || event.target !== event.currentTarget) return
+                if (!assistantModal || event.target !== event.currentTarget)
+                  return
                 const bounds = event.currentTarget.getBoundingClientRect()
                 if (
                   event.clientX < bounds.left ||
@@ -670,17 +678,42 @@ export function DocumentWorkspaceDetail({
                     <Bot aria-hidden className='size-4 text-primary' />
                     {t('admin.workspace.ai')}
                   </h2>
-                  <Button
-                    variant='ghost'
-                    size='icon'
-                    className='size-8'
-                    aria-label={t('admin.workspace.closeAssistant')}
-                    onClick={closeAssistant}
-                  >
-                    <X aria-hidden className='size-4' />
-                  </Button>
+                  <div className='flex items-center gap-1'>
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className='size-8'
+                      aria-label={t(
+                        assistantExpanded
+                          ? 'admin.ai.collapseChat'
+                          : 'admin.ai.expandChat'
+                      )}
+                      title={t(
+                        assistantExpanded
+                          ? 'admin.ai.collapseChat'
+                          : 'admin.ai.expandChat'
+                      )}
+                      aria-pressed={assistantExpanded}
+                      onClick={() => setAssistantExpanded(!assistantExpanded)}
+                    >
+                      {assistantExpanded ? (
+                        <Minimize2 aria-hidden className='size-4' />
+                      ) : (
+                        <Maximize2 aria-hidden className='size-4' />
+                      )}
+                    </Button>
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className='size-8'
+                      aria-label={t('admin.workspace.closeAssistant')}
+                      onClick={closeAssistant}
+                    >
+                      <X aria-hidden className='size-4' />
+                    </Button>
+                  </div>
                 </div>
-                <div className='min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-5'>
+                <div className='min-h-0 min-w-0 flex-1 overflow-hidden p-4'>
                   {assistantVisited && (
                     <Suspense fallback={<ToolSkeleton />}>
                       <DocumentWorkspaceAI

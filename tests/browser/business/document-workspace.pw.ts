@@ -387,11 +387,13 @@ for (const width of [1440, 1920, 390]) {
       .getByRole('button', { name: 'Search versions', exact: true })
       .click()
     await openTool(page, 'Document AI')
+    await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
     await expect(
       page.getByText(`Summary for exact revision ${historicalId}.`, {
         exact: true,
       })
     ).toBeVisible()
+    await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
     await page
       .getByLabel('AI chat message', { exact: true })
       .fill('Explain the selected historical release.')
@@ -449,6 +451,7 @@ for (const width of [1440, 1920, 390]) {
       })
     ).toBeVisible()
     await openTool(page, 'Document AI')
+    await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
     await expect(
       page.getByText(`Summary for exact revision ${releaseDraftId}.`, {
         exact: true,
@@ -614,11 +617,13 @@ for (const width of [1440, 1920, 390]) {
       .getByRole('textbox', { name: 'Version name', exact: true })
       .fill('2.5.0-local')
     await openTool(page, 'Document AI')
+    await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
     await expect(
       page.getByText(`Summary for exact revision ${mainDraftId}.`, {
         exact: true,
       })
     ).toBeVisible()
+    await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
     await page
       .getByLabel('AI chat message', { exact: true })
       .fill('Explain this saved draft without replacing my local edits.')
@@ -674,6 +679,7 @@ for (const width of [1440, 1920, 390]) {
       })
     ).toBeVisible()
     await openTool(page, 'Document AI')
+    await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
     await expect(
       page.getByText(`Summary for exact revision ${historicalId}.`, {
         exact: true,
@@ -682,6 +688,7 @@ for (const width of [1440, 1920, 390]) {
     await expect(
       page.getByRole('button', { name: 'Regenerate AI summary', exact: true })
     ).toBeDisabled()
+    await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
     await page
       .getByLabel('AI chat message', { exact: true })
       .fill('Summarize this historical release.')

@@ -2172,12 +2172,16 @@ describe('VersionsPage', () => {
       target,
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
-    expect(createAIChatSession).toHaveBeenCalledWith('project-1', {
-      document_id: 'document-1',
-      context_type: 'version',
-      context_id: 'version-1',
-      title: 'AI chat for version version-1',
-    })
+    expect(createAIChatSession).toHaveBeenCalledWith(
+      'project-1',
+      {
+        document_id: 'document-1',
+        context_type: 'version',
+        context_id: 'version-1',
+        title: 'What changed?',
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(sendAIChatMessage).toHaveBeenCalledWith(
       'project-1',
       'session-version',

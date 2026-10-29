@@ -38,7 +38,7 @@ it('preserves the existing pinned release package and personal Skill installatio
   expect(
     screen.getByRole('region', { name: 'Let AI install, update, or uninstall' })
   ).toHaveTextContent(
-    'Read https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.22/docs/public/skill-install.md and install the Vdoc Skill in the current project using the release channel.'
+    'Read https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.23/docs/public/skill-install.md and install the Vdoc Skill in the current project using the release channel.'
   )
 })
 
@@ -87,6 +87,6 @@ it('requires a reviewed installer release tag and verifies it before installing 
   expect(
     screen.getByRole('region', { name: 'Let AI install, update, or uninstall' })
   ).toHaveTextContent(
-    'Read https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.22/docs/public/skill-install.md and install the Vdoc Skill in the current project using the beta channel.'
+    'Read https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17-beta.23/docs/public/skill-install.md and install the Vdoc Skill in the current project using the beta channel.'
   )
 })
