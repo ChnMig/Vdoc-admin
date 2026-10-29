@@ -545,9 +545,9 @@ test('mobile AI history and send shortcut stay interactive inside the native dia
     name: 'Chat history',
     exact: true,
   })
-  await expect(
-    dialog.getByText('Reviewed integration policy', { exact: true })
-  ).toBeVisible()
+  await expect(dialog.locator('[data-chat-title]')).toHaveText(
+    'Reviewed integration policy'
+  )
   await historyButton.click()
   await dialog
     .getByRole('textbox', { name: 'Search conversations', exact: true })
@@ -559,9 +559,9 @@ test('mobile AI history and send shortcut stay interactive inside the native dia
     dialog.getByRole('button', { name: /Reviewed integration policy/ })
   ).toHaveCount(0)
   await dialog.getByRole('button', { name: /Release upgrade plan/ }).click()
-  await expect(
-    dialog.getByText('Release upgrade plan', { exact: true })
-  ).toBeVisible()
+  await expect(dialog.locator('[data-chat-title]')).toHaveText(
+    'Release upgrade plan'
+  )
   await expect
     .poll(() =>
       api.requests.some((request) =>
