@@ -1,6 +1,6 @@
 import { AxiosHeaders, type AxiosResponse } from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { sendAIChatMessage, vdocApi } from './vdoc-api'
+import { getAIRequestError, sendAIChatMessage, vdocApi } from './vdoc-api'
 
 const message = {
   id: 'reply-1',
@@ -29,6 +29,65 @@ function mockResponse(body: string, contentType = 'text/event-stream') {
 afterEach(() => vi.restoreAllMocks())
 
 describe('streaming AI chat API', () => {
+  it('routes reasoning and context events separately and sends the retry ID', async () => {
+    const post = mockResponse(
+      'event: context\ndata: {"status":"compacting","summary_count":2}\n\n' +
+        'event: reasoning\ndata: {"delta":"检查早期事实"}\n\n' +
+        'event: delta\ndata: {"delta":"答案"}\n\n' +
+        'event: done\ndata: ' +
+        JSON.stringify(envelope) +
+        '\n\n'
+    )
+    const onReasoning = vi.fn()
+    const onContext = vi.fn()
+    const onDelta = vi.fn()
+    await sendAIChatMessage('project-1', 'session-1', '', {
+      retryOf: 'previous-answer',
+      onDelta,
+      onReasoning,
+      onContext,
+    })
+    expect(post.mock.calls[0]?.[1]).toEqual({
+      content: '',
+      retry_of: 'previous-answer',
+    })
+    expect(onReasoning).toHaveBeenCalledWith('检查早期事实')
+    expect(onDelta).toHaveBeenCalledWith('答案')
+    expect(onContext).toHaveBeenCalledWith({
+      status: 'compacting',
+      summary_count: 2,
+    })
+  })
+
+  it('preserves structured provider errors for recovery and diagnostics', async () => {
+    const ai_error = {
+      code: 'rate_limit',
+      message: 'Wait before retrying',
+      retryable: true,
+      upstream_status: 429,
+      retry_after_seconds: 10,
+      provider_request_id: 'request-123',
+    }
+    mockResponse(
+      'event: error\ndata: ' +
+        JSON.stringify({
+          code: 412,
+          status: 'FAILED_PRECONDITION',
+          message: ai_error.message,
+          detail: { ai_error },
+          trace_id: 'trace-123',
+        }) +
+        '\n\n'
+    )
+    try {
+      await sendAIChatMessage('project-1', 'session-1', 'Explain', {
+        onDelta: vi.fn(),
+      })
+      expect.unreachable('provider error should reject')
+    } catch (error) {
+      expect(getAIRequestError(error)).toEqual(ai_error)
+    }
+  })
   it('negotiates SSE, decodes deltas and returns only the final saved message', async () => {
     const post = mockResponse(
       'event: delta\ndata: {"delta":"你好 "}\n\nevent: delta\ndata: {"delta":"world"}\n\nevent: done\ndata: ' +

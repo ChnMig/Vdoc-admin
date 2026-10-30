@@ -618,6 +618,8 @@ export type AIChatSessionDTO = {
   readonly title: string
   readonly title_generated?: boolean
   readonly reasoning_effort?: AIReasoningEffort
+  readonly context_summary_count?: number
+  readonly context_compacted_at?: string
   readonly created_by: string
   readonly created_at: string
   readonly updated_at: string
@@ -634,6 +636,8 @@ export type AIChatMessageDTO = {
   readonly session_id: string
   readonly role: 'user' | 'assistant'
   readonly content: string
+  readonly reasoning?: string
+  readonly retry_of?: string
   readonly attachments?: readonly AIChatAttachmentDTO[]
   readonly provider_id?: string
   readonly created_at: string
@@ -649,6 +653,37 @@ const aiSummaryOwnerPath = {
   version: 'versions',
   diff: 'diffs',
 } as const satisfies Record<AIContextType, string>
+
+export type AIChatContextState = {
+  readonly status: 'compacting' | 'ready'
+  readonly summary_count: number
+  readonly compacted_at?: string
+}
+
+export type AIRequestErrorDetail = {
+  readonly code: string
+  readonly message: string
+  readonly provider_message?: string
+  readonly retryable: boolean
+  readonly upstream_status?: number
+  readonly retry_after_seconds?: number
+  readonly provider_request_id?: string
+}
+
+export function getAIRequestError(
+  error: unknown
+): AIRequestErrorDetail | undefined {
+  if (!(error instanceof VdocApiError)) return
+  const detail = error.envelope.detail as {
+    ai_error?: AIRequestErrorDetail
+  } | null
+  if (
+    detail?.ai_error &&
+    typeof detail.ai_error.code === 'string' &&
+    typeof detail.ai_error.retryable === 'boolean'
+  )
+    return detail.ai_error
+}
 
 export class VdocApiError extends Error {
   envelope: VdocEnvelope<unknown>
@@ -1546,10 +1581,13 @@ export function sendAIChatMessage(
   content: string,
   options?: RequestOptions & {
     onDelta?: (delta: string) => void
+    onReasoning?: (delta: string) => void
+    onContext?: (state: AIChatContextState) => void
+    retryOf?: string
     attachments?: readonly AIChatAttachmentDTO[]
   }
 ) {
-  if (options?.onDelta) {
+  if (options?.onDelta || options?.onReasoning || options?.onContext) {
     return sendStreamingAIChatMessage(projectId, sessionId, content, options)
   }
   return unwrapEnvelope<AIChatMessageDTO>(
@@ -1557,6 +1595,7 @@ export function sendAIChatMessage(
       `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/messages`,
       {
         content,
+        ...(options?.retryOf ? { retry_of: options.retryOf } : {}),
         ...(options?.attachments?.length
           ? { attachments: options.attachments }
           : {}),
@@ -1576,6 +1615,9 @@ async function sendStreamingAIChatMessage(
   content: string,
   options: RequestOptions & {
     onDelta?: (delta: string) => void
+    onReasoning?: (delta: string) => void
+    onContext?: (state: AIChatContextState) => void
+    retryOf?: string
     attachments?: readonly AIChatAttachmentDTO[]
   }
 ) {
@@ -1583,6 +1625,7 @@ async function sendStreamingAIChatMessage(
     `/api/v1/private/projects/${projectId}/ai/chat-sessions/${sessionId}/messages`,
     {
       content,
+      ...(options.retryOf ? { retry_of: options.retryOf } : {}),
       ...(options.attachments?.length
         ? { attachments: options.attachments }
         : {}),
@@ -1610,6 +1653,20 @@ async function sendStreamingAIChatMessage(
       if (typeof chunk.delta !== 'string')
         throw new Error('Invalid AI stream event.')
       options.onDelta?.(chunk.delta)
+    } else if (event === 'reasoning') {
+      const chunk = JSON.parse(data) as { delta: string }
+      if (typeof chunk.delta !== 'string')
+        throw new Error('Invalid AI reasoning event.')
+      options.onReasoning?.(chunk.delta)
+    } else if (event === 'context') {
+      const state = JSON.parse(data) as AIChatContextState
+      if (
+        !['compacting', 'ready'].includes(state.status) ||
+        !Number.isInteger(state.summary_count) ||
+        state.summary_count < 0
+      )
+        throw new Error('Invalid AI context event.')
+      options.onContext?.(state)
     } else if (event === 'done' || event === 'error') {
       const envelope = JSON.parse(data) as VdocEnvelope<AIChatMessageDTO>
       if (envelope.code !== 200 || envelope.status !== 'OK')

@@ -23,6 +23,9 @@ import { cn } from '@/lib/utils'
 import {
   createAIChatSession,
   getAIChatSession,
+  getAIRequestError,
+  VdocApiError,
+  type AIChatContextState,
   generateAIChatTitle,
   updateAIChatReasoning,
   type AIChatSessionDTO,
@@ -46,14 +49,18 @@ import {
   chatAttachmentAccept,
   readChatAttachments,
 } from './ai-chat-attachments'
-import { AIChatMessage, ChatAttachmentList } from './ai-chat-message'
+import {
+  AIChatMessage,
+  ChatAttachmentList,
+  ChatCopyButton,
+} from './ai-chat-message'
 
 type ChatDraft = {
   content: string
   attachments: readonly AIChatAttachmentDTO[]
 }
 const emptyDraft: ChatDraft = { content: '', attachments: [] }
-type CompletedTurn = { user: AIChatMessageDTO; assistant: AIChatMessageDTO }
+type CompletedTurn = { user?: AIChatMessageDTO; assistant: AIChatMessageDTO }
 const shortcutKey = 'vdoc-ai-send-shortcut'
 const reasoningEfforts = [
   '',
@@ -65,6 +72,23 @@ const reasoningEfforts = [
   'xhigh',
   'max',
 ] as const
+const aiErrorTranslations = {
+  timeout: 'admin.ai.error_timeout',
+  quota: 'admin.ai.error_quota',
+  authentication: 'admin.ai.error_authentication',
+  permission: 'admin.ai.error_permission',
+  rate_limit: 'admin.ai.error_rate_limit',
+  context_limit: 'admin.ai.error_context_limit',
+  reasoning_unsupported: 'admin.ai.error_reasoning_unsupported',
+  model_configuration: 'admin.ai.error_model_configuration',
+  output_limit: 'admin.ai.error_output_limit',
+  unavailable: 'admin.ai.error_unavailable',
+  invalid_request: 'admin.ai.error_invalid_request',
+  stream_interrupted: 'admin.ai.error_stream_interrupted',
+  network: 'admin.ai.error_network',
+  provider_error: 'admin.ai.error_provider_error',
+  context_compaction: 'admin.ai.error_context_compaction',
+} as const
 function readReasoningDefault(accountId: string): AIReasoningEffort {
   try {
     const stored = accountId
@@ -119,13 +143,18 @@ export function AIChatPanel({
     question: string
     attachments: readonly AIChatAttachmentDTO[]
     answer: string
+    reasoning: string
+    retryOf?: string
+    state: 'streaming' | 'failed' | 'stopped'
     startedAt: string
   } | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [attachmentError, setAttachmentError] = useState('')
   const [readingFiles, setReadingFiles] = useState(false)
-  const [stopped, setStopped] = useState(false)
+  const [contextState, setContextState] = useState<AIChatContextState | null>(
+    null
+  )
   const [atBottom, setAtBottom] = useState(true)
   const [sendShortcut, setSendShortcut] = useState(() => {
     try {
@@ -269,7 +298,8 @@ export function AIChatPanel({
       content,
       attachments,
       sessionVersion,
-    }: ChatDraft & { sessionVersion: number }) => {
+      retryOf,
+    }: ChatDraft & { sessionVersion: number; retryOf?: string }) => {
       if (!target || !interactive) throw new Error('AI chat is read-only.')
       const ownsSubmission = () =>
         mountedRef.current &&
@@ -316,15 +346,22 @@ export function AIChatPanel({
           question: content,
           attachments,
           answer: '',
+          reasoning: '',
+          retryOf,
+          state: 'streaming',
           startedAt: new Date().toISOString(),
         })
         const message = await sendAIChatMessage(
           target.projectId,
           targetSessionId,
-          content,
+          retryOf ? '' : content,
           {
             signal: controller.signal,
-            ...(attachments.length ? { attachments } : {}),
+            ...(retryOf
+              ? { retryOf }
+              : attachments.length
+                ? { attachments }
+                : {}),
             onDelta: (delta) => {
               if (ownsSubmission() && !controller.signal.aborted)
                 setPendingReply((current) =>
@@ -332,6 +369,18 @@ export function AIChatPanel({
                     ? { ...current, answer: current.answer + delta }
                     : current
                 )
+            },
+            onReasoning: (delta) => {
+              if (ownsSubmission() && !controller.signal.aborted)
+                setPendingReply((current) =>
+                  current?.sessionId === targetSessionId
+                    ? { ...current, reasoning: current.reasoning + delta }
+                    : current
+                )
+            },
+            onContext: (state) => {
+              if (ownsSubmission() && !controller.signal.aborted)
+                setContextState(state)
             },
           }
         )
@@ -342,9 +391,18 @@ export function AIChatPanel({
           sessionVersion,
           content,
           attachments,
+          retryOf,
         }
       } catch (error) {
         if (ownsSubmission()) {
+          setPendingReply((current) =>
+            current
+              ? {
+                  ...current,
+                  state: controller.signal.aborted ? 'stopped' : 'failed',
+                }
+              : current
+          )
           if (controller.signal.aborted)
             throw new DOMException('Stopped', 'AbortError')
           throw error
@@ -352,7 +410,6 @@ export function AIChatPanel({
       } finally {
         if (sendControllerRef.current === controller)
           sendControllerRef.current = null
-        if (ownsSubmission()) setPendingReply(null)
       }
     },
     onSuccess: (result) => {
@@ -367,22 +424,33 @@ export function AIChatPanel({
         sessionId: targetSessionId,
         content,
         attachments,
+        retryOf,
       } = result
+      setPendingReply(null)
       setTurns((current) => [
         ...current,
         {
-          user: {
-            id: `local-user:${message.id}`,
-            session_id: targetSessionId,
-            role: 'user',
-            content,
-            attachments,
-            created_at: message.created_at,
-          },
+          user: retryOf
+            ? undefined
+            : {
+                id: `local-user:${message.id}`,
+                session_id: targetSessionId,
+                role: 'user',
+                content,
+                attachments,
+                created_at: message.created_at,
+              },
           assistant: message,
         },
       ])
-      setDrafts((current) => ({ ...current, [targetSessionId]: emptyDraft }))
+      setDrafts((current) => {
+        const draft = current[targetSessionId]
+        return !retryOf &&
+          draft?.content.trim() === content &&
+          draft.attachments === attachments
+          ? { ...current, [targetSessionId]: emptyDraft }
+          : current
+      })
       restoreInputRef.current = true
       void queryClient.invalidateQueries({
         queryKey: [
@@ -453,7 +521,7 @@ export function AIChatPanel({
   ])
   const persisted = chatQuery.data?.messages ?? []
   const persistedIds = new Set(persisted.map((message) => message.id))
-  const visibleMessages = [
+  const mergedMessages = [
     ...persisted,
     ...turns
       .filter(
@@ -461,8 +529,22 @@ export function AIChatPanel({
           turn.assistant.session_id === activeSessionId &&
           !persistedIds.has(turn.assistant.id)
       )
-      .flatMap((turn) => [turn.user, turn.assistant]),
+      .flatMap((turn) =>
+        turn.user ? [turn.user, turn.assistant] : [turn.assistant]
+      ),
   ]
+  const supersededIds = new Set(
+    mergedMessages.map((message) => message.retry_of).filter(Boolean)
+  )
+  const visibleMessages = mergedMessages.filter(
+    (message) => !supersededIds.has(message.id)
+  )
+  const latestMessage = visibleMessages[visibleMessages.length - 1]
+  const latestAssistant =
+    latestMessage?.role === 'assistant' ? latestMessage : undefined
+  const summaryCount =
+    contextState?.summary_count ?? activeSession?.context_summary_count ?? 0
+
   const busy =
     sendMutation.isPending || settingsMutation.isPending || readingFiles
   useLayoutEffect(() => {
@@ -499,6 +581,8 @@ export function AIChatPanel({
     activeSessionId,
     visibleMessages.length,
     pendingReply?.answer,
+    pendingReply?.reasoning,
+    pendingReply?.state,
     historyOpen,
   ])
   useLayoutEffect(() => {
@@ -547,7 +631,8 @@ export function AIChatPanel({
     setSessionId(id)
     setHistoryOpen(false)
     setAttachmentError('')
-    setStopped(false)
+    setPendingReply(null)
+    setContextState(null)
     sendMutation.reset()
     settingsMutation.reset()
     followReplyRef.current = true
@@ -555,6 +640,144 @@ export function AIChatPanel({
     restoreInputRef.current = true
     inputRef.current?.focus({ preventScroll: true })
   }
+
+  const startSubmission = (submission: ChatDraft & { retryOf?: string }) => {
+    if (
+      !target ||
+      !interactive ||
+      busy ||
+      loading ||
+      sendLockedRef.current ||
+      settingsLockedRef.current ||
+      readingRef.current
+    )
+      return
+    sendLockedRef.current = true
+    followReplyRef.current = true
+    setAtBottom(true)
+    setAttachmentError('')
+    setContextState(null)
+    sendMutation.mutate({
+      ...submission,
+      sessionVersion: useAuthStore.getState().auth.sessionVersion,
+    })
+  }
+  const handleRegenerateLatest = () => {
+    const original = visibleMessages[visibleMessages.length - 2]
+    if (latestAssistant && original?.role === 'user')
+      startSubmission({
+        content: original.content,
+        attachments: original.attachments ?? [],
+        retryOf: latestAssistant.id,
+      })
+  }
+  const retrySubmission = () =>
+    startSubmission(
+      pendingReply?.sessionId === activeSessionId
+        ? {
+            content: pendingReply.question,
+            attachments: pendingReply.attachments,
+            retryOf: pendingReply.retryOf,
+          }
+        : { content: draft.content.trim(), attachments: draft.attachments }
+    )
+  const failureDetail = getAIRequestError(error)
+  const failureKey = failureDetail
+    ? aiErrorTranslations[
+        failureDetail.code as keyof typeof aiErrorTranslations
+      ]
+    : undefined
+  const diagnostics = failureDetail
+    ? JSON.stringify(
+        {
+          ...failureDetail,
+          trace_id:
+            error instanceof VdocApiError ? error.envelope.trace_id : undefined,
+        },
+        null,
+        2
+      )
+    : ''
+  const errorNotice = error && (
+    <Alert variant='destructive' className='min-w-0' aria-live='polite'>
+      <AlertCircle />
+      <AlertTitle>{t('admin.common.error')}</AlertTitle>
+      <AlertDescription>
+        <p>{failureKey ? t(failureKey) : error.message}</p>
+        <p>
+          {pendingReply?.retryOf
+            ? t('admin.ai.regenerateFailureHint')
+            : t('admin.ai.retryHint')}
+        </p>
+        {!!failureDetail?.retry_after_seconds && (
+          <p>
+            {t('admin.ai.retryAfter', {
+              seconds: failureDetail.retry_after_seconds,
+            })}
+          </p>
+        )}
+        {failureDetail && (
+          <details className='min-w-0'>
+            <summary className='w-fit cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring'>
+              {t('admin.ai.errorDetails')}
+            </summary>
+            <dl className='mt-1 grid gap-1 text-xs break-words'>
+              <div>
+                <dt className='inline'>{t('admin.ai.errorCode')}: </dt>
+                <dd className='inline'>{failureDetail.code}</dd>
+              </div>
+              {!!failureDetail.upstream_status && (
+                <div>HTTP {failureDetail.upstream_status}</div>
+              )}
+              {failureDetail.provider_message && (
+                <div>{failureDetail.provider_message}</div>
+              )}
+              {failureDetail.provider_request_id && (
+                <div>
+                  {t('admin.ai.requestId')}: {failureDetail.provider_request_id}
+                </div>
+              )}
+              {error instanceof VdocApiError && error.envelope.trace_id && (
+                <div>Trace ID: {error.envelope.trace_id}</div>
+              )}
+            </dl>
+            <ChatCopyButton
+              content={diagnostics}
+              label={t('admin.ai.copyDiagnostics')}
+            />
+          </details>
+        )}
+        {sendMutation.isError && (
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            disabled={busy || !interactive}
+            onClick={retrySubmission}
+          >
+            {t('admin.ai.retry')}
+          </Button>
+        )}
+        {reasoningEffort && <p>{t('admin.ai.reasoningErrorHint')}</p>}
+        {draft.attachments.some(
+          (attachment) => attachment.media_type !== 'text/plain'
+        ) && <p>{t('admin.ai.attachmentModelHint')}</p>}
+        {(sessionsQuery.isError || chatQuery.isError) && (
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            onClick={() => {
+              if (sessionsQuery.isError) void sessionsQuery.refetch()
+              if (chatQuery.isError) void chatQuery.refetch()
+            }}
+          >
+            {t('admin.ai.retry')}
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
 
   return (
     <section
@@ -643,6 +866,16 @@ export function AIChatPanel({
           </aside>
         )}
         <div className='flex min-h-0 min-w-0 flex-col gap-3'>
+          {summaryCount > 0 && !historyOpen && (
+            <details className='shrink-0 text-xs text-muted-foreground'>
+              <summary className='w-fit cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring'>
+                {t('admin.ai.contextCompacted')}
+              </summary>
+              <p className='pt-1 leading-5'>
+                {t('admin.ai.contextCompactedHint', { count: summaryCount })}
+              </p>
+            </details>
+          )}
           {!interactive && target && (
             <Alert>
               <AlertCircle />
@@ -729,7 +962,16 @@ export function AIChatPanel({
                   </div>
                 ) : (
                   visibleMessages.map((message) => (
-                    <AIChatMessage key={message.id} message={message} />
+                    <AIChatMessage
+                      key={message.id}
+                      message={message}
+                      regenerateDisabled={busy || loading || !interactive}
+                      onRegenerate={
+                        interactive && message.id === latestAssistant?.id
+                          ? handleRegenerateLatest
+                          : undefined
+                      }
+                    />
                   ))
                 )}
                 {!loading && !visibleMessages.length && !pendingReply && (
@@ -761,24 +1003,58 @@ export function AIChatPanel({
                 )}
                 {pendingReply?.sessionId === activeSessionId && (
                   <>
-                    <AIChatMessage
-                      message={{
-                        role: 'user',
-                        content: pendingReply.question,
-                        attachments: pendingReply.attachments,
-                        created_at: pendingReply.startedAt,
-                      }}
-                    />
+                    {!pendingReply.retryOf && (
+                      <AIChatMessage
+                        message={{
+                          role: 'user',
+                          content: pendingReply.question,
+                          attachments: pendingReply.attachments,
+                          created_at: pendingReply.startedAt,
+                        }}
+                      />
+                    )}
                     <AIChatMessage
                       message={{
                         role: 'assistant',
                         content: pendingReply.answer,
+                        reasoning: pendingReply.reasoning,
                         created_at: pendingReply.startedAt,
                       }}
-                      pending
+                      pending={pendingReply.state === 'streaming'}
+                      statusText={
+                        contextState?.status === 'compacting'
+                          ? t('admin.ai.contextCompacting')
+                          : pendingReply.reasoning && !pendingReply.answer
+                            ? t('admin.ai.thinking')
+                            : undefined
+                      }
                     />
+                    {pendingReply.state !== 'streaming' && (
+                      <div className='grid gap-2 ps-1 text-xs text-muted-foreground'>
+                        <p role='status'>
+                          {t(
+                            pendingReply.state === 'stopped'
+                              ? 'admin.ai.stopped'
+                              : 'admin.ai.partialReplyHint'
+                          )}
+                        </p>
+                        {pendingReply.state === 'stopped' && (
+                          <Button
+                            type='button'
+                            variant='outline'
+                            size='sm'
+                            className='w-fit'
+                            disabled={busy || !interactive}
+                            onClick={retrySubmission}
+                          >
+                            {t('admin.ai.retry')}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
+                {errorNotice}
               </div>
             </div>
             {!atBottom && (
@@ -803,22 +1079,10 @@ export function AIChatPanel({
               className='grid w-full shrink-0 gap-2 rounded-xl border bg-background p-2.5'
               onSubmit={(event) => {
                 event.preventDefault()
-                if (
-                  !canSend ||
-                  sendLockedRef.current ||
-                  settingsLockedRef.current ||
-                  readingRef.current
-                )
-                  return
-                sendLockedRef.current = true
-                followReplyRef.current = true
-                setAtBottom(true)
-                setStopped(false)
-                setAttachmentError('')
-                sendMutation.mutate({
+                if (!canSend) return
+                startSubmission({
                   content: draft.content.trim(),
                   attachments: draft.attachments,
-                  sessionVersion: useAuthStore.getState().auth.sessionVersion,
                 })
               }}
               onPaste={(event) => {
@@ -1020,7 +1284,6 @@ export function AIChatPanel({
                     variant='outline'
                     aria-label={t('admin.ai.stopGenerating')}
                     onClick={() => {
-                      setStopped(true)
                       sendControllerRef.current?.abort()
                     }}
                   >
@@ -1057,42 +1320,6 @@ export function AIChatPanel({
             <p role='alert' className='shrink-0 text-xs text-destructive'>
               {attachmentError}
             </p>
-          )}
-          {stopped && !sendMutation.isPending && (
-            <p role='status' className='text-xs text-muted-foreground'>
-              {t('admin.ai.stopped')}
-            </p>
-          )}
-          {error && (
-            <Alert
-              variant='destructive'
-              className='max-h-36 shrink-0 overflow-y-auto'
-              aria-live='polite'
-            >
-              <AlertCircle />
-              <AlertTitle>{t('admin.common.error')}</AlertTitle>
-              <AlertDescription>
-                <p>{error.message}</p>
-                <p>{t('admin.ai.retryHint')}</p>
-                {reasoningEffort && <p>{t('admin.ai.reasoningErrorHint')}</p>}
-                {draft.attachments.some(
-                  (attachment) => attachment.media_type !== 'text/plain'
-                ) && <p>{t('admin.ai.attachmentModelHint')}</p>}
-                {(sessionsQuery.isError || chatQuery.isError) && (
-                  <Button
-                    type='button'
-                    size='sm'
-                    variant='outline'
-                    onClick={() => {
-                      if (sessionsQuery.isError) void sessionsQuery.refetch()
-                      if (chatQuery.isError) void chatQuery.refetch()
-                    }}
-                  >
-                    {t('admin.ai.retry')}
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
           )}
         </div>
       </div>

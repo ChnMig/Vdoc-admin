@@ -1,9 +1,28 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { LanguageProvider } from '@/context/language-provider'
-import { AIChatMarkdown } from './ai-chat-message'
+import { AIChatMarkdown, AIChatMessage } from './ai-chat-message'
 
 describe('chat markdown', () => {
+  it('keeps provider reasoning in a disclosure and allows latest-answer regeneration', () => {
+    const regenerate = vi.fn()
+    const { container } = render(
+      <LanguageProvider>
+        <AIChatMessage
+          message={{
+            role: 'assistant',
+            content: 'Final answer',
+            reasoning: '**Checked** the supplied source.',
+          }}
+          onRegenerate={regenerate}
+        />
+      </LanguageProvider>
+    )
+    expect(container.querySelector('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Checked').tagName).toBe('STRONG')
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate answer' }))
+    expect(regenerate).toHaveBeenCalledOnce()
+  })
   it('renders structured replies and confines wide code and tables', () => {
     render(
       <LanguageProvider>

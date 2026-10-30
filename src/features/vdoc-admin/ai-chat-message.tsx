@@ -6,6 +6,8 @@ import {
   Copy,
   Download,
   FileText,
+  RotateCcw,
+  ChevronRight,
   X,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -252,10 +254,16 @@ function ChatImagePreview({ attachment }: { attachment: AIChatAttachmentDTO }) {
 export const AIChatMessage = memo(function AIChatMessage({
   message,
   pending = false,
+  statusText,
+  onRegenerate,
+  regenerateDisabled,
 }: {
   message: Pick<AIChatMessageDTO, 'role' | 'content' | 'attachments'> &
-    Partial<Pick<AIChatMessageDTO, 'created_at'>>
+    Partial<Pick<AIChatMessageDTO, 'created_at' | 'reasoning'>>
   pending?: boolean
+  statusText?: string
+  onRegenerate?: () => void
+  regenerateDisabled?: boolean
 }) {
   const { t, language } = useLanguage()
   const user = message.role === 'user'
@@ -320,6 +328,25 @@ export const AIChatMessage = memo(function AIChatMessage({
           {!!message.attachments?.length && (
             <ChatAttachmentList attachments={message.attachments} />
           )}
+          {!user && message.reasoning && (
+            <details
+              className='group min-w-0 border-b border-border/70 pb-2 text-muted-foreground'
+              open={pending && !message.content ? true : undefined}
+            >
+              <summary className='flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs focus-visible:ring-2 focus-visible:ring-ring'>
+                <ChevronRight
+                  aria-hidden
+                  className='size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none'
+                />
+                {pending && !message.content
+                  ? t('admin.ai.thinking')
+                  : t('admin.ai.thinkingSummary')}
+              </summary>
+              <div className='mt-2 text-xs leading-5'>
+                <AIChatMarkdown content={message.reasoning} />
+              </div>
+            </details>
+          )}
           {message.content &&
             (user ? (
               <p className='[overflow-wrap:anywhere] whitespace-pre-wrap'>
@@ -330,15 +357,30 @@ export const AIChatMessage = memo(function AIChatMessage({
             ))}
           {pending && (
             <p role='status' className='text-xs text-muted-foreground'>
-              {t('admin.ai.generating')}
+              {statusText || t('admin.ai.generating')}
             </p>
           )}
         </div>
         {!user && !pending && message.content && (
-          <ChatCopyButton
-            content={message.content}
-            label={t('admin.ai.copyMessage')}
-          />
+          <div className='flex items-center gap-1'>
+            <ChatCopyButton
+              content={message.content}
+              label={t('admin.ai.copyMessage')}
+            />
+            {onRegenerate && (
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className='h-7 px-2 text-xs text-muted-foreground'
+                disabled={regenerateDisabled}
+                onClick={onRegenerate}
+              >
+                <RotateCcw className='size-3.5' aria-hidden />
+                {t('admin.ai.regenerateAnswer')}
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </article>

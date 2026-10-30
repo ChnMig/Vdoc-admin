@@ -167,7 +167,11 @@ for (const viewport of [
 
 async function installConversations(page: Page) {
   let count = 0
-  const requests: Array<{ content: string; attachments?: unknown[] }> = []
+  const requests: Array<{
+    content: string
+    attachments?: unknown[]
+    retry_of?: string
+  }> = []
   const messages = new Map<string, unknown[]>()
   const sessions = [
     {
@@ -263,17 +267,23 @@ async function installConversations(page: Page) {
           session_id: sessionId,
           role: 'assistant',
           content: answer,
+          reasoning: 'I checked the **published sources** and prior decisions.',
+          retry_of: payload.retry_of,
           created_at: '2026-10-29T00:00:00Z',
         }
         messages.set(sessionId, [
           ...(messages.get(sessionId) ?? []),
-          {
-            ...reply,
-            id: `user-${requests.length}`,
-            role: 'user',
-            content: payload.content,
-            attachments: payload.attachments,
-          },
+          ...(payload.retry_of
+            ? []
+            : [
+                {
+                  ...reply,
+                  id: `user-${requests.length}`,
+                  role: 'user',
+                  content: payload.content,
+                  attachments: payload.attachments,
+                },
+              ]),
           reply,
         ])
         detail = reply
@@ -482,9 +492,11 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole('heading', { name: 'Comparison', exact: true })
     ).toBeVisible()
-    await expect(page.locator('[data-chat-role=assistant] strong')).toHaveText(
-      'Reviewed facts'
-    )
+    await expect(
+      page
+        .locator('[data-chat-role=assistant] strong')
+        .filter({ hasText: 'Reviewed facts' })
+    ).toHaveText('Reviewed facts')
     await expect(page.getByRole('table')).toBeVisible()
     await expect(
       page.getByRole('button', { name: 'Copy code', exact: true })
@@ -650,3 +662,113 @@ test('Chinese chat stays usable in a short mobile viewport and rejects invalid f
     animations: 'disabled',
   })
 })
+
+for (const width of [1440, 390]) {
+  test(`reasoning, regeneration and detailed recovery work at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 640 })
+    await installWorkspace(page)
+    const api = await installConversations(page)
+    await openDocument(page)
+    await openTool(page, 'Document AI')
+    await page
+      .getByRole('button', { name: 'New conversation', exact: true })
+      .click()
+    const input = page.getByRole('textbox', {
+      name: 'AI chat message',
+      exact: true,
+    })
+    await input.fill('Keep the deadline 2031-09-19')
+    await input.press('Enter')
+    const transcript = page.getByRole('log')
+    await expect(transcript.locator('[data-chat-role=user]')).toHaveCount(1)
+    const summary = transcript
+      .locator('summary')
+      .filter({ hasText: 'Reasoning summary' })
+    await expect(summary).toBeVisible()
+    await summary.click()
+    await expect(
+      transcript.getByText('published sources', { exact: true })
+    ).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Expand AI workspace', exact: true })
+      .click()
+    api.failNext()
+    await page
+      .getByRole('button', { name: 'Regenerate answer', exact: true })
+      .click()
+    await expect(page.getByRole('alert')).toContainText(
+      'The previous answer is kept'
+    )
+    await expect(transcript.locator('[data-chat-role=user]')).toHaveCount(1)
+    await expect(
+      transcript.getByRole('heading', { name: 'Comparison' })
+    ).toBeVisible()
+    await page
+      .getByRole('alert')
+      .getByRole('button', { name: 'Retry', exact: true })
+      .click()
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(transcript.locator('[data-chat-role=user]')).toHaveCount(1)
+    await expect(
+      transcript.getByRole('heading', { name: 'Comparison' })
+    ).toHaveCount(1)
+    expect(api.requests[1].retry_of).toBe('answer-1')
+    expect(api.requests[2].retry_of).toBe('answer-1')
+    await expect(input).toHaveValue('')
+    await page.route(/\/ai\/chat-sessions\/[^/]+\/messages$/, async (route) => {
+      await route.fulfill({
+        contentType: 'text/event-stream',
+        body: [
+          'event: context\ndata: {"status":"compacting","summary_count":8}\n\n',
+          'event: reasoning\ndata: {"delta":"Checking the deadline and constraints."}\n\n',
+          'event: delta\ndata: {"delta":"An incomplete reply"}\n\n',
+          'event: error\ndata: ' +
+            JSON.stringify({
+              code: 412,
+              status: 'FAILED_PRECONDITION',
+              message: 'The AI provider is rate limited.',
+              trace_id: 'trace-fixture',
+              detail: {
+                ai_error: {
+                  code: 'rate_limit',
+                  message: 'The AI provider is rate limited.',
+                  provider_message: 'Please reduce request frequency.',
+                  retryable: true,
+                  upstream_status: 429,
+                  retry_after_seconds: 12,
+                  provider_request_id: 'request-fixture',
+                },
+              },
+            }) +
+            '\n\n',
+        ].join(''),
+      })
+    })
+    await input.fill('Failed streaming follow-up')
+    await input.press('Enter')
+    await expect(page.getByRole('alert')).toContainText('rate limited')
+    await expect(
+      transcript.getByText('An incomplete reply', { exact: true })
+    ).toBeVisible()
+    await expect(
+      transcript.getByText('This reply is incomplete', { exact: false })
+    ).toBeVisible()
+    await expect(input).toHaveValue('Failed streaming follow-up')
+    await page.getByText('Technical details', { exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('HTTP 429')
+    await expect(page.getByRole('alert')).toContainText('request-fixture')
+    const panel = page.getByRole('dialog', { name: 'Document AI', exact: true })
+    expect(
+      await panel.evaluate((node) => node.scrollHeight - node.clientHeight)
+    ).toBeLessThanOrEqual(1)
+    await expect(
+      page.getByRole('button', { name: 'Send AI message', exact: true })
+    ).toBeInViewport()
+    await page.screenshot({
+      path: info.outputPath(`ai-chat-recovery-${width}.png`),
+      animations: 'disabled',
+    })
+  })
+}
