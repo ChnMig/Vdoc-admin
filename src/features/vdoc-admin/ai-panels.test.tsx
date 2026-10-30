@@ -387,7 +387,7 @@ describe('AIContextPanel', () => {
     await waitFor(() => expect(input).toHaveValue(''))
   })
 
-  it('discards incomplete streamed text and keeps the prompt for retry', async () => {
+  it('marks incomplete streamed text and retries the submitted snapshot while preserving a changed draft', async () => {
     let reject!: (error: Error) => void
     apiMocks.sendAIChatMessage.mockImplementationOnce(
       () =>
@@ -413,11 +413,28 @@ describe('AIContextPanel', () => {
     expect(
       await screen.findByText('Connection interrupted. Please retry.')
     ).toBeInTheDocument()
-    expect(screen.queryByText(/Incomplete answer/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Incomplete answer/)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'This reply is incomplete and has not been saved. Retry your original question below.'
+      )
+    ).toHaveAttribute('role', 'status')
     expect(input).toHaveValue('Retry this prompt')
     expect(
       screen.getByRole('button', { name: 'Send AI message' })
     ).toBeEnabled()
+    fireEvent.change(input, { target: { value: 'A different unsent draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }))
+    await waitFor(() =>
+      expect(apiMocks.sendAIChatMessage).toHaveBeenCalledTimes(2)
+    )
+    expect(apiMocks.sendAIChatMessage.mock.calls[1][2]).toBe(
+      'Retry this prompt'
+    )
+    await waitFor(() =>
+      expect(screen.queryByText(/Incomplete answer/)).not.toBeInTheDocument()
+    )
+    expect(input).toHaveValue('A different unsent draft')
   })
 
   it('coalesces rapid first-message submissions into one session and one send', async () => {
