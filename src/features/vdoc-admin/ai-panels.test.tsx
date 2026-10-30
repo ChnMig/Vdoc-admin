@@ -424,7 +424,7 @@ describe('AIContextPanel', () => {
       screen.getByRole('button', { name: 'Send AI message' })
     ).toBeEnabled()
     fireEvent.change(input, { target: { value: 'A different unsent draft' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: /^Retry$/ }))
     await waitFor(() =>
       expect(apiMocks.sendAIChatMessage).toHaveBeenCalledTimes(2)
     )
