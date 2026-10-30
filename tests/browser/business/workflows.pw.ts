@@ -1,5 +1,10 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { selectOption } from '../helpers/select-option'
+import {
+  installRepository,
+  installUnimportedRepository,
+  projectId as repositoryProjectId,
+} from '../support/repository-workflow'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 const adminToken = 'business-workflow-session'
@@ -181,21 +186,15 @@ async function installAdminSession(page: Page) {
 
 async function openWorkspaceFile(
   page: Page,
-  view: 'content' | 'drafts' | 'versions' | 'diffs' = 'content'
+  view: 'content' | 'versions' | 'diffs' = 'content'
 ) {
   await page.goto(
-    `/documents/${documentId}?team_id=${project.team_id}&project_id=${projectId}`
+    `/documents/${documentId}?team_id=${project.team_id}&project_id=${projectId}&version_id=${latestVersionId}`
   )
   await expect(
     page.getByRole('heading', { name: document.name, exact: true })
   ).toBeVisible()
-  if (view === 'drafts') {
-    await selectOption(
-      page.getByLabel('Content state', { exact: true }),
-      'draft'
-    )
-    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
-  } else if (view !== 'content') await openWorkspaceTool(page, view)
+  if (view !== 'content') await openWorkspaceTool(page, view)
 }
 
 async function openWorkspaceTool(page: Page, view: 'versions' | 'diffs') {
@@ -206,14 +205,6 @@ async function openWorkspaceTool(page: Page, view: 'versions' | 'diffs') {
       exact: true,
     })
     .click()
-}
-
-async function selectWorkspaceDraft(page: Page, draftId: string) {
-  const select = page.getByLabel('Draft', { exact: true })
-  const currentId = await select.getAttribute('value')
-  await selectOption(select, draftId)
-  if (currentId !== draftId)
-    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
 }
 
 async function installAdminApi(
@@ -454,65 +445,43 @@ for (const width of [1280, 390]) {
     }
   })
 
-  test(`workspace loads list metadata first and statistics once on demand at ${width}px`, async ({
+  test(`workspace lists documents before loading committed content at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 })
-    await installAdminSession(page)
-    await installAdminApi(page)
-    const paths: string[] = []
-    const finishedPaths: string[] = []
-    page.on('request', (request) => paths.push(new URL(request.url()).pathname))
-    page.on('requestfinished', (request) =>
-      finishedPaths.push(new URL(request.url()).pathname)
-    )
+    const api = await installRepository(page)
     await page.goto(
-      `/documents?team_id=${project.team_id}&project_id=${projectId}`
+      `/documents?team_id=commit-team&project_id=${repositoryProjectId}&repository_branch_id=repo-work`
     )
     const files = page.getByRole('tabpanel', { name: 'Documents', exact: true })
     await expect(
-      files.getByRole('button', { name: 'guides', exact: true })
+      files.getByRole('button', { name: 'Shared guide', exact: true })
     ).toBeVisible()
-    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
     expect(
-      paths.some(
-        (path) =>
-          path.endsWith('/versions') ||
-          path.includes('/content/') ||
-          path.endsWith('/endpoints')
+      api.requests.some((request) => request.path.endsWith('/content'))
+    ).toBe(false)
+    await files
+      .getByRole('button', { name: 'Shared guide', exact: true })
+      .click()
+    await expect(
+      page.getByText('Original saved body.', { exact: true })
+    ).toBeVisible()
+    expect(
+      new Set(
+        api.requests
+          .filter((request) => request.path.endsWith('/content'))
+          .map((request) => request.path)
+      ).size
+    ).toBe(1)
+    expect(
+      api.requests.some(
+        (request) =>
+          request.path.endsWith('/overview') ||
+          request.path.endsWith('/versions') ||
+          request.path.endsWith('/drafts')
       )
     ).toBe(false)
-    await files.getByRole('button', { name: 'guides', exact: true }).click()
-    const file = files.getByRole('button', { name: document.name, exact: true })
-    await expect(file).toContainText('Published')
-    await file.click()
-    await expect(page).toHaveURL(new RegExp(`/documents/${documentId}[?]`))
-    await expect(
-      page.getByRole('heading', { name: 'Release Notes', exact: true })
-    ).toBeVisible()
-    await expect
-      .poll(
-        () => finishedPaths.filter((path) => path.includes('/content/')).length
-      )
-      .toBe(1)
-    expect(
-      new Set(paths.filter((path) => path.includes('/content/'))).size
-    ).toBe(1)
-    expect(paths.filter((path) => path.endsWith('/overview'))).toHaveLength(0)
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
-    await expect
-      .poll(
-        () => finishedPaths.filter((path) => path.endsWith('/overview')).length
-      )
-      .toBe(1)
-    await page.keyboard.press('Escape')
-    await expect(page.getByRole('dialog')).toBeHidden()
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
-    expect(
-      finishedPaths.filter((path) => path.endsWith('/overview'))
-    ).toHaveLength(1)
-    expect(paths.some((path) => path.endsWith('/endpoints'))).toBe(false)
-    expect(paths.filter((path) => path.endsWith('/versions'))).toHaveLength(1)
+    expect(api.unexpected).toEqual([])
   })
 }
 
@@ -586,6 +555,7 @@ test('a comparison completed after document navigation stays in its original his
 }) => {
   await installAdminSession(page)
   await installAdminApi(page)
+  await installUnimportedRepository(page, projectId)
   const otherDocument = {
     ...document,
     id: 'document-other',
@@ -671,11 +641,9 @@ test('a comparison completed after document navigation stays in its original his
   const tree = page.getByRole('navigation', { name: 'Files', exact: true })
   const otherFile = tree.getByRole('button', { name: /other\.md/ })
   await otherFile.click()
-  await expect(otherFile).toHaveAttribute('aria-current', 'page')
-  await openWorkspaceTool(page, 'diffs')
   await expect(
-    page.getByLabel('From version', { exact: true })
-  ).toHaveAttribute('value', '')
+    page.getByRole('button', { name: 'Import existing documents', exact: true })
+  ).toBeVisible()
   const switchedUrl = page.url()
   const response = page.waitForResponse(
     (value) =>
@@ -685,11 +653,15 @@ test('a comparison completed after document navigation stays in its original his
   releaseComparison()
   await response
   await expect(page).toHaveURL(switchedUrl)
-  await expect(otherFile).toHaveAttribute('aria-current', 'page')
+  await expect(
+    page.getByRole('button', { name: 'Import existing documents', exact: true })
+  ).toBeVisible()
   await expect(
     page.getByText('Linked entity is unavailable', { exact: true })
   ).toHaveCount(0)
-  await tree.getByRole('button', { name: /closure\.md/ }).click()
+  await page.goto(
+    `/diffs/?project_id=${projectId}&document_id=${documentId}&from_version_id=${previousVersionId}&to_version_id=${latestVersionId}`
+  )
   await openWorkspaceTool(page, 'diffs')
   await page
     .getByRole('tab', { name: 'Stored diff history', exact: true })
@@ -702,312 +674,6 @@ test('a comparison completed after document navigation stays in its original his
   await history.click()
   await expect(page).toHaveURL(new RegExp(`diff_id=${result.id}`))
 })
-
-for (const viewport of [
-  { width: 1280, height: 900 },
-  { width: 390, height: 844 },
-]) {
-  test(`draft conflict preserves edits and supports both resolutions at ${viewport.width}px`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize(viewport)
-    await installAdminSession(page)
-    await installAdminApi(page)
-    let serverContent = '# Original draft'
-    await page.route(
-      `**/drafts/${editableDraftId}/content/raw`,
-      async (route) => {
-        if (route.request().method() === 'OPTIONS') {
-          await fulfillOptions(route)
-          return
-        }
-        await fulfillEnvelope(route, {
-          owner_type: 'draft',
-          owner_id: editableDraftId,
-          kind: 'raw',
-          content_kind: 'markdown',
-          draft: { ...editableDraft, revision: serverContent },
-          content: serverContent,
-          hash: serverContent,
-        })
-      }
-    )
-    await openWorkspaceFile(page, 'drafts')
-    await selectWorkspaceDraft(page, editableDraftId)
-    const content = page.getByRole('textbox', { name: 'Content', exact: true })
-    await expect(content).toHaveValue('# Original draft')
-    await content.fill('# Local edits to retain')
-    await page.clock.install()
-    const refetch = async (nextContent: string) => {
-      serverContent = nextContent
-      await page.clock.fastForward(11_000)
-      await selectWorkspaceDraft(page, submittedDraftId)
-      await selectWorkspaceDraft(page, editableDraftId)
-      await expect(
-        page.getByText('This draft changed on the server')
-      ).toBeVisible()
-    }
-    await refetch('# Updated server draft')
-    await expect(content).toHaveValue('# Local edits to retain')
-    const update = page.getByRole('button', { name: 'Update', exact: true })
-    await expect(update).toBeDisabled()
-    const editor = page.locator('[data-slot="card"]').filter({ has: content })
-    await editor.scrollIntoViewIfNeeded()
-    await editor.screenshot({
-      path: testInfo.outputPath(`draft-conflict-${viewport.width}.png`),
-    })
-    expect(
-      await editor.evaluate(
-        (element) => element.scrollWidth <= element.clientWidth + 1
-      )
-    ).toBe(true)
-    await page
-      .getByRole('button', { name: 'Keep my edits', exact: true })
-      .click()
-    await expect(content).toHaveValue('# Local edits to retain')
-    await expect(update).toBeEnabled()
-    await expect(
-      page.getByText('This draft changed on the server')
-    ).toBeHidden()
-    await refetch('# Latest server draft')
-    await page
-      .getByRole('button', {
-        name: 'Discard edits and load server version',
-        exact: true,
-      })
-      .click()
-    await expect(content).toHaveValue('# Latest server draft')
-    await expect(update).toBeEnabled()
-    await expect(
-      page.getByText('This draft changed on the server')
-    ).toBeHidden()
-  })
-}
-
-for (const width of [1280, 390]) {
-  test(`stale draft save is rejected and reconciled at ${width}px`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 })
-    await installAdminSession(page)
-    await installAdminApi(page)
-    let current = { ...editableDraft }
-    let serverContent = '# Original draft'
-    const saves: Record<string, string>[] = []
-    await page.route(
-      `**/drafts/${editableDraftId}/content/raw`,
-      async (route) => {
-        if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
-        await fulfillEnvelope(route, {
-          owner_type: 'draft',
-          owner_id: editableDraftId,
-          kind: 'raw',
-          content_kind: 'markdown',
-          draft: current,
-          content: serverContent,
-          hash: current.revision,
-        })
-      }
-    )
-    await page.route(`**/drafts/${editableDraftId}`, async (route) => {
-      if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
-      if (route.request().method() !== 'PATCH') return route.fallback()
-      const body = route.request().postDataJSON() as Record<string, string>
-      saves.push(body)
-      if (body.expected_revision !== current.revision) {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          headers: responseHeaders(),
-          body: JSON.stringify({
-            code: 400,
-            status: 'FAILED_PRECONDITION',
-            message: 'draft changed since it was loaded',
-            timestamp: Date.now(),
-          }),
-        })
-        return
-      }
-      current = {
-        ...current,
-        revision: 'revision-3',
-        changelog: body.changelog!,
-      }
-      serverContent = body.content!
-      await fulfillEnvelope(route, current)
-    })
-    await openWorkspaceFile(page, 'drafts')
-    await selectWorkspaceDraft(page, editableDraftId)
-    const content = page.getByRole('textbox', { name: 'Content', exact: true })
-    await expect(content).toHaveValue('# Original draft')
-    await page
-      .getByLabel('Changelog', { exact: true })
-      .fill('Editor B changelog')
-    current = { ...current, revision: 'revision-2' }
-    serverContent = '# Editor A saved content'
-    const update = page.getByRole('button', { name: 'Update', exact: true })
-    await update.click()
-    await expect(
-      page.getByText('This draft changed on the server')
-    ).toBeVisible()
-    await expect(update).toBeDisabled()
-    expect(saves).toHaveLength(1)
-    expect(saves[0]?.expected_revision).toBe('revision-1')
-    expect(serverContent).toBe('# Editor A saved content')
-    await expect(page.getByLabel('Changelog', { exact: true })).toHaveValue(
-      'Editor B changelog'
-    )
-    const editor = page.locator('[data-slot="card"]').filter({ has: content })
-    await editor.screenshot({
-      path: testInfo.outputPath(`stale-save-${width}.png`),
-    })
-    expect(
-      await editor.evaluate(
-        (element) => element.scrollWidth <= element.clientWidth + 1
-      )
-    ).toBe(true)
-    await page
-      .getByRole('button', { name: 'Keep my edits', exact: true })
-      .click()
-    await expect(content).toHaveValue('# Editor A saved content')
-    await update.click()
-    await expect(page.getByText(/Unsaved edits are kept/)).toBeHidden()
-    expect(saves).toHaveLength(2)
-    expect(saves[1]).toMatchObject({
-      expected_revision: 'revision-2',
-      content: '# Editor A saved content',
-      changelog: 'Editor B changelog',
-    })
-    expect(serverContent).toBe('# Editor A saved content')
-  })
-}
-
-test('draft review confirms and approves the selected submitted draft', async ({
-  page,
-}) => {
-  let approvedRequest:
-    { readonly path: string; readonly body: unknown } | undefined
-  await installAdminSession(page)
-  await installAdminApi(page, (request) => {
-    approvedRequest = request
-  })
-
-  await openWorkspaceFile(page, 'drafts')
-  const draftSelect = page.getByLabel('Draft', { exact: true })
-  await expect(draftSelect).toBeVisible()
-  await selectWorkspaceDraft(page, submittedDraftId)
-
-  const reviewNote = page.getByLabel('Review note', { exact: true })
-  await expect(reviewNote).toBeEnabled()
-  await reviewNote.fill('Reviewed against the release checklist.')
-  await page.getByRole('button', { name: 'Approve', exact: true }).click()
-
-  const dialog = page.getByRole('alertdialog')
-  await expect(
-    dialog.getByRole('heading', { name: 'Publish 2.0.0?' })
-  ).toBeVisible()
-  await expect(dialog).toContainText('immutable published version')
-  await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
-
-  await expect(dialog).toBeHidden()
-  await expect
-    .poll(() => approvedRequest)
-    .toEqual({
-      path: `/api/v1/private/projects/${projectId}/documents/${documentId}/drafts/${submittedDraftId}/approve`,
-      body: {
-        expected_review_revision: 'review-1',
-        comment: 'Reviewed against the release checklist.',
-      },
-    })
-})
-
-for (const width of [1280, 390]) {
-  test(`stale review requires a new decision at ${width}px`, async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 })
-    await installAdminSession(page)
-    await installAdminApi(page)
-    let current = { ...submittedDraft }
-    const requests: Record<string, string>[] = []
-    await page.route(
-      `**/drafts/${submittedDraftId}/content/raw`,
-      async (route) => {
-        if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
-        await fulfillEnvelope(route, {
-          owner_type: 'draft',
-          owner_id: submittedDraftId,
-          kind: 'raw',
-          content_kind: 'markdown',
-          draft: current,
-          content:
-            current.review_revision === 'review-1'
-              ? '# Original review content'
-              : '# Latest content and baseline',
-          hash: current.revision,
-        })
-      }
-    )
-    await page.route(`**/drafts/${submittedDraftId}/approve`, async (route) => {
-      if (route.request().method() === 'OPTIONS') return fulfillOptions(route)
-      const body = route.request().postDataJSON() as Record<string, string>
-      requests.push(body)
-      if (body.expected_review_revision !== current.review_revision) {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          headers: responseHeaders(),
-          body: JSON.stringify({
-            code: 400,
-            status: 'FAILED_PRECONDITION',
-            message: 'review baseline changed',
-            timestamp: Date.now(),
-          }),
-        })
-        return
-      }
-      await fulfillEnvelope(route, latestVersion)
-    })
-    await openWorkspaceFile(page, 'drafts')
-    await selectWorkspaceDraft(page, submittedDraftId)
-    const note = page.getByLabel('Review note', { exact: true })
-    await expect(note).toBeEnabled()
-    await note.fill('Preserve this review note')
-    await page.getByRole('button', { name: 'Approve', exact: true }).click()
-    const dialog = page.getByRole('alertdialog')
-    current = { ...current, review_revision: 'review-2' }
-    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
-    await expect(dialog).toContainText('This review is out of date')
-    await expect(note).toHaveValue('Preserve this review note')
-    await expect(
-      dialog.getByRole('button', { name: 'Approve', exact: true })
-    ).toHaveCount(0)
-    await page.screenshot({
-      path: testInfo.outputPath(`stale-review-${width}.png`),
-      fullPage: true,
-    })
-    await dialog
-      .getByRole('button', { name: 'Review latest content and diff' })
-      .click()
-    await expect(dialog).toBeHidden()
-    await expect(
-      page.getByText('# Latest content and baseline', { exact: true })
-    ).toBeVisible()
-    expect(requests).toEqual([
-      {
-        expected_review_revision: 'review-1',
-        comment: 'Preserve this review note',
-      },
-    ])
-    await page.getByRole('button', { name: 'Approve', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Approve', exact: true }).click()
-    await expect(dialog).toBeHidden()
-    expect(requests[1]).toEqual({
-      expected_review_revision: 'review-2',
-      comment: 'Preserve this review note',
-    })
-  })
-}
 
 test('version history opens reviewed Markdown and keeps relative links inert', async ({
   page,
@@ -1209,63 +875,6 @@ for (const size of [
   { name: 'desktop', width: 1280, height: 900 },
   { name: 'mobile', width: 390, height: 844 },
 ]) {
-  test(`draft history pagination keeps an off-page review on ${size.name}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: size.width, height: size.height })
-    await installAdminSession(page)
-    await installAdminApi(page)
-    const offsets: string[] = []
-    await page.route('**/drafts?*', async (route) => {
-      if (route.request().method() === 'OPTIONS') {
-        await fulfillOptions(route)
-        return
-      }
-      const params = new URL(route.request().url()).searchParams
-      expect(params.get('page_size')).toBe('50')
-      const offset = Number(params.get('offset') ?? '0')
-      offsets.push(String(offset))
-      const rows = Array.from({ length: 50 }, (_, i) => ({
-        ...editableDraft,
-        id: `history-${offset + i}`,
-        version_name: `draft-${offset + i}`,
-      }))
-      await fulfillEnvelope(route, rows, { total: 120 })
-    })
-    await page.goto(
-      `/drafts/?project_id=${projectId}&document_id=${documentId}&branch_id=${branchId}&draft_id=${submittedDraftId}`
-    )
-    await expect(page.getByLabel('Draft', { exact: true })).toHaveAttribute(
-      'value',
-      submittedDraftId
-    )
-    await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
-    await page.getByRole('tab', { name: 'Draft history', exact: true }).click()
-    await page
-      .getByRole('navigation', { name: 'Draft pages' })
-      .getByRole('button', { name: 'Next', exact: true })
-      .click()
-    await expect.poll(() => offsets.includes('50')).toBe(true)
-    await expect(page.getByLabel('Draft', { exact: true })).toHaveAttribute(
-      'value',
-      submittedDraftId
-    )
-    await page.getByRole('tab', { name: 'Workspace', exact: true }).click()
-    await expect(page.getByLabel('Review note', { exact: true })).toBeEnabled()
-    await page.getByRole('button', { name: 'Approve', exact: true }).click()
-    await expect(page.getByRole('alertdialog')).toContainText('Publish 2.0.0?')
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Cancel', exact: true })
-      .click()
-    await page.getByRole('tab', { name: 'Draft history', exact: true }).click()
-    await page
-      .getByRole('navigation', { name: 'Draft pages' })
-      .scrollIntoViewIfNeeded()
-    await page.screenshot({
-      path: `../.artifacts/project-optimization-20260928/drafts-after-${size.name}.png`,
-    })
-  })
   test(`diff history pagination loads details outside the page on ${size.name}`, async ({
     page,
   }) => {
@@ -1558,4 +1167,56 @@ for (const width of [1280, 390]) {
       .toBe('endpoint-precision')
     await expect(preview).toHaveText(responsesJSON)
   })
+}
+
+// Mutable draft saves and approval are retired. Legacy URLs must preserve the
+// selected snapshot without exposing writes; commit/review replacements are
+// covered by repository-workflow.pw.ts.
+for (const width of [1280, 390]) {
+  for (const draftId of [editableDraftId, submittedDraftId]) {
+    test(`legacy saved draft ${draftId} is read-only at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await installAdminSession(page)
+      await installAdminApi(page)
+      const writes: string[] = []
+      page.on('request', (request) => {
+        if (['POST', 'PATCH', 'DELETE'].includes(request.method()))
+          writes.push(new URL(request.url()).pathname)
+      })
+      await page.goto(
+        `/drafts?project_id=${projectId}&document_id=${documentId}&draft_id=${draftId}&content_mode=draft`
+      )
+      await expect(
+        page.getByText(
+          'Legacy snapshots are read-only. Save new changes through project branches and commits.'
+        )
+      ).toBeVisible()
+      await expect(
+        page.getByRole('heading', {
+          name:
+            draftId === submittedDraftId
+              ? 'Submitted handbook'
+              : 'Editable handbook',
+          exact: true,
+        })
+      ).toBeVisible()
+      for (const name of [
+        'Edit draft',
+        'Update',
+        'Submit',
+        'Approve',
+        'Reject',
+        'Publish',
+      ])
+        await expect(
+          page.getByRole('button', { name, exact: true })
+        ).toHaveCount(0)
+      await expect(
+        page.getByRole('textbox', { name: 'Review note', exact: true })
+      ).toHaveCount(0)
+      expect(writes).toEqual([])
+    })
+  }
 }

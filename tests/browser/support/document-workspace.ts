@@ -452,23 +452,12 @@ export async function chooseWorkspaceOption(trigger: Locator, value: string) {
   )
 }
 
+// Legacy reader coverage always opens an explicit saved revision. The default
+// project commit workflow is exercised separately in repository-workflow.pw.ts.
 export async function openDocument(page: Page) {
-  await page.goto('/documents')
-  const hierarchy = page.getByRole('navigation', {
-    name: 'Teams and projects',
-    exact: true,
-  })
-  await hierarchy
-    .getByRole('button', { name: 'Documentation team', exact: true })
-    .click()
-  await hierarchy
-    .getByRole('button', { name: 'Developer platform', exact: true })
-    .click()
-  await page.getByRole('button', { name: 'guides', exact: true }).click()
-  await page
-    .getByRole('button', { name: 'Integration handbook', exact: true })
-    .click()
-  await expect(page).toHaveURL(new RegExp(`/documents/${documentId}\\?`))
+  await page.goto(
+    `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}&version_id=${latestId}`
+  )
   await expect(
     page.getByRole('heading', { name: 'Integration handbook 2.4', exact: true })
   ).toBeVisible()

@@ -616,7 +616,7 @@ test('Chinese chat stays usable in a short mobile viewport and rejects invalid f
   await installWorkspace(page, 'zh-CN')
   const api = await installConversations(page)
   await page.goto(
-    `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}`
+    `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}&content_mode=published`
   )
   await page.getByRole('button', { name: '文档 AI', exact: true }).click()
   await page.getByRole('button', { name: '新建对话', exact: true }).click()

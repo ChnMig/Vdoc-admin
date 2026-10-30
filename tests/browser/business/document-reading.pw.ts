@@ -434,14 +434,16 @@ for (const width of [1280, 390]) {
       })
     })
   }
-  test(`private reader actions, activity and approved draft history at ${width}px`, async ({
+  test(`legacy reader exports exact source without draft mutations at ${width}px`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height: 900 })
     await privateFixture(page)
     let loads = 0
     page.on('load', () => loads++)
-    await page.goto(`/documents/${documentId}?project_id=${projectId}`)
+    await page.goto(
+      `/documents/${documentId}?project_id=${projectId}&version_id=${versionId}`
+    )
     await expect(
       page.getByRole('heading', { name: 'Getting started' })
     ).toBeVisible()
@@ -456,54 +458,24 @@ for (const width of [1280, 390]) {
     expect(file.suggestedFilename()).toBe('guide.md')
     expect(await readFile((await file.path())!, 'utf8')).toBe(source)
     await file.delete()
-    await page.getByRole('button', { name: 'Activity', exact: true }).click()
-    await expect(
-      page.getByText('Version published', { exact: true })
-    ).toBeVisible()
-    await expect(
-      page.getByText('Submitted for review', { exact: true })
-    ).toBeVisible()
-    await page
-      .getByRole('button', { name: 'Back to preview', exact: true })
-      .click()
-    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
-    await expect(
-      page.getByRole('button', { name: 'Approve', exact: true })
-    ).toBeEnabled()
-    await page.getByRole('button', { name: 'Approve', exact: true }).click()
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Approve', exact: true })
-      .click()
-    await expect(page).toHaveURL(new RegExp(`version_id=${publicationId}`))
-    await expect(
-      page.getByRole('heading', { name: 'Getting started' })
-    ).toBeVisible()
+    for (const name of [
+      'Activity',
+      'Edit draft',
+      'Approve',
+      'Share',
+      'Document settings',
+    ])
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(
+        0
+      )
     await expect(
       page.getByText(
-        'The selected branch or revision is unavailable. Choose another branch or revision.'
+        'Legacy snapshots are read-only. Save new changes through project branches and commits.'
       )
-    ).toHaveCount(0)
-    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
-    await page.getByRole('tab', { name: 'Draft history', exact: true }).click()
-    await expect(
-      page.getByRole('columnheader', { name: 'Created at' })
     ).toBeVisible()
     await expect(
-      page.getByRole('columnheader', { name: 'Published at' })
+      page.getByRole('button', { name: 'Open project repository', exact: true })
     ).toBeVisible()
-    await page.getByRole('button', { name: 'View', exact: true }).click()
-    await expect(
-      page.getByText('Selected draft is read-only', { exact: true })
-    ).toBeVisible()
-    await expect(
-      page.getByRole('textbox', { name: 'Review note' })
-    ).toHaveCount(0)
-    await expect(
-      page.getByText(
-        'The selected branch or revision is unavailable. Choose another branch or revision.'
-      )
-    ).toHaveCount(0)
     expect(loads).toBe(loaded)
     expect(
       await page.evaluate(

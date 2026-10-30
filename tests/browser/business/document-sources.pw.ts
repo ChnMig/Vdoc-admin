@@ -13,7 +13,6 @@ import {
   openDocument,
   openTool,
 } from '../support/document-workspace'
-import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] })
 
@@ -168,82 +167,23 @@ for (const width of [1280, 390]) {
 }
 
 for (const width of [1280, 390]) {
-  test(`active sharing capability wraps completely and copies intact at ${width}px`, async ({
+  test(`legacy source links do not expose new share writes at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 })
-    await installWorkspace(page)
-    const secret = `vdoc_share_${'d'.repeat(48)}`
-    await page.addInitScript(() => {
-      window.__VDOC_ADMIN_CONFIG__ = {
-        ...window.__VDOC_ADMIN_CONFIG__,
-        publicShareBaseUrl: `https://${'preview-documentation-'.repeat(2)}test.${'shared-reader-'.repeat(3)}environment.${'release-verification-'.repeat(2)}test.example.test`,
-      }
-    })
-    await registerCapabilitySecret(
-      process.env.VDOC_PLAYWRIGHT_SECRET_REGISTRY!,
-      secret
-    )
-    await page.route(`**${basePath}/shares`, async (route) => {
-      if (route.request().method() !== 'POST') return route.fallback()
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify({
-          code: 200,
-          status: 'OK',
-          detail: {
-            secret,
-            share: {
-              id: 'f'.repeat(32),
-              project_id: 'workspace-project',
-              document_id: documentId,
-              status: 1,
-            },
-          },
-        }),
-      })
-    })
+    const api = await installWorkspace(page)
     await openDocument(page)
-    await page.getByRole('button', { name: 'Share', exact: true }).click()
-    const dialog = page
-      .getByRole('dialog')
-      .filter({ has: page.locator('#share-expiry') })
-    await dialog.locator('button[type="submit"]').click()
-    const link = dialog.locator('code').filter({ hasText: /#vdoc_share_/ })
-    await expect(link).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Share', exact: true })
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: 'Open project repository', exact: true })
+    ).toBeVisible()
     expect(
-      await link.evaluate((element) => {
-        const box = element.getBoundingClientRect()
-        const parent = element
-          .closest('[role="dialog"]')!
-          .getBoundingClientRect()
-        const style = getComputedStyle(element)
-        return (
-          box.left >= parent.left &&
-          box.right <= parent.right &&
-          element.scrollWidth <= element.clientWidth &&
-          style.whiteSpace !== 'nowrap' &&
-          box.height > parseFloat(style.lineHeight) * 2
-        )
-      })
-    ).toBe(true)
-    await dialog.getByRole('button', { name: /Copy link/ }).click()
-    expect(
-      await page.evaluate(async () => {
-        const displayed = document.querySelector(
-          '[role="dialog"] code'
-        )?.textContent
-        return (await navigator.clipboard.readText()) === displayed
-      })
-    ).toBe(true)
-    expect(
-      await page.evaluate(
-        () =>
-          document.documentElement.scrollWidth <=
-          document.documentElement.clientWidth
+      api.requests.filter(
+        (request) =>
+          request.method === 'POST' && request.path.endsWith('/shares')
       )
-    ).toBe(true)
+    ).toEqual([])
   })
 }

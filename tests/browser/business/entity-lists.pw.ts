@@ -254,15 +254,6 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
   return { reads, writes, lists }
 }
 
-async function openBranchSettings(page: Page) {
-  await page
-    .getByRole('navigation', { name: 'Document tools', exact: true })
-    .filter({ visible: true })
-    .getByRole('button', { name: 'Document settings', exact: true })
-    .click()
-  await page.getByRole('tab', { name: 'Branches', exact: true }).click()
-}
-
 async function noPageOverflow(page: Page) {
   expect(
     await page.evaluate(
@@ -297,12 +288,6 @@ const cases = [
     edit: 'Edit project',
   },
   { route: '/users', trigger: 'Create user', label: 'admin@example.test' },
-  {
-    route: documentManagementRoute,
-    trigger: 'New document',
-    label: 'Published handbook',
-    edit: 'Edit document',
-  },
   {
     route: '/mcp-tokens',
     trigger: 'Create MCP token',
@@ -352,27 +337,6 @@ test('entity pages open labeled create/edit dialogs from read-only lists', async
     }
     await noPageOverflow(page)
   }
-  await page.goto(documentManagementRoute)
-  await openBranchSettings(page)
-  await page.getByRole('button', { name: 'Create branch', exact: true }).click()
-  await expect(
-    page
-      .getByRole('dialog', { name: 'Create branch' })
-      .getByLabel('Name', { exact: true })
-  ).toBeVisible()
-  await page.keyboard.press('Escape')
-  const branchRow = page
-    .getByRole('region', { name: /^Branches/ })
-    .getByRole('listitem')
-    .filter({ hasText: 'Main environment branch' })
-  await expect(branchRow.locator('input')).toHaveCount(0)
-  await branchRow.getByRole('button', { name: 'Edit', exact: true }).click()
-  await expect(
-    page
-      .getByRole('dialog', { name: 'Edit branch' })
-      .getByLabel('Default branch', { exact: true })
-  ).toBeChecked()
-  await page.keyboard.press('Escape')
 })
 
 test('creation errors retain input and success refreshes list; pending keeps focus protected', async ({
@@ -533,79 +497,22 @@ for (const width of [1280, 768, 640, 390]) {
   })
 }
 
-test('document creation can upload its first TXT draft inside a newly created nested folder', async ({
+test('legacy management route cannot create mutable document branches', async ({
   page,
 }) => {
   const state = await fixture(page)
-  await page.goto(projectWorkspaceRoute)
-  await page
-    .getByRole('button', { name: 'Create document', exact: true })
-    .click()
-  const dialog = page.getByRole('dialog', { name: 'Create document' })
-  await dialog.getByLabel('Name', { exact: true }).fill('Display title')
-  await dialog
-    .getByRole('button', { name: 'New subfolder', exact: true })
-    .click()
-  await dialog.getByLabel('Folder name', { exact: true }).fill('Empty parent')
-  await dialog
-    .getByRole('button', { name: 'Create folder', exact: true })
-    .click()
+  await page.goto(documentManagementRoute)
   await expect(
-    dialog.getByRole('button', { name: 'Empty parent', exact: true })
-  ).toHaveAttribute('aria-pressed', 'true')
-  await dialog
-    .getByRole('button', { name: 'New subfolder', exact: true })
-    .click()
-  await dialog.getByLabel('Folder name', { exact: true }).fill('Child folder')
-  await dialog
-    .getByRole('button', { name: 'Create folder', exact: true })
-    .click()
-  await expect(
-    dialog.getByRole('button', { name: 'Child folder', exact: true })
-  ).toHaveAttribute('aria-pressed', 'true')
-  const content = '# Literal heading\r\n<script>literal</script>\r\n中文\n'
-  await dialog.getByLabel('Initial document file (optional)').setInputFiles({
-    name: 'original-notes.txt',
-    mimeType: 'text/plain',
-    buffer: Buffer.from(content, 'utf8'),
-  })
-  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue(
-    'Display title'
-  )
-  await expect(dialog.getByLabel('Filename', { exact: true })).toHaveValue(
-    'original-notes.txt'
-  )
-  await dialog.getByLabel('Filename', { exact: true }).fill('independent.txt')
-  await saveScreenshot(page, 'document-upload-folder-dialog.png')
-  await dialog.getByRole('button', { name: 'Create', exact: true }).click()
-  await expect(dialog).toHaveCount(0)
-  const folders = state.lists[`${rootPath}/projects/${projectId}/folders`]
-  const parent = folders.find((folder) => folder.name === 'Empty parent')!
-  const child = folders.find((folder) => folder.name === 'Child folder')!
-  expect(child.parent_id).toBe(parent.id)
-  expect(child.path).toBe('Empty parent/Child folder')
-  expect(
-    state.writes.find((request) => request.path === documentPath)?.body
-  ).toEqual({
-    name: 'Display title',
-    description: '',
-    document_type: 3,
-    file_name: 'independent.txt',
-    folder_id: child.id,
-    initial_content: { content, version_name: '0.1.0' },
-  })
-  await expect(
-    page.getByRole('heading', { name: 'Display title', exact: true })
+    page.getByText(
+      'Legacy snapshots are read-only. Save new changes through project branches and commits.'
+    )
   ).toBeVisible()
-  expect(new URL(page.url()).pathname).toMatch(/^\/documents\/created-\d+$/)
-  await expect(
-    page.getByRole('navigation', { name: 'Files' }).getByRole('button', {
-      name: /Display title.*independent\.txt/,
-    })
-  ).toHaveAttribute('aria-current', 'page')
+  for (const name of ['Create branch', 'Edit draft', 'Document settings'])
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0)
+  expect(state.writes).toEqual([])
 })
 
-test('document/branch/user/token creation returns to updated lists', async ({
+test('project/user/token creation returns to updated lists', async ({
   page,
 }) => {
   await fixture(page)
@@ -637,23 +544,6 @@ test('document/branch/user/token creation returns to updated lists', async ({
       },
     },
     {
-      route: projectWorkspaceRoute,
-      title: 'Create document',
-      name: 'Created handbook',
-      fill: async () => {
-        await page
-          .getByRole('dialog')
-          .getByLabel('Filename', { exact: true })
-          .fill('created.yaml')
-      },
-    },
-    {
-      route: documentManagementRoute,
-      title: 'Create branch',
-      name: 'preview',
-      fill: async () => {},
-    },
-    {
       route: '/mcp-tokens',
       title: 'Create MCP token',
       name: 'Created agent',
@@ -662,29 +552,15 @@ test('document/branch/user/token creation returns to updated lists', async ({
   ]
   for (const flow of flows) {
     await page.goto(flow.route)
-    if (flow.title === 'Create branch') await openBranchSettings(page)
     await page.getByRole('button', { name: flow.title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: flow.title })
     await dialog.getByLabel('Name', { exact: true }).fill(flow.name)
     await flow.fill()
     await dialog.getByRole('button', { name: 'Create', exact: true }).click()
     await expect(dialog).toHaveCount(0)
-    if (flow.title === 'Create document') {
-      await expect(
-        page.getByRole('heading', { name: flow.name, exact: true })
-      ).toBeVisible()
-      expect(new URL(page.url()).pathname).toMatch(/^\/documents\/created-\d+$/)
-    } else if (flow.title === 'Create branch')
-      await expect(
-        page
-          .getByRole('region', { name: /^Branches/ })
-          .getByRole('listitem')
-          .filter({ hasText: flow.name })
-      ).toBeVisible()
-    else
-      await expect(
-        page.getByRole('row').filter({ hasText: flow.name }).first()
-      ).toBeVisible()
+    await expect(
+      page.getByRole('row').filter({ hasText: flow.name }).first()
+    ).toBeVisible()
   }
   expect(
     await page

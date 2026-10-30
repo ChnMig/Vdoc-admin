@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const guide =
-  'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.3.17/docs/public/skill-install.md'
+  'https://raw.githubusercontent.com/ChnMig/Vdoc-site/refs/tags/v0.4.0-beta.1/docs/public/skill-install.md'
 
 for (const language of ['en', 'zh-CN'] as const) {
   for (const channel of ['release', 'beta'] as const) {

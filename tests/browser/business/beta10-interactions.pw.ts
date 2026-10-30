@@ -150,7 +150,64 @@ test('workspace folders remain local and repeated folder clicks do not add histo
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   const api = await installWorkspace(page)
-  await page.goto(`/documents?team_id=workspace-team&project_id=${projectId}`)
+  const head = 'c'.repeat(64)
+  const prefix = `/api/v1/private/projects/${projectId}/repository`
+  await page.route(`**${prefix}/branches`, (route) =>
+    route.fulfill({
+      json: {
+        code: 200,
+        status: 'OK',
+        detail: [
+          {
+            id: 'imported-main',
+            project_id: projectId,
+            name: 'main',
+            head_commit_id: head,
+            generation: 1,
+            is_protected: true,
+            created_by: 'workspace-admin',
+            created_at: '2026-10-30T08:00:00Z',
+          },
+        ],
+      },
+    })
+  )
+  await page.route(`**${prefix}/commits/${head}`, (route) =>
+    route.fulfill({
+      json: {
+        code: 200,
+        status: 'OK',
+        detail: {
+          id: head,
+          project_id: projectId,
+          parent_ids: [],
+          tree_hash: head,
+          message: 'Imported project tree',
+          created_by: 'workspace-admin',
+          created_at: '2026-10-30T08:00:00Z',
+          files: [
+            {
+              document_id: 'workspace-handbook',
+              relative_path: 'guides/integration.md',
+              name: 'Integration handbook',
+              document_type: 2,
+              content_hash: 'hash',
+            },
+            {
+              document_id: 'reference-contract',
+              relative_path: 'reference/contract.yaml',
+              name: 'Contract',
+              document_type: 1,
+              content_hash: 'hash',
+            },
+          ],
+        },
+      },
+    })
+  )
+  await page.goto(
+    `/documents?team_id=workspace-team&project_id=${projectId}&content_mode=published`
+  )
   const documentRequests: string[] = []
   page.on('request', (request) => {
     if (request.resourceType() === 'document')
@@ -411,7 +468,7 @@ test('desktop AI docks beside reading and retains conversation, input and DOM ac
 })
 
 for (const width of [390, 768, 1440]) {
-  test(`responsive reading, settings and accessible AI at ${width}px`, async ({
+  test(`responsive legacy reading and accessible AI at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
@@ -419,30 +476,9 @@ for (const width of [390, 768, 1440]) {
     await openDocument(page)
     await closeMobileFiles(page)
     await capture(page, 'reading', width)
-    await openTool(page, 'Document settings')
     await expect(
-      page.getByRole('tab', { name: 'Document details', exact: true })
-    ).toHaveAttribute('data-state', 'active')
-    await expect(
-      page.getByRole('button', { name: 'Manage branches', exact: true })
+      page.getByRole('button', { name: 'Document settings', exact: true })
     ).toHaveCount(0)
-    await page.getByRole('tab', { name: 'Branches', exact: true }).click()
-    await expect(
-      page.getByRole('button', { name: 'Create branch', exact: true })
-    ).toBeVisible()
-    await openTool(page, 'Versions')
-    await openTool(page, 'Document settings')
-    await expect(
-      page.getByRole('tab', { name: 'Branches', exact: true })
-    ).toHaveAttribute('data-state', 'active')
-    await page
-      .getByRole('tab', { name: 'Document details', exact: true })
-      .click()
-    await expect(
-      page.getByRole('button', { name: 'Edit', exact: true })
-    ).toBeVisible()
-    await capture(page, 'settings', width)
-    await backToContent(page)
     await openTool(page, 'Document AI')
     const dialog = page.getByRole('dialog', {
       name: 'Document AI',
@@ -476,7 +512,7 @@ for (const width of [390, 768, 1440]) {
         ).toBe(true)
       }
       const backgroundClick = await page
-        .getByRole('button', { name: 'Share', exact: true })
+        .getByRole('button', { name: 'Open project repository', exact: true })
         .click({ trial: true, timeout: 350 })
         .then(() => true)
         .catch(() => false)
@@ -593,53 +629,25 @@ test('mobile AI history and send shortcut stay interactive inside the native dia
   expect(api.unexpected).toEqual([])
 })
 
-test('AI yields to document forms across the mobile breakpoint', async ({
+test('legacy AI question survives viewport changes without exposing mutation forms', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   const api = await installWorkspace(page)
   await openDocument(page)
   await openTool(page, 'Document AI')
-  await page
-    .getByLabel('AI chat message', { exact: true })
-    .fill('Retain my question while editing document settings.')
-  await openTool(page, 'Document settings')
-  await page.getByRole('tab', { name: 'Branches', exact: true }).click()
-  await page.getByRole('button', { name: 'Create branch', exact: true }).click()
-  const form = page.getByRole('dialog', { name: 'Create branch', exact: true })
-  await form
-    .getByLabel('Name', { exact: true })
-    .fill('feature/retained-local-branch')
-  const formInput = await form
-    .getByLabel('Name', { exact: true })
-    .elementHandle()
-  await page.setViewportSize({ width: 390, height: 1000 })
-  await expect(form).toBeVisible()
-  await expect(form.getByLabel('Name', { exact: true })).toHaveValue(
-    'feature/retained-local-branch'
-  )
-  expect(
-    await form
-      .getByLabel('Name', { exact: true })
-      .evaluate((node, retained) => node === retained, formInput)
-  ).toBe(true)
-  expect(
-    await page
-      .locator('dialog.document-assistant-panel')
-      .evaluate((element) => element.matches(':modal'))
-  ).toBe(false)
-  await form.getByLabel('Name', { exact: true }).focus()
-  await page.keyboard.type('-mobile')
-  await expect(form.getByLabel('Name', { exact: true })).toHaveValue(
-    'feature/retained-local-branch-mobile'
-  )
-  await form.getByRole('button', { name: 'Cancel', exact: true }).click()
-  await expect(form).toHaveCount(0)
+  const input = page.getByLabel('AI chat message', { exact: true })
+  await input.fill('Retain this question while reading the saved snapshot.')
   await expect(
-    page.getByRole('dialog', { name: 'Document AI', exact: true })
-  ).toBeVisible()
-  await expect(page.getByLabel('AI chat message', { exact: true })).toHaveValue(
-    'Retain my question while editing document settings.'
+    page.getByRole('button', { name: 'Document settings', exact: true })
+  ).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 1000 })
+  await expect(input).toHaveValue(
+    'Retain this question while reading the saved snapshot.'
+  )
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await expect(input).toHaveValue(
+    'Retain this question while reading the saved snapshot.'
   )
   expect(api.requests.filter((request) => request.method === 'POST')).toEqual(
     []

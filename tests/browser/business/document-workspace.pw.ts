@@ -10,8 +10,6 @@ import {
   historicalId,
   mainDraftId,
   releaseDraftId,
-  basePath,
-  contentById,
   installWorkspace,
   chooseWorkspaceOption,
   openDocument,
@@ -19,6 +17,7 @@ import {
   closeMobileFiles,
   openTool,
 } from '../support/document-workspace'
+import { installUnimportedRepository } from '../support/repository-workflow'
 
 const evidenceDirectory = resolve(
   '../.artifacts/document-workspace-interactions-20261025-beta10/regression'
@@ -249,13 +248,13 @@ for (const width of [1440, 1920, 390]) {
     )
   })
 
-  test(`share dialog pins current version and localizes aligned expiry fields at ${width}px`, async ({
+  test(`legacy publication sharing requires the repository workflow at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
     const api = await installWorkspace(page, 'zh-CN')
     await page.goto(
-      `/documents/?team_id=workspace-team&project_id=${projectId}&document_id=${documentId}&branch_id=${mainBranchId}&version_id=${historicalId}`
+      `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}&version_id=${historicalId}`
     )
     await expect(
       page.getByRole('heading', {
@@ -263,69 +262,20 @@ for (const width of [1440, 1920, 390]) {
         exact: true,
       })
     ).toBeVisible()
-    await page.getByRole('button', { name: '分享', exact: true }).click()
-    const dialog = page.getByRole('dialog')
     await expect(
-      dialog.getByText('分享当前版本', { exact: true })
+      page.getByText('旧历史快照仅供读取。新的修改通过项目分支和提交保存。')
     ).toBeVisible()
-    await expect(dialog.getByText('2.3.0', { exact: true })).toBeVisible()
+    for (const name of ['分享', '编辑草稿', '文档设置'])
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(
+        0
+      )
     await expect(
-      dialog.getByText('当前已发布版本', { exact: true })
+      page.getByRole('button', { name: '打开项目仓库', exact: true })
     ).toBeVisible()
-    const expiry = dialog.locator('#share-expiry')
-    await expect(expiry).toHaveText('3 个月')
-    await expiry.click()
-    for (const name of ['1 个月', '3 个月', '6 个月', '1 年', '永久有效'])
-      await expect(
-        page.getByRole('option', { name, exact: true })
-      ).toBeVisible()
-    await page.getByRole('option', { name: '6 个月', exact: true }).click()
-    const expiryBounds = await expiry.boundingBox()
-    const passwordBounds = await dialog
-      .locator('#share-password-admin')
-      .boundingBox()
-    expect(expiryBounds).not.toBeNull()
-    expect(passwordBounds).not.toBeNull()
-    if (width >= 1440)
-      expect(Math.abs(expiryBounds!.y - passwordBounds!.y)).toBeLessThanOrEqual(
-        1
-      )
-    else
-      expect(passwordBounds!.y).toBeGreaterThan(
-        expiryBounds!.y + expiryBounds!.height
-      )
-    await capture(page, 'share-localized', width)
-    await dialog.locator('button[type="submit"]').click()
-    await expect
-      .poll(
-        () =>
-          api.requests.filter(
-            (request) =>
-              request.method === 'POST' && request.path === `${basePath}/shares`
-          ).length
-      )
-      .toBe(1)
-    expect(
-      api.requests.find(
-        (request) =>
-          request.method === 'POST' && request.path === `${basePath}/shares`
-      )?.body
-    ).toEqual({
-      branch_id: mainBranchId,
-      version_scope: 3,
-      version_id: historicalId,
-      expiry_preset: '6_months',
-      password: '',
-    })
-    expect(api.unexpected).toEqual([])
-    await writeFile(
-      resolve(evidenceDirectory, `share-request-${width}.json`),
-      JSON.stringify(
-        api.requests.filter((request) => request.method === 'POST'),
-        null,
-        2
-      )
+    expect(api.requests.filter((request) => request.method === 'POST')).toEqual(
+      []
     )
+    expect(api.unexpected).toEqual([])
   })
 
   test(`document tools, custom branches and AI use the selected revision at ${width}px`, async ({
@@ -469,36 +419,12 @@ for (const width of [1440, 1920, 390]) {
     await page
       .getByRole('button', { name: 'Close document AI', exact: true })
       .click()
-    await openTool(page, 'Document settings')
-    await page.getByRole('tab', { name: 'Branches', exact: true }).click()
     await expect(
-      page.getByRole('tab', { name: 'Branches', exact: true })
-    ).toHaveAttribute('data-state', 'active')
-    await page
-      .getByRole('button', { name: 'Create branch', exact: true })
-      .click()
-    const dialog = page.getByRole('dialog')
-    await dialog
-      .getByLabel('Name', { exact: true })
-      .fill('feature/webhook-contract')
-    await dialog
-      .getByLabel('Description', { exact: true })
-      .fill('Custom branch for webhook documentation')
-    await dialog.getByRole('button', { name: 'Create', exact: true }).click()
-    await expect(dialog).toHaveCount(0)
+      page.getByRole('button', { name: 'Document settings', exact: true })
+    ).toHaveCount(0)
     await expect(
-      page.getByText('feature/webhook-contract', { exact: true })
-    ).toBeVisible()
-    expect(
-      api.requests.find(
-        (request) =>
-          request.method === 'POST' && request.path === `${basePath}/branches`
-      )?.body
-    ).toEqual({
-      name: 'feature/webhook-contract',
-      description: 'Custom branch for webhook documentation',
-    })
-    await capture(page, 'settings-branches', width)
+      page.getByRole('button', { name: 'Create branch', exact: true })
+    ).toHaveCount(0)
     expect(api.unexpected).toEqual([])
     await writeFile(
       resolve(evidenceDirectory, `tools-ai-requests-${width}.json`),
@@ -511,6 +437,7 @@ for (const width of [1440, 1920, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 1000 })
     const api = await installWorkspace(page)
+    await installUnimportedRepository(page, projectId)
     await openDocument(page)
     await expect(page.locator('[data-document-page]')).toBeVisible()
     await expect(
@@ -533,8 +460,8 @@ for (const width of [1440, 1920, 390]) {
       .click()
     await expect(page).toHaveURL(new RegExp(`/documents/${documentId}\\?`))
     await expect(
-      page.getByRole('heading', {
-        name: 'Integration handbook 2.4',
+      page.getByRole('button', {
+        name: 'Import existing documents',
         exact: true,
       })
     ).toBeVisible()
@@ -599,7 +526,7 @@ for (const width of [1440, 1920, 390]) {
     expect(api.unexpected).toEqual([])
   })
 
-  test(`draft editor retains unsaved input across the document AI sidebar at ${width}px`, async ({
+  test(`legacy saved draft remains fixed while using AI at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
@@ -607,15 +534,17 @@ for (const width of [1440, 1920, 390]) {
     await page.goto(
       `/documents/${documentId}?team_id=workspace-team&project_id=${projectId}&branch_id=${mainBranchId}&content_mode=draft&draft_id=${mainDraftId}`
     )
-    await page.getByRole('button', { name: 'Edit draft', exact: true }).click()
-    const editor = page.locator('textarea[name="content"]')
-    await expect(editor).toHaveValue(contentById[mainDraftId])
-    const unsavedContent =
-      '# Unsaved integration changes\n\nKeep this exact local draft while using document tools.'
-    await editor.fill(unsavedContent)
-    await page
-      .getByRole('textbox', { name: 'Version name', exact: true })
-      .fill('2.5.0-local')
+    await expect(
+      page.getByRole('heading', {
+        name: 'Main branch working draft',
+        exact: true,
+      })
+    ).toBeVisible()
+    for (const name of ['Edit draft', 'Update', 'Approve'])
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(
+        0
+      )
+    await expect(page.locator('textarea[name=content]')).toHaveCount(0)
     await openTool(page, 'Document AI')
     await page.getByRole('tab', { name: 'AI summary', exact: true }).click()
     await expect(
@@ -623,24 +552,21 @@ for (const width of [1440, 1920, 390]) {
         exact: true,
       })
     ).toBeVisible()
-    await page.getByRole('tab', { name: 'AI chat', exact: true }).click()
-    await page
-      .getByLabel('AI chat message', { exact: true })
-      .fill('Explain this saved draft without replacing my local edits.')
     await page
       .getByRole('button', { name: 'Close document AI', exact: true })
       .click()
-    await expect(editor).toHaveValue(unsavedContent)
     await expect(
-      page.getByRole('textbox', { name: 'Version name', exact: true })
-    ).toHaveValue('2.5.0-local')
+      page.getByRole('heading', {
+        name: 'Main branch working draft',
+        exact: true,
+      })
+    ).toBeVisible()
     expect(new URL(page.url()).searchParams.get('draft_id')).toBe(mainDraftId)
     expect(
       api.requests.filter((request) =>
-        ['POST', 'PATCH'].includes(request.method)
+        ['POST', 'PATCH', 'DELETE'].includes(request.method)
       )
     ).toEqual([])
-    await capture(page, 'draft-unsaved', width)
     expect(api.unexpected).toEqual([])
   })
 
