@@ -19,6 +19,7 @@ import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
 import { publicMarkdownLink } from '@/features/public-share/public-markdown-link'
 import { attachmentBytes, chatAttachmentURL } from './ai-chat-attachments'
+import { aiChatText } from './ai-chat-errors'
 
 export function ChatCopyButton({
   content,
@@ -339,8 +340,8 @@ export const AIChatMessage = memo(function AIChatMessage({
                   className='size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none'
                 />
                 {pending && !message.content
-                  ? t('admin.ai.thinking')
-                  : t('admin.ai.thinkingSummary')}
+                  ? aiChatText(language, 'thinking')
+                  : aiChatText(language, 'thinkingSummary')}
               </summary>
               <div className='mt-2 text-xs leading-5'>
                 <AIChatMarkdown content={message.reasoning} />
@@ -377,7 +378,7 @@ export const AIChatMessage = memo(function AIChatMessage({
                 onClick={onRegenerate}
               >
                 <RotateCcw className='size-3.5' aria-hidden />
-                {t('admin.ai.regenerateAnswer')}
+                {aiChatText(language, 'regenerateAnswer')}
               </Button>
             )}
           </div>

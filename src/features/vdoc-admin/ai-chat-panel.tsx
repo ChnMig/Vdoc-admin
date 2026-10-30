@@ -49,6 +49,7 @@ import {
   chatAttachmentAccept,
   readChatAttachments,
 } from './ai-chat-attachments'
+import { aiChatErrorMessage, aiChatText } from './ai-chat-errors'
 import {
   AIChatMessage,
   ChatAttachmentList,
@@ -72,23 +73,6 @@ const reasoningEfforts = [
   'xhigh',
   'max',
 ] as const
-const aiErrorTranslations = {
-  timeout: 'admin.ai.error_timeout',
-  quota: 'admin.ai.error_quota',
-  authentication: 'admin.ai.error_authentication',
-  permission: 'admin.ai.error_permission',
-  rate_limit: 'admin.ai.error_rate_limit',
-  context_limit: 'admin.ai.error_context_limit',
-  reasoning_unsupported: 'admin.ai.error_reasoning_unsupported',
-  model_configuration: 'admin.ai.error_model_configuration',
-  output_limit: 'admin.ai.error_output_limit',
-  unavailable: 'admin.ai.error_unavailable',
-  invalid_request: 'admin.ai.error_invalid_request',
-  stream_interrupted: 'admin.ai.error_stream_interrupted',
-  network: 'admin.ai.error_network',
-  provider_error: 'admin.ai.error_provider_error',
-  context_compaction: 'admin.ai.error_context_compaction',
-} as const
 function readReasoningDefault(accountId: string): AIReasoningEffort {
   try {
     const stored = accountId
@@ -111,7 +95,7 @@ export function AIChatPanel({
   interactive: boolean
   fill?: boolean
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const queryClient = useQueryClient()
   const accountId = useAuthStore((state) => state.auth.user?.id ?? '')
   const [reasoningDefault, setReasoningDefault] = useState(() =>
@@ -682,11 +666,6 @@ export function AIChatPanel({
         : { content: draft.content.trim(), attachments: draft.attachments }
     )
   const failureDetail = getAIRequestError(error)
-  const failureKey = failureDetail
-    ? aiErrorTranslations[
-        failureDetail.code as keyof typeof aiErrorTranslations
-      ]
-    : undefined
   const diagnostics = failureDetail
     ? JSON.stringify(
         {
@@ -703,15 +682,19 @@ export function AIChatPanel({
       <AlertCircle />
       <AlertTitle>{t('admin.common.error')}</AlertTitle>
       <AlertDescription>
-        <p>{failureKey ? t(failureKey) : error.message}</p>
+        <p>
+          {failureDetail
+            ? aiChatErrorMessage(failureDetail, language)
+            : error.message}
+        </p>
         <p>
           {pendingReply?.retryOf
-            ? t('admin.ai.regenerateFailureHint')
+            ? aiChatText(language, 'regenerateFailureHint')
             : t('admin.ai.retryHint')}
         </p>
         {!!failureDetail?.retry_after_seconds && (
           <p>
-            {t('admin.ai.retryAfter', {
+            {aiChatText(language, 'retryAfter', {
               seconds: failureDetail.retry_after_seconds,
             })}
           </p>
@@ -719,11 +702,13 @@ export function AIChatPanel({
         {failureDetail && (
           <details className='min-w-0'>
             <summary className='w-fit cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring'>
-              {t('admin.ai.errorDetails')}
+              {aiChatText(language, 'errorDetails')}
             </summary>
             <dl className='mt-1 grid gap-1 text-xs break-words'>
               <div>
-                <dt className='inline'>{t('admin.ai.errorCode')}: </dt>
+                <dt className='inline'>
+                  {aiChatText(language, 'errorCode')}:{' '}
+                </dt>
                 <dd className='inline'>{failureDetail.code}</dd>
               </div>
               {!!failureDetail.upstream_status && (
@@ -734,7 +719,8 @@ export function AIChatPanel({
               )}
               {failureDetail.provider_request_id && (
                 <div>
-                  {t('admin.ai.requestId')}: {failureDetail.provider_request_id}
+                  {aiChatText(language, 'requestId')}:{' '}
+                  {failureDetail.provider_request_id}
                 </div>
               )}
               {error instanceof VdocApiError && error.envelope.trace_id && (
@@ -743,7 +729,7 @@ export function AIChatPanel({
             </dl>
             <ChatCopyButton
               content={diagnostics}
-              label={t('admin.ai.copyDiagnostics')}
+              label={aiChatText(language, 'copyDiagnostics')}
             />
           </details>
         )}
@@ -869,10 +855,12 @@ export function AIChatPanel({
           {summaryCount > 0 && !historyOpen && (
             <details className='shrink-0 text-xs text-muted-foreground'>
               <summary className='w-fit cursor-pointer rounded-sm focus-visible:ring-2 focus-visible:ring-ring'>
-                {t('admin.ai.contextCompacted')}
+                {aiChatText(language, 'contextCompacted')}
               </summary>
               <p className='pt-1 leading-5'>
-                {t('admin.ai.contextCompactedHint', { count: summaryCount })}
+                {aiChatText(language, 'contextCompactedHint', {
+                  count: summaryCount,
+                })}
               </p>
             </details>
           )}
@@ -1023,20 +1011,18 @@ export function AIChatPanel({
                       pending={pendingReply.state === 'streaming'}
                       statusText={
                         contextState?.status === 'compacting'
-                          ? t('admin.ai.contextCompacting')
+                          ? aiChatText(language, 'contextCompacting')
                           : pendingReply.reasoning && !pendingReply.answer
-                            ? t('admin.ai.thinking')
+                            ? aiChatText(language, 'thinking')
                             : undefined
                       }
                     />
                     {pendingReply.state !== 'streaming' && (
                       <div className='grid gap-2 ps-1 text-xs text-muted-foreground'>
                         <p role='status'>
-                          {t(
-                            pendingReply.state === 'stopped'
-                              ? 'admin.ai.stopped'
-                              : 'admin.ai.partialReplyHint'
-                          )}
+                          {pendingReply.state === 'stopped'
+                            ? t('admin.ai.stopped')
+                            : aiChatText(language, 'partialReplyHint')}
                         </p>
                         {pendingReply.state === 'stopped' && (
                           <Button
