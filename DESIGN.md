@@ -8,6 +8,20 @@ Vdoc Admin is the authenticated product workbench and developer portal. It uses 
 
 Use the Control Plane direction: a restrained product-tool register for operators managing reviewed documentation facts. The admin surface should feel precise, state-rich, and calm under normal office light, with workflow state, IDs, review gates, diffs, and MCP token status easier to scan than template defaults. Preserve the shadcn/Radix foundation and functional contracts, but do not preserve the previous warm starter-template styling.
 
+## Repository workspace (0.4 beta)
+
+This section defines the normal document workflow and takes precedence over the draft/version interaction descriptions below, which remain relevant to legacy deep links. Preserve the Control Plane visual direction, theme tokens, type scale, shared selects, buttons and reader. This is a workflow extension within Operate and Read surfaces.
+
+The independent document workspace retains its project file rail. The center header identifies the project, a labeled project-branch selector, the fixed commit ID, protected state and uncommitted changes. Read, Edit, Commit history, Compare, Merge requests, Releases, AI, and Activity & subscriptions form one horizontally scrollable task row. On phones the file rail uses the existing left sheet; labels and task controls remain reachable without page overflow. Dense tool content uses divided lists and bounded controls. The existing reader supplies source/preview, copy and exact download behavior.
+
+Reading and the file tree come from the selected immutable commit. A missing or unauthorized branch, commit or body has an explicit local error and never borrows another snapshot. Keep the reader mounted through task switches. Wait for source content before mounting an editor. Retain unsaved edits for each branch/document during local navigation and clear scope on project/account changes. Saving uses the original head and generation plus a retry key; conflicts preserve input and expose a new-branch recovery action. Users edit source, name, path and optional commit message. No version-number input appears. New files use one atomic repository commit, with a working branch for protected destinations.
+
+History identifies commit, parents, actor, time and files. Comparisons identify fixed endpoints and preserve source line-ending and final-newline differences; semantic output is secondary. Merge requests display fixed source/target commits and generations. Review merge candidate shows target-to-candidate changes using the actual server candidate files, including automatic merges. A separate Compare inputs action describes source versus target. Stale requests cannot be approved or merged. Conflict resolution presents the full desired tree and requires explicit choices for conflicting files; its result creates a new request for fresh review.
+
+Release controls name the exact commit and require an explicit administrator action. Release identifiers are read-only server output. Share dialogs pin release and document, with expiry/password controls and one-time capability handling. AI analysis displays its fixed target and optional baseline. Activity shows durable event sequence and commit context; administrator subscription controls expose in-app/webhook delivery, pause/resume, failures and retry. Secrets appear only on creation and remain scoped to the active account/project.
+
+When the server marks import_required, show the administrative import action and explain the writer's next step. Disable repository writes until import completes. Existing links and shares remain readable. Empty metadata alone must not be described as lost history or block a new project.
+
 ## Color
 
 Theme tokens live in `src/styles/theme.css` as OKLCH custom properties and Tailwind v4 `@theme inline` mappings.
@@ -101,7 +115,7 @@ Maintain WCAG 2.2 AA. Preserve `SkipToMain`, semantic tables and forms, visible 
 ## Implementation Notes
 
 - Main style files: `src/styles/index.css` and `src/styles/theme.css`; motion classes are shared by the app shell, task panes, tree, and assistant.
-- Document interaction sources: `document-workspace-detail.tsx`, `document-workspace-content.tsx`, `document-file-tree.tsx`, `diffs-page.tsx`, and `versions-page.tsx` under `src/features/vdoc-admin/`.
+- Normal document interaction sources: `repository-workspace.tsx`, `repository-editor.tsx`, `repository-history-tools.tsx`, `repository-merge-preview.tsx`, `repository-merge-resolver.tsx`, `repository-automation.tsx` and `document-file-tree.tsx` under `src/features/vdoc-admin/`. `document-workspace-detail.tsx`, `diffs-page.tsx` and `versions-page.tsx` also preserve legacy deep links.
 - Main shell files: `src/main.tsx`, `src/routes/_authenticated/route.tsx`, `src/components/layout/authenticated-layout.tsx`, and `src/features/vdoc-admin/pages.tsx`.
 - Generated `src/routeTree.gen.ts` is not a design source and should not be edited.
 - Verify with `pnpm lint`, `pnpm test`, `pnpm build`, and `pnpm format:check` from `Vdoc-admin/` when formatting changes are in scope.

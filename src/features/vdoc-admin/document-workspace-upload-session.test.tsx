@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { bindQueryCacheToAuth } from '@/lib/auth-query-cache'
-import type { DocumentDTO, ProjectDTO } from '@/lib/vdoc-api'
+import type { ProjectDTO } from '@/lib/vdoc-api'
 import { LanguageProvider } from '@/context/language-provider'
 import { DocumentWorkspacePage } from './document-workspace-page'
 
@@ -18,6 +18,14 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
   ...api,
+}))
+const repository = vi.hoisted(() => ({
+  listRepositoryBranches: vi.fn(),
+  getRepositoryCommit: vi.fn(),
+}))
+vi.mock('@/lib/repository-api', async (load) => ({
+  ...(await load<typeof import('@/lib/repository-api')>()),
+  ...repository,
 }))
 vi.mock('./document-workspace-detail', () => ({
   DocumentWorkspaceDetail: () => null,
@@ -41,22 +49,46 @@ const project: ProjectDTO = {
   created_at: '',
   updated_at: '',
 }
-const created: DocumentDTO = {
-  id: 'created-document',
+const committed = {
+  id: 'server-commit',
   project_id: project.id,
-  name: 'Private upload',
-  document_type: 3,
-  file_name: 'private.txt',
-  status: 1,
+  parent_ids: ['root'],
+  tree_hash: 'tree',
+  message: '',
   created_by: userA.id,
   created_at: '',
-  updated_at: '',
+  files: [
+    {
+      document_id: 'created-document',
+      relative_path: 'private.txt',
+      name: 'Private upload',
+      document_type: 3,
+      content_hash: 'hash',
+    },
+  ],
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   document.cookie = 'vdoc-admin-language=en; path=/'
   useAuthStore.getState().auth.setSession(userA, 'account-a-token')
+  repository.listRepositoryBranches.mockResolvedValue([
+    {
+      id: 'working',
+      project_id: project.id,
+      name: 'main',
+      head_commit_id: 'root',
+      generation: 0,
+      is_protected: false,
+      created_by: userA.id,
+      created_at: '',
+    },
+  ])
+  repository.getRepositoryCommit.mockResolvedValue({
+    ...committed,
+    id: 'root',
+    files: [],
+  })
   api.listProjects.mockResolvedValue({ items: [project], total: 1 })
   api.listDocuments.mockResolvedValue({ items: [], total: 0 })
   api.listDocumentFolders.mockResolvedValue({ items: [], total: 0 })
@@ -76,14 +108,13 @@ describe('initial document upload session ownership', () => {
         await vi.importActual<typeof import('@/lib/vdoc-api')>('@/lib/vdoc-api')
       const originalAdapter = actual.vdocApi.defaults.adapter
       const transport = vi.fn(async (config) => ({
-        data: { code: 200, status: 'OK', timestamp: 0, detail: created },
+        data: { code: 200, status: 'OK', timestamp: 0, detail: committed },
         status: 200,
         statusText: 'OK',
         headers: {},
         config,
       }))
       actual.vdocApi.defaults.adapter = transport
-      api.createDocument.mockImplementation(actual.createDocument)
       const onError = vi.fn()
       const client = new QueryClient({
         defaultOptions: {
@@ -131,9 +162,11 @@ describe('initial document upload session ownership', () => {
       )
       try {
         const user = userEvent.setup()
-        await user.click(
-          await view.findByRole('button', { name: 'New document' })
-        )
+        const newButton = await view.findByRole('button', {
+          name: 'New document',
+        })
+        await waitFor(() => expect(newButton).toBeEnabled())
+        await user.click(newButton)
         const dialog = within(
           view.getByRole('dialog', { name: 'New document' })
         )
@@ -169,10 +202,19 @@ describe('initial document upload session ownership', () => {
             'account-a-token'
           )
           expect(JSON.parse(transport.mock.calls[0][0].data)).toMatchObject({
-            initial_content: { content: 'Private text' },
+            changes: [
+              {
+                document_id: '',
+                content: 'Private text',
+                relative_path: 'private.txt',
+              },
+            ],
           })
           expect(changes).toHaveBeenCalledWith(
-            expect.objectContaining({ document_id: created.id }),
+            expect.objectContaining({
+              document_id: 'created-document',
+              commit_id: 'server-commit',
+            }),
             { replace: false }
           )
         } else {

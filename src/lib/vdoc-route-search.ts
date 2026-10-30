@@ -18,6 +18,23 @@ export const vdocRouteSearchSchema = z.object({
   project_id: optionalEntityId,
   folder_id: optionalEntityId,
   document_id: optionalEntityId,
+  repository_branch_id: optionalEntityId,
+  commit_id: optionalEntityId,
+  repository_view: z.catch(
+    z.optional(
+      z.enum([
+        'content',
+        'edit',
+        'history',
+        'compare',
+        'merges',
+        'releases',
+        'events',
+        'ai',
+      ])
+    ),
+    undefined
+  ),
   branch_id: optionalEntityId,
   draft_id: optionalEntityId,
   version_id: optionalEntityId,

@@ -40,6 +40,7 @@ import { RepositoryLink } from '@/components/repository-link'
 import { DocumentReadingPreferences } from '@/features/document-reader/document-reader'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceContent } from './document-workspace-content'
+import { emptyDocumentSelection } from './document-workspace-model'
 import { DocumentWorkspaceToolbar } from './document-workspace-toolbar'
 import { LoadingErrorState } from './page-shared'
 import { useDocumentReadingSelection } from './use-document-reading-selection'
@@ -91,8 +92,9 @@ export function DocumentWorkspaceDetail({
   projectId,
   document,
   search,
-  canManage,
-  canWrite,
+  canManage: requestedCanManage,
+  canWrite: requestedCanWrite,
+  legacyReadOnly = false,
   interactive,
   onSearchChange,
   navigationActions,
@@ -103,16 +105,23 @@ export function DocumentWorkspaceDetail({
   search: VdocRouteSearch
   canManage: boolean
   canWrite: boolean
+  legacyReadOnly?: boolean
   interactive: boolean
   onSearchChange: (patch: Partial<VdocRouteSearch>, replace?: boolean) => void
   navigationActions?: ReactNode
   projectName?: string
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const canManage = requestedCanManage && !legacyReadOnly
+  const canWrite = requestedCanWrite && !legacyReadOnly
   const { selection, branches, branch, versions, drafts, queryStates } =
     useDocumentReadingSelection(projectId, document, search)
   const requestedView = search.workspace_view ?? 'content'
-  const view = requestedView === 'ai' ? 'content' : requestedView
+  const view =
+    requestedView === 'ai' ||
+    (legacyReadOnly && ['drafts', 'manage', 'activity'].includes(requestedView))
+      ? 'content'
+      : requestedView
   const [assistantOpen, setAssistantOpen] = useState(requestedView === 'ai')
   const [assistantVisited, setAssistantVisited] = useState(assistantOpen)
   const [assistantExpanded, setAssistantExpanded] = useState(false)
@@ -257,7 +266,15 @@ export function DocumentWorkspaceDetail({
     label: string
     icon: typeof Clock3
   }[] = [
-    { value: 'activity', label: t('reader.activity'), icon: History },
+    ...(!legacyReadOnly
+      ? [
+          {
+            value: 'activity' as const,
+            label: t('reader.activity'),
+            icon: History,
+          },
+        ]
+      : []),
     { value: 'versions', label: t('admin.workspace.versions'), icon: Clock3 },
     {
       value: 'diffs',
@@ -386,6 +403,32 @@ export function DocumentWorkspaceDetail({
           <RepositoryLink />
         </div>
       </header>
+      {legacyReadOnly && (
+        <div className='flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-3 text-sm sm:px-6'>
+          <p className='text-muted-foreground'>
+            {language === 'zh-CN'
+              ? '旧历史快照仅供读取。新的修改通过项目分支和提交保存。'
+              : 'Legacy snapshots are read-only. Save new changes through project branches and commits.'}
+          </p>
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={() =>
+              onSearchChange({
+                ...emptyDocumentSelection,
+                document_id: document.id,
+                folder_id: undefined,
+                repository_branch_id: undefined,
+                commit_id: undefined,
+                repository_view: 'content',
+                workspace_view: 'content',
+              })
+            }
+          >
+            {language === 'zh-CN' ? '打开项目仓库' : 'Open project repository'}
+          </Button>
+        </div>
+      )}
       <div className='flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2 sm:px-6'>
         <DocumentWorkspaceToolbar
           selection={selection}

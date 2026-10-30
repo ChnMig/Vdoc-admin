@@ -104,7 +104,7 @@ describe('document file and folder fields', () => {
       document_type: 3,
       file_name: 'notes.txt',
       folder_id: null,
-      initial_content: { content, version_name: '0.1.0' },
+      initial_content: { content },
     })
   })
 
@@ -119,7 +119,7 @@ describe('document file and folder fields', () => {
     data.set('initial_file', new File([], 'empty.txt'))
     expect(
       (await documentPayloadFromFormData(data, t)).initial_content
-    ).toEqual({ content: '', version_name: '0.1.0' })
+    ).toEqual({ content: '' })
     data.set('initial_file', new File([new Uint8Array([0xff])], 'invalid.txt'))
     await expect(documentPayloadFromFormData(data, t)).rejects.toThrow('UTF-8')
   })
@@ -135,7 +135,6 @@ describe('document file and folder fields', () => {
       (await documentPayloadFromFormData(data, t)).initial_content
     ).toEqual({
       content,
-      version_name: '0.1.0',
     })
   })
 

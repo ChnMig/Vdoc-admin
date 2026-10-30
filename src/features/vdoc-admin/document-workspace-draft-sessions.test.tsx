@@ -30,6 +30,16 @@ const api = vi.hoisted(() => ({
   listAIChatSessions: vi.fn(),
   updateDraft: vi.fn(),
 }))
+// Keep exercising the retained legacy renderer in isolation. The actual beta
+// entry makes it read-only; legacy-repository-compat.test.tsx verifies that policy.
+vi.mock('./document-workspace-detail', async (load) => {
+  const actual = await load<typeof import('./document-workspace-detail')>()
+  return {
+    DocumentWorkspaceDetail: (
+      props: Parameters<typeof actual.DocumentWorkspaceDetail>[0]
+    ) => <actual.DocumentWorkspaceDetail {...props} legacyReadOnly={false} />,
+  }
+})
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
   ...api,
@@ -132,9 +142,21 @@ function renderWorkspace() {
           Change project
         </button>
         <DocumentWorkspacePage
-          search={search}
+          search={{
+            ...search,
+            branch_id: search.branch_id ?? `${search.document_id}-branch`,
+          }}
           onSearchChange={(patch) =>
-            setSearch((current) => ({ ...current, ...patch }))
+            setSearch((current) => ({
+              ...current,
+              ...patch,
+              ...(patch.document_id && patch.document_id !== current.document_id
+                ? {
+                    branch_id: `${patch.document_id}-branch`,
+                    draft_id: `${patch.document_id}-draft`,
+                  }
+                : {}),
+            }))
           }
         />
       </>

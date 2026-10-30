@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
 import { translate } from '@/lib/i18n'
+import { listRepositoryBranches } from '@/lib/repository-api'
+import { createRepositoryFile } from '@/lib/repository-new-file'
 import type {
   createDocument,
   createDocumentFolder,
@@ -40,6 +42,11 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
   ...api,
+}))
+vi.mock('@/lib/repository-new-file', () => ({ createRepositoryFile: vi.fn() }))
+vi.mock('@/lib/repository-api', async (load) => ({
+  ...(await load<typeof import('@/lib/repository-api')>()),
+  listRepositoryBranches: vi.fn(),
 }))
 vi.mock('@/components/layout/header', () => ({
   Header: ({ children }: { children: ReactNode }) => (
@@ -192,6 +199,18 @@ function setup(
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(listRepositoryBranches).mockResolvedValue([
+    {
+      id: 'main',
+      project_id: 'project-a',
+      name: 'main',
+      head_commit_id: 'root',
+      generation: 0,
+      is_protected: true,
+      created_by: 'admin',
+      created_at: timestamp,
+    },
+  ])
   document.cookie = 'vdoc-admin-language=en; Path=/'
   useAuthStore.getState().auth.setUser(user)
   useVdocContextStore.getState().reset()
@@ -741,7 +760,7 @@ describe('workspace hierarchy', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('opens an uploaded first draft while preserving the returned draft and branch', async () => {
+  it('creates an uploaded file as a system-numbered commit and opens that exact snapshot', async () => {
     useAuthStore.getState().auth.setUser({ ...user, is_super_admin: true })
     // JSDOM does not copy userEvent's FileList into FormData(form).
     // Bridge that browser behavior while retaining the real form submission.
@@ -762,11 +781,19 @@ describe('workspace hierarchy', () => {
         }
       }
     )
-    api.createDocument.mockResolvedValue({
-      ...makeDocument('uploaded', 'Uploaded guide', 3, null, 'seed.txt'),
-      initial_draft_id: 'first-draft',
-      initial_branch_id: 'first-branch',
-      workflow_state: 'draft',
+    vi.mocked(createRepositoryFile).mockResolvedValue({
+      documentId: 'uploaded',
+      branchId: 'first-branch',
+      commit: {
+        id: 'server-commit',
+        project_id: 'project-a',
+        parent_ids: [],
+        tree_hash: 'tree',
+        message: '',
+        created_by: 'admin',
+        created_at: timestamp,
+        files: [],
+      },
     })
     const onSearchChange = vi.fn()
     const onDocumentOpen = vi.fn()
@@ -786,7 +813,7 @@ describe('workspace hierarchy', () => {
     const dialog = within(
       view.screen.getByRole('dialog', { name: 'Create document' })
     )
-    await view.user.type(dialog.getByLabelText('Name'), 'Uploaded guide')
+    await view.user.type(await dialog.findByLabelText('Name'), 'Uploaded guide')
     await view.user.upload(
       dialog.getByLabelText(translate('en', 'admin.documentForm.upload')),
       new File(['Initial draft content'], 'seed.txt', { type: 'text/plain' })
@@ -794,7 +821,7 @@ describe('workspace hierarchy', () => {
     await view.user.click(dialog.getByRole('button', { name: 'Create' }))
 
     await waitFor(() =>
-      expect(api.createDocument).toHaveBeenCalledWith(
+      expect(createRepositoryFile).toHaveBeenCalledWith(
         'project-a',
         expect.objectContaining({
           name: 'Uploaded guide',
@@ -803,8 +830,10 @@ describe('workspace hierarchy', () => {
           folder_id: null,
           initial_content: {
             content: 'Initial draft content',
-            version_name: '0.1.0',
           },
+        }),
+        expect.objectContaining({
+          attempt: expect.objectContaining({ key: expect.any(String) }),
         })
       )
     )
@@ -812,14 +841,16 @@ describe('workspace hierarchy', () => {
       expect(onSearchChange).toHaveBeenCalledWith(
         expect.objectContaining({
           document_id: 'uploaded',
-          workspace_view: 'drafts',
-          draft_id: 'first-draft',
-          branch_id: 'first-branch',
+          repository_view: 'content',
+          commit_id: 'server-commit',
+          repository_branch_id: 'first-branch',
+          draft_id: undefined,
         })
       )
     )
     expect(onSearchChange).toHaveBeenCalledOnce()
     expect(onDocumentOpen).not.toHaveBeenCalled()
+    expect(api.createDocument).not.toHaveBeenCalled()
   })
 
   it('distinguishes hierarchy levels and all three document formats with icons', async () => {

@@ -380,7 +380,7 @@ const en = {
       location: 'Save location',
       upload: 'Initial document file (optional)',
       uploadHint:
-        'Upload YAML, JSON, Markdown, or TXT to create the first draft. It will still need review and publication.',
+        'Upload YAML, JSON, Markdown, or TXT to create the first commit. Review and publication are separate actions.',
       uploadInvalidExtension: 'Choose a YAML, JSON, Markdown, or TXT file.',
       uploadInvalidUtf8: 'The file must use UTF-8 text encoding.',
       filenameInvalid:
@@ -1640,7 +1640,7 @@ const en = {
       title:
         'Reviewed documentation operations, without losing the state trail.',
       description:
-        'Sign in to review drafts, compare versions, inspect source facts, and manage MCP access from one calm operator surface.',
+        'Sign in to review commits, compare changes, publish releases, and manage MCP access.',
       sourceTitle: 'Source of truth',
       sourceDescription:
         'Versions, diffs, tokens, and review state remain visible after authentication.',
@@ -2169,7 +2169,7 @@ const zhCN = {
       location: '保存位置',
       upload: '初始文档文件（可选）',
       uploadHint:
-        '可上传 YAML、JSON、Markdown 或 TXT，内容将成为首个草稿，仍需审核和发布。',
+        '可上传 YAML、JSON、Markdown 或 TXT，内容将成为首个提交；审阅和发布是独立操作。',
       uploadInvalidExtension: '请选择 YAML、JSON、Markdown 或 TXT 文件。',
       uploadInvalidUtf8: '文件必须使用 UTF-8 文本编码。',
       filenameInvalid: '文件名不能包含路径分隔符、控制字符，或仅使用点号。',
@@ -3360,8 +3360,7 @@ const zhCN = {
     controlPlane: {
       label: '控制平面',
       title: '审阅后的文档操作，始终保留状态轨迹。',
-      description:
-        '登录后可在一个冷静的操作界面中审阅草稿、比较版本、检查源事实并管理 MCP 访问。',
+      description: '登录后可审阅提交、比较改动、发布正式内容并管理 MCP 访问。',
       sourceTitle: '事实源',
       sourceDescription: '版本、差异、令牌和审阅状态在认证后保持可见。',
       ready: '就绪',

@@ -6,6 +6,9 @@ export function clearDocumentContext(search: VdocRouteSearch): VdocRouteSearch {
   return {
     ...search,
     document_id: undefined,
+    repository_branch_id: undefined,
+    commit_id: undefined,
+    repository_view: undefined,
     branch_id: undefined,
     draft_id: undefined,
     version_id: undefined,

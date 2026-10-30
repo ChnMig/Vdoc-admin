@@ -21,9 +21,14 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import {
+  bootstrapRepository,
+  listRepositoryBranches,
+  repositoryKeys,
+} from '@/lib/repository-api'
+import type { RepositoryNewFileAttempt } from '@/lib/repository-new-file'
 import { cn } from '@/lib/utils'
 import {
-  createDocument,
   createDocumentFolder,
   createProject,
   createTeam,
@@ -53,10 +58,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import {
-  DocumentFormFields,
-  documentPayloadFromFormData,
-} from './document-form-fields'
 import { DocumentTypeIcon } from './document-type-icon'
 import {
   documentSelection,
@@ -80,6 +81,11 @@ import { WorkspaceEmbedding } from './workspace-embedding'
 
 const ProjectsPage = lazy(() =>
   import('./projects-page').then((module) => ({ default: module.ProjectsPage }))
+)
+const DocumentFormFields = lazy(() =>
+  import('./document-form-fields').then((module) => ({
+    default: module.DocumentFormFields,
+  }))
 )
 const TeamsPage = lazy(() =>
   import('./teams-page').then((module) => ({ default: module.TeamsPage }))
@@ -117,6 +123,7 @@ export function WorkspaceHierarchyPage({
   const [panel, setPanel] = useState<HubPanel>('browse')
   const [filter, setFilter] = useState('')
   const [fileFilter, setFileFilter] = useState('')
+  const newFileAttempt = useRef<RepositoryNewFileAttempt | undefined>(undefined)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [createProjectScope, setCreateProjectScope] = useState<string | null>(
     null
@@ -194,6 +201,19 @@ export function WorkspaceHierarchyPage({
     queryKey: ['documents', projectId, 'all'],
     queryFn: ({ signal }) => listDocuments(projectId, undefined, { signal }),
     enabled: Boolean(projectId),
+  })
+  const repositoryBranchesQuery = useQuery({
+    queryKey: repositoryKeys.branches(projectId),
+    queryFn: ({ signal }) => listRepositoryBranches(projectId, signal),
+    enabled: Boolean(projectId),
+  })
+  const importRequired =
+    repositoryBranchesQuery.data?.some((branch) => branch.import_required) ??
+    false
+  const bootstrapMutation = useMutation({
+    mutationFn: () => bootstrapRepository(projectId),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: repositoryKeys.all(projectId) }),
   })
   const foldersQuery = useQuery({
     queryKey: ['document-folders', projectId, sessionVersion],
@@ -298,29 +318,58 @@ export function WorkspaceHierarchyPage({
         formData: FormData
       }
     ) => {
+      const { documentPayloadFromFormData } =
+        await import('./document-form-fields')
       const payload = await documentPayloadFromFormData(request.formData, t)
       if (!ownsSession(request.sessionVersion))
         throw new Error(t('admin.common.error'))
-      return createDocument(request.projectId, payload)
+      const directory = String(
+        request.formData.get('relative_directory') ?? folder?.path ?? ''
+      )
+      const newBranchName = String(
+        request.formData.get('new_branch_name') ?? ''
+      )
+      const fingerprint = JSON.stringify([
+        request.projectId,
+        payload,
+        directory,
+        newBranchName,
+      ])
+      if (newFileAttempt.current?.fingerprint !== fingerprint)
+        newFileAttempt.current = { fingerprint, key: crypto.randomUUID() }
+      const { createRepositoryFile } = await import('@/lib/repository-new-file')
+      return createRepositoryFile(request.projectId, payload, {
+        directory,
+        newBranchName,
+        attempt: newFileAttempt.current,
+        isCurrent: () =>
+          currentScope.current === request.owner &&
+          ownsSession(request.sessionVersion),
+      })
     },
     onSuccess: async (result, request) => {
-      if (!ownsSession(request.sessionVersion)) return
+      if (!result || !ownsSession(request.sessionVersion)) return
       await invalidateVdocQueries(client, {
         kind: 'document',
         projectId: request.projectId,
-        documentId: result.id,
+        documentId: result.documentId,
+      })
+      client.setQueryData(
+        repositoryKeys.commit(request.projectId, result.commit.id),
+        result.commit
+      )
+      await client.invalidateQueries({
+        queryKey: repositoryKeys.all(request.projectId),
       })
       if (currentScope.current !== request.owner) return
-      // Preserve an uploaded first draft when the router opens the document page.
       changeSearch({
-        ...documentSelection(result),
-        ...(result.initial_draft_id
-          ? {
-              workspace_view: 'drafts',
-              draft_id: result.initial_draft_id,
-              branch_id: result.initial_branch_id,
-            }
-          : {}),
+        ...emptyDocumentSelection,
+        document_id: result.documentId,
+        repository_branch_id: result.branchId,
+        commit_id: result.commit.id,
+        repository_view: 'content',
+        workspace_view: 'content',
+        folder_id: undefined,
       })
     },
   })
@@ -460,6 +509,42 @@ export function WorkspaceHierarchyPage({
             {t('admin.hierarchy.description')}
           </p>
         </div>
+        {projectId && importRequired && (
+          <Alert className='mb-5'>
+            <AlertDescription className='grid gap-3'>
+              <p>
+                {language === 'zh-CN'
+                  ? '此项目有原有文档历史。管理员需先明确导入，之后才能保存新的提交；原链接和分享会保留。'
+                  : 'This project has existing document history. An administrator must explicitly import it before new commits can be saved. Existing links and shares remain available.'}
+              </p>
+              {canManageProject ? (
+                <Button
+                  className='w-fit'
+                  size='sm'
+                  disabled={bootstrapMutation.isPending}
+                  onClick={() => bootstrapMutation.mutate()}
+                >
+                  {language === 'zh-CN'
+                    ? '导入已有文档'
+                    : 'Import existing documents'}
+                </Button>
+              ) : (
+                <p>
+                  {language === 'zh-CN'
+                    ? '请联系项目管理员完成导入。'
+                    : 'Ask a project administrator to complete the import.'}
+                </p>
+              )}
+              <LoadingErrorState
+                state={{
+                  isLoading: false,
+                  isError: bootstrapMutation.isError,
+                  error: bootstrapMutation.error,
+                }}
+              />
+            </AlertDescription>
+          </Alert>
+        )}
         <div className='grid min-w-0 overflow-hidden rounded-lg border bg-card lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[15.5rem_minmax(0,1fr)]'>
           <aside
             aria-label={t('admin.hierarchy.navigation')}
@@ -882,7 +967,10 @@ export function WorkspaceHierarchyPage({
                                         pending={documentMutation.isPending}
                                         disabled={
                                           foldersQuery.isLoading ||
-                                          foldersQuery.isError
+                                          foldersQuery.isError ||
+                                          importRequired ||
+                                          repositoryBranchesQuery.isLoading ||
+                                          repositoryBranchesQuery.isError
                                         }
                                         submissionScope={scope}
                                         onSubmit={(formData) =>
@@ -894,9 +982,32 @@ export function WorkspaceHierarchyPage({
                                           })
                                         }
                                       >
-                                        <DocumentFormFields
-                                          projectId={projectId}
-                                          initialFolderId={folderId}
+                                        <Suspense
+                                          fallback={
+                                            <p role='status'>
+                                              {t('admin.common.loading')}
+                                            </p>
+                                          }
+                                        >
+                                          <DocumentFormFields
+                                            projectId={projectId}
+                                            repositoryDirectory={
+                                              folder?.path ?? ''
+                                            }
+                                          />
+                                        </Suspense>
+                                        <TextField
+                                          name='new_branch_name'
+                                          label={
+                                            language === 'zh-CN'
+                                              ? '新分支名称（可选）'
+                                              : 'New branch name (optional)'
+                                          }
+                                          description={
+                                            language === 'zh-CN'
+                                              ? '保护分支会自动创建工作分支；提交编号由系统生成。'
+                                              : 'A working branch is created for protected branches. Commit IDs are generated by the server.'
+                                          }
                                         />
                                       </FormDialog>
                                     </>

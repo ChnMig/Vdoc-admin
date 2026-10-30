@@ -16,9 +16,10 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
+import { repositoryKeys } from '@/lib/repository-api'
+import type { RepositoryNewFileAttempt } from '@/lib/repository-new-file'
 import { cn } from '@/lib/utils'
 import {
-  createDocument,
   createDocumentFolder,
   listDocumentFolders,
   listDocuments,
@@ -60,10 +61,20 @@ import {
   activeProjectRole,
   fieldValue,
 } from './page-utils'
+import {
+  isLegacyRepositorySelection,
+  projectRepositoryTree,
+  useRepositorySnapshot,
+} from './use-repository-snapshot'
 
 const DocumentWorkspaceDetail = lazy(() =>
   import('./document-workspace-detail').then((module) => ({
     default: module.DocumentWorkspaceDetail,
+  }))
+)
+const RepositoryWorkspace = lazy(() =>
+  import('./repository-workspace').then((module) => ({
+    default: module.RepositoryWorkspace,
   }))
 )
 
@@ -76,7 +87,7 @@ export function DocumentWorkspacePage({
   onSearchChange,
   defaultView = 'content',
 }: DocumentWorkspacePageProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.auth.user)
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -84,6 +95,7 @@ export function DocumentWorkspacePage({
   const routeSearch = onSearchChange ? search : localSearch
   const [filesVisible, setFilesVisible] = useState(true)
   const [mobileFilesOpen, setMobileFilesOpen] = useState(false)
+  const newFileAttempt = useRef<RepositoryNewFileAttempt | undefined>(undefined)
   const isMobile = useIsMobile()
   const changeSearch = (patch: Partial<VdocRouteSearch>, replace = false) => {
     if (onSearchChange) onSearchChange(patch, { replace })
@@ -136,6 +148,21 @@ export function DocumentWorkspacePage({
     queryFn: ({ signal }) => listDocuments(projectId, undefined, { signal }),
     enabled: Boolean(projectId),
   })
+  const legacySelection =
+    isLegacyRepositorySelection(routeSearch) || defaultView !== 'content'
+  const repository = useRepositorySnapshot(
+    projectId,
+    routeSearch,
+    !legacySelection
+  )
+  const legacyDocuments = documentsQuery.data?.items ?? []
+  const repositoryTree = projectRepositoryTree(
+    repository.commitQuery.data,
+    legacyDocuments
+  )
+  const visibleDocuments = legacySelection
+    ? legacyDocuments
+    : repositoryTree.documents
   const foldersQuery = useQuery({
     queryKey: ['document-folders', projectId, sessionVersion],
     queryFn: ({ signal }) => listDocumentFolders(projectId, { signal }),
@@ -149,15 +176,17 @@ export function DocumentWorkspacePage({
   const role = activeProjectRole(membersQuery.data?.items, user?.id)
   const canManage = Boolean(user?.is_super_admin || role === ROLE_ADMIN)
   const canMutate = canManage && project?.status === ACTIVE_STATUS
-  const document = documentsQuery.data?.items.find(
-    (item) => item.id === routeSearch.document_id
-  )
+  const document =
+    visibleDocuments.find((item) => item.id === routeSearch.document_id) ??
+    legacyDocuments.find((item) => item.id === routeSearch.document_id)
   const canWrite = Boolean(
     (user?.is_super_admin || (role ?? 0) >= ROLE_WRITER) &&
     project?.status === ACTIVE_STATUS &&
-    document?.status === ACTIVE_STATUS
+    (!document || document.status === ACTIVE_STATUS)
   )
-  const folders = foldersQuery.data?.items ?? []
+  const folders = legacySelection
+    ? (foldersQuery.data?.items ?? [])
+    : repositoryTree.folders
   const folderId =
     routeSearch.folder_id === 'root'
       ? ''
@@ -176,8 +205,11 @@ export function DocumentWorkspacePage({
         (routeSearch.team_id &&
           !teamOptions.some((team) => team.value === teamId)) ||
         (routeSearch.project_id && !project))) ||
-    (documentsQuery.isSuccess && routeSearch.document_id && !document) ||
-    (foldersQuery.isSuccess && folderId && !folder)
+    (legacySelection &&
+      documentsQuery.isSuccess &&
+      routeSearch.document_id &&
+      !document) ||
+    (legacySelection && foldersQuery.isSuccess && folderId && !folder)
   )
   const view = routeSearch.workspace_view ?? defaultView
   const setStoredProject = useVdocContextStore((state) => state.setProjectId)
@@ -202,7 +234,30 @@ export function DocumentWorkspacePage({
         // FileReader may finish after sign-out, reauthentication, or navigation.
         // The API captures the current token when dispatched, so check again.
         if (!ownsRequest()) return
-        const result = await createDocument(request.projectId, payload)
+        const directory = String(
+          request.formData.get('relative_directory') ?? folder?.path ?? ''
+        )
+        const newBranchName = String(
+          request.formData.get('new_branch_name') ?? ''
+        )
+        const fingerprint = JSON.stringify([
+          request.projectId,
+          repository.branch?.id,
+          payload,
+          directory,
+          newBranchName,
+        ])
+        if (newFileAttempt.current?.fingerprint !== fingerprint)
+          newFileAttempt.current = { fingerprint, key: crypto.randomUUID() }
+        const { createRepositoryFile } =
+          await import('@/lib/repository-new-file')
+        const result = await createRepositoryFile(request.projectId, payload, {
+          branch: repository.branch,
+          directory,
+          newBranchName,
+          attempt: newFileAttempt.current,
+          isCurrent: ownsRequest,
+        })
         if (
           useAuthStore.getState().auth.sessionVersion === request.sessionVersion
         )
@@ -220,7 +275,14 @@ export function DocumentWorkspacePage({
       await invalidateVdocQueries(queryClient, {
         kind: 'document',
         projectId: request.projectId,
-        documentId: result.id,
+        documentId: result.documentId,
+      })
+      queryClient.setQueryData(
+        repositoryKeys.commit(request.projectId, result.commit.id),
+        result.commit
+      )
+      await queryClient.invalidateQueries({
+        queryKey: repositoryKeys.all(request.projectId),
       })
       if (
         currentScope.current !== request.owner ||
@@ -228,14 +290,13 @@ export function DocumentWorkspacePage({
       )
         return
       changeSearch({
-        ...documentSelection(result),
-        ...(result.initial_draft_id
-          ? {
-              workspace_view: 'drafts',
-              draft_id: result.initial_draft_id,
-              branch_id: result.initial_branch_id,
-            }
-          : {}),
+        ...emptyDocumentSelection,
+        document_id: result.documentId,
+        repository_branch_id: result.branchId,
+        commit_id: result.commit.id,
+        repository_view: 'content',
+        workspace_view: 'content',
+        folder_id: undefined,
       })
     },
   })
@@ -327,7 +388,13 @@ export function DocumentWorkspacePage({
               submitLabel={t('admin.common.create')}
               triggerSize='sm'
               pending={createMutation.isPending}
-              disabled={unavailable}
+              disabled={
+                unavailable ||
+                repository.branch?.import_required ||
+                (!legacySelection &&
+                  (repository.branchesQuery.isPending ||
+                    repository.branchesQuery.isError))
+              }
               submissionScope={`${effectiveScope}:${folderId}`}
               onSubmit={(formData) =>
                 createMutation.mutateAsync({
@@ -340,35 +407,50 @@ export function DocumentWorkspacePage({
             >
               <DocumentFormFields
                 projectId={projectId}
-                initialFolderId={folderId}
+                repositoryDirectory={folder?.path ?? ''}
               />
-            </FormDialog>
-            <FormDialog
-              title={t('admin.workspace.newFolder')}
-              submitLabel={t('admin.workspace.createFolder')}
-              triggerVariant='outline'
-              triggerSize='sm'
-              pending={folderMutation.isPending}
-              disabled={unavailable}
-              submissionScope={`${effectiveScope}:${folderId}`}
-              onSubmit={(formData) =>
-                folderMutation.mutateAsync({
-                  projectId,
-                  parentId: folderId,
-                  name: fieldValue(formData, 'name'),
-                  owner: mutationScope,
-                })
-              }
-            >
-              <p className='text-sm text-muted-foreground'>
-                {folder?.path ?? t('admin.workspace.rootFolder')}
-              </p>
               <TextField
-                label={t('admin.workspace.folderName')}
-                name='name'
-                required
+                name='new_branch_name'
+                label={
+                  language === 'zh-CN'
+                    ? '新分支名称（可选）'
+                    : 'New branch name (optional)'
+                }
+                description={
+                  language === 'zh-CN'
+                    ? '保护分支会自动创建工作分支；提交编号由系统生成。'
+                    : 'A working branch is created for protected branches. Commit IDs are generated by the server.'
+                }
               />
             </FormDialog>
+            {legacySelection && (
+              <FormDialog
+                title={t('admin.workspace.newFolder')}
+                submitLabel={t('admin.workspace.createFolder')}
+                triggerVariant='outline'
+                triggerSize='sm'
+                pending={folderMutation.isPending}
+                disabled={unavailable}
+                submissionScope={`${effectiveScope}:${folderId}`}
+                onSubmit={(formData) =>
+                  folderMutation.mutateAsync({
+                    projectId,
+                    parentId: folderId,
+                    name: fieldValue(formData, 'name'),
+                    owner: mutationScope,
+                  })
+                }
+              >
+                <p className='text-sm text-muted-foreground'>
+                  {folder?.path ?? t('admin.workspace.rootFolder')}
+                </p>
+                <TextField
+                  label={t('admin.workspace.folderName')}
+                  name='name'
+                  required
+                />
+              </FormDialog>
+            )}
           </div>
         )}
         <LoadingErrorState state={documentsQuery} />
@@ -377,15 +459,33 @@ export function DocumentWorkspacePage({
           <DocumentFileTree
             key={`${effectiveScope}`}
             folders={folders}
-            documents={documentsQuery.data?.items ?? []}
+            documents={visibleDocuments}
             documentId={document?.id}
             folderId={folderId}
             onDocumentSelect={(selected) => {
               if (selected.id === document?.id) {
-                if (view !== 'content')
-                  changeSearch({ workspace_view: 'content' })
+                if (
+                  view !== 'content' ||
+                  (routeSearch.repository_view &&
+                    routeSearch.repository_view !== 'content')
+                )
+                  changeSearch({
+                    workspace_view: 'content',
+                    ...(!legacySelection
+                      ? { repository_view: 'content' as const }
+                      : {}),
+                  })
               } else {
-                changeSearch(documentSelection(selected))
+                changeSearch({
+                  ...documentSelection(selected),
+                  ...(!legacySelection
+                    ? {
+                        repository_branch_id: routeSearch.repository_branch_id,
+                        commit_id: routeSearch.commit_id,
+                        repository_view: undefined,
+                      }
+                    : {}),
+                })
               }
               setMobileFilesOpen(false)
             }}
@@ -425,7 +525,29 @@ export function DocumentWorkspacePage({
       )}
       <DraftEditorSessionProvider key={effectiveScope}>
         <div className='min-h-0 min-w-0'>
-          {document && !unavailable ? (
+          {projectId && !legacySelection && !unavailable ? (
+            <Suspense
+              fallback={
+                <p role='status' className='p-6 text-sm text-muted-foreground'>
+                  {t('admin.common.loading')}
+                </p>
+              }
+            >
+              <RepositoryWorkspace
+                key={effectiveScope}
+                projectId={projectId}
+                projectName={project?.name}
+                document={document}
+                legacyDocuments={legacyDocuments}
+                search={routeSearch}
+                canManage={canManage}
+                canWrite={canWrite}
+                interactive={project?.status === ACTIVE_STATUS}
+                navigationActions={navigationActions}
+                onSearchChange={changeSearch}
+              />
+            </Suspense>
+          ) : document && !unavailable ? (
             <Suspense
               fallback={
                 <p role='status' className='p-6 text-sm text-muted-foreground'>
@@ -434,6 +556,7 @@ export function DocumentWorkspacePage({
               }
             >
               <DocumentWorkspaceDetail
+                legacyReadOnly
                 key={`${effectiveScope}:${document.id}`}
                 projectId={projectId}
                 projectName={project?.name}

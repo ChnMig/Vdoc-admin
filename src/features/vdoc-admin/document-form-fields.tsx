@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DocumentFolderPicker } from './document-folder-picker'
-import { NativeSelect } from './page-shared'
+import { NativeSelect, TextField } from './page-shared'
 import {
   DOCUMENT_TYPE_MARKDOWN,
   DOCUMENT_TYPE_OPENAPI,
@@ -82,7 +82,6 @@ export async function documentPayloadFromFormData(
       throw new Error(t('admin.documentForm.uploadTypeMismatch'))
     payload.initial_content = {
       content: await readUtf8File(file, t),
-      version_name: '0.1.0',
     }
   }
   return payload
@@ -94,6 +93,7 @@ type DocumentFormFieldsProps = {
   initialFolderId?: string
   disabled?: boolean
   allowUpload?: boolean
+  repositoryDirectory?: string
 }
 
 export function DocumentFormFields(props: DocumentFormFieldsProps) {
@@ -112,8 +112,9 @@ function ScopedDocumentFormFields({
   initialFolderId = '',
   disabled = false,
   allowUpload = !document,
+  repositoryDirectory,
 }: DocumentFormFieldsProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [name, setName] = useState(document?.name ?? '')
   const [documentType, setDocumentType] = useState(
     document?.document_type ?? DOCUMENT_TYPE_OPENAPI
@@ -193,19 +194,32 @@ function ScopedDocumentFormFields({
           {t('admin.documentForm.filenameHint')}
         </p>
       </div>
-      <DocumentFolderPicker
-        key={projectId}
-        projectId={projectId}
-        value={folderId ?? ''}
-        onChange={setFolderId}
-        initialPath={document?.folder_id === undefined ? previousPath : ''}
-        filename={
-          filename.includes('.')
-            ? filename
-            : defaultDocumentFilename(filename, documentType)
-        }
-        disabled={disabled}
-      />
+      {repositoryDirectory !== undefined ? (
+        <TextField
+          name='relative_directory'
+          label={language === 'zh-CN' ? '目录（可选）' : 'Directory (optional)'}
+          defaultValue={repositoryDirectory}
+          description={
+            language === 'zh-CN'
+              ? '例如 docs/api；留空表示项目根目录。'
+              : 'For example, docs/api. Leave empty for the project root.'
+          }
+        />
+      ) : (
+        <DocumentFolderPicker
+          key={projectId}
+          projectId={projectId}
+          value={folderId ?? ''}
+          onChange={setFolderId}
+          initialPath={document?.folder_id === undefined ? previousPath : ''}
+          filename={
+            filename.includes('.')
+              ? filename
+              : defaultDocumentFilename(filename, documentType)
+          }
+          disabled={disabled}
+        />
+      )}
       {allowUpload && (
         <div className='grid min-w-0 gap-2'>
           <Label htmlFor={fileId}>{t('admin.documentForm.upload')}</Label>
