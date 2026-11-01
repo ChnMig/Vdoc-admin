@@ -104,7 +104,7 @@ describe('repository editor', () => {
     const body = view.getByRole('textbox', { name: 'Content' })
     await view.user.clear(body)
     await view.user.type(body, 'new content')
-    await view.user.click(view.getByRole('button', { name: 'Save and commit' }))
+    await view.user.click(view.getByRole('button', { name: 'Save version' }))
     await view.findByText('HEAD changed')
     expect(body).toHaveValue('new content')
     const first = vi.mocked(saveRepositoryCommit).mock.calls[0][2]
@@ -115,7 +115,7 @@ describe('repository editor', () => {
     })
     expect(first.idempotency_key).toBeTruthy()
     expect(first).not.toHaveProperty('version_name')
-    await view.user.click(view.getByRole('button', { name: 'Save and commit' }))
+    await view.user.click(view.getByRole('button', { name: 'Save version' }))
     await waitFor(() =>
       expect(view.onSaved).toHaveBeenCalledWith(commit, 'branch')
     )
@@ -136,7 +136,7 @@ describe('repository editor', () => {
       view.getByRole('textbox', { name: 'Content' }),
       ' addition'
     )
-    await view.user.click(view.getByRole('button', { name: 'Save and commit' }))
+    await view.user.click(view.getByRole('button', { name: 'Save version' }))
     await view.findByText('HEAD changed')
     await view.user.click(
       view.getByRole('button', { name: 'Save changes on a new branch' })
@@ -146,9 +146,7 @@ describe('repository editor', () => {
       dialog.getByRole('textbox', { name: 'Branch name' }),
       'recovered'
     )
-    await view.user.click(
-      dialog.getByRole('button', { name: 'Save and commit' })
-    )
+    await view.user.click(dialog.getByRole('button', { name: 'Save version' }))
     await waitFor(() =>
       expect(view.onSaved).toHaveBeenCalledWith(commit, 'recovered')
     )

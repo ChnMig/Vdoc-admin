@@ -47,6 +47,8 @@ vi.mock('@/lib/repository-new-file', () => ({ createRepositoryFile: vi.fn() }))
 vi.mock('@/lib/repository-api', async (load) => ({
   ...(await load<typeof import('@/lib/repository-api')>()),
   listRepositoryBranches: vi.fn(),
+  listRepositoryDocuments: async (projectId: string, signal: AbortSignal) =>
+    (await api.listDocuments(projectId, undefined, { signal })).items,
 }))
 vi.mock('@/components/layout/header', () => ({
   Header: ({ children }: { children: ReactNode }) => (

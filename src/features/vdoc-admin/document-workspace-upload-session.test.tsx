@@ -21,6 +21,7 @@ vi.mock('@/lib/vdoc-api', async (load) => ({
 }))
 const repository = vi.hoisted(() => ({
   listRepositoryBranches: vi.fn(),
+  listRepositoryDocuments: vi.fn(),
   getRepositoryCommit: vi.fn(),
 }))
 vi.mock('@/lib/repository-api', async (load) => ({
@@ -70,6 +71,7 @@ const committed = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  repository.listRepositoryDocuments.mockResolvedValue([])
   document.cookie = 'vdoc-admin-language=en; path=/'
   useAuthStore.getState().auth.setSession(userA, 'account-a-token')
   repository.listRepositoryBranches.mockResolvedValue([
@@ -108,7 +110,16 @@ describe('initial document upload session ownership', () => {
         await vi.importActual<typeof import('@/lib/vdoc-api')>('@/lib/vdoc-api')
       const originalAdapter = actual.vdocApi.defaults.adapter
       const transport = vi.fn(async (config) => ({
-        data: { code: 200, status: 'OK', timestamp: 0, detail: committed },
+        data: {
+          code: 200,
+          status: 'OK',
+          timestamp: 0,
+          detail: {
+            commit: committed,
+            branch: { id: 'working' },
+            document: { id: 'created-document' },
+          },
+        },
         status: 200,
         statusText: 'OK',
         headers: {},
@@ -202,13 +213,9 @@ describe('initial document upload session ownership', () => {
             'account-a-token'
           )
           expect(JSON.parse(transport.mock.calls[0][0].data)).toMatchObject({
-            changes: [
-              {
-                document_id: '',
-                content: 'Private text',
-                relative_path: 'private.txt',
-              },
-            ],
+            content: 'Private text',
+            relative_path: 'private.txt',
+            initial_branch: 'main',
           })
           expect(changes).toHaveBeenCalledWith(
             expect.objectContaining({

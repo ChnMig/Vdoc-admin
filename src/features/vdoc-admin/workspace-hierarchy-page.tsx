@@ -21,11 +21,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
-import {
-  bootstrapRepository,
-  listRepositoryBranches,
-  repositoryKeys,
-} from '@/lib/repository-api'
+import { listRepositoryDocuments, repositoryKeys } from '@/lib/repository-api'
 import type { RepositoryNewFileAttempt } from '@/lib/repository-new-file'
 import { cn } from '@/lib/utils'
 import {
@@ -33,7 +29,6 @@ import {
   createProject,
   createTeam,
   listDocumentFolders,
-  listDocuments,
   listProjectMembers,
   listProjects,
   listTeams,
@@ -77,6 +72,7 @@ import {
   fieldValue,
   formatDate,
 } from './page-utils'
+import { repositoryDocumentTree } from './use-repository-snapshot'
 import { WorkspaceEmbedding } from './workspace-embedding'
 
 const ProjectsPage = lazy(() =>
@@ -198,22 +194,9 @@ export function WorkspaceHierarchyPage({
     }
   }, [scope])
   const documentsQuery = useQuery({
-    queryKey: ['documents', projectId, 'all'],
-    queryFn: ({ signal }) => listDocuments(projectId, undefined, { signal }),
+    queryKey: repositoryKeys.documents(projectId),
+    queryFn: ({ signal }) => listRepositoryDocuments(projectId, signal),
     enabled: Boolean(projectId),
-  })
-  const repositoryBranchesQuery = useQuery({
-    queryKey: repositoryKeys.branches(projectId),
-    queryFn: ({ signal }) => listRepositoryBranches(projectId, signal),
-    enabled: Boolean(projectId),
-  })
-  const importRequired =
-    repositoryBranchesQuery.data?.some((branch) => branch.import_required) ??
-    false
-  const bootstrapMutation = useMutation({
-    mutationFn: () => bootstrapRepository(projectId),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: repositoryKeys.all(projectId) }),
   })
   const foldersQuery = useQuery({
     queryKey: ['document-folders', projectId, sessionVersion],
@@ -225,7 +208,23 @@ export function WorkspaceHierarchyPage({
     queryFn: ({ signal }) => listProjectMembers(projectId, { signal }),
     enabled: Boolean(projectId && !isSuperAdmin),
   })
-  const folders = foldersQuery.data?.items ?? []
+  const storedFolders = foldersQuery.data?.items ?? []
+  const inferredFolders = repositoryDocumentTree(
+    projectId,
+    documentsQuery.data ?? []
+  ).folders
+  const folders = [
+    ...storedFolders,
+    ...inferredFolders.filter(
+      (item) => !storedFolders.some((stored) => stored.path === item.path)
+    ),
+  ].map((item, _, all) => ({
+    ...item,
+    parent_id:
+      all.find(
+        (parent) => parent.path === item.path.split('/').slice(0, -1).join('/')
+      )?.id ?? null,
+  }))
   const folder = folders.find((item) => item.id === folderId)
   const canManageProject = Boolean(
     isSuperAdmin ||
@@ -355,7 +354,10 @@ export function WorkspaceHierarchyPage({
         documentId: result.documentId,
       })
       client.setQueryData(
-        repositoryKeys.commit(request.projectId, result.commit.id),
+        repositoryKeys.commit(
+          { projectId: request.projectId, documentId: result.documentId },
+          result.commit.id
+        ),
         result.commit
       )
       await client.invalidateQueries({
@@ -416,7 +418,7 @@ export function WorkspaceHierarchyPage({
           item.name.toLocaleLowerCase().includes(normalizedFileFilter))
     )
     .sort((left, right) => left.name.localeCompare(right.name, language))
-  const visibleDocuments = (documentsQuery.data?.items ?? [])
+  const visibleDocuments = (documentsQuery.data ?? [])
     .filter(
       (item) =>
         documentFolderId(item, folders) === folderId &&
@@ -509,42 +511,6 @@ export function WorkspaceHierarchyPage({
             {t('admin.hierarchy.description')}
           </p>
         </div>
-        {projectId && importRequired && (
-          <Alert className='mb-5'>
-            <AlertDescription className='grid gap-3'>
-              <p>
-                {language === 'zh-CN'
-                  ? '此项目有原有文档历史。管理员需先明确导入，之后才能保存新的提交；原链接和分享会保留。'
-                  : 'This project has existing document history. An administrator must explicitly import it before new commits can be saved. Existing links and shares remain available.'}
-              </p>
-              {canManageProject ? (
-                <Button
-                  className='w-fit'
-                  size='sm'
-                  disabled={bootstrapMutation.isPending}
-                  onClick={() => bootstrapMutation.mutate()}
-                >
-                  {language === 'zh-CN'
-                    ? '导入已有文档'
-                    : 'Import existing documents'}
-                </Button>
-              ) : (
-                <p>
-                  {language === 'zh-CN'
-                    ? '请联系项目管理员完成导入。'
-                    : 'Ask a project administrator to complete the import.'}
-                </p>
-              )}
-              <LoadingErrorState
-                state={{
-                  isLoading: false,
-                  isError: bootstrapMutation.isError,
-                  error: bootstrapMutation.error,
-                }}
-              />
-            </AlertDescription>
-          </Alert>
-        )}
         <div className='grid min-w-0 overflow-hidden rounded-lg border bg-card lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[15.5rem_minmax(0,1fr)]'>
           <aside
             aria-label={t('admin.hierarchy.navigation')}
@@ -967,10 +933,7 @@ export function WorkspaceHierarchyPage({
                                         pending={documentMutation.isPending}
                                         disabled={
                                           foldersQuery.isLoading ||
-                                          foldersQuery.isError ||
-                                          importRequired ||
-                                          repositoryBranchesQuery.isLoading ||
-                                          repositoryBranchesQuery.isError
+                                          foldersQuery.isError
                                         }
                                         submissionScope={scope}
                                         onSubmit={(formData) =>
@@ -998,15 +961,16 @@ export function WorkspaceHierarchyPage({
                                         </Suspense>
                                         <TextField
                                           name='new_branch_name'
+                                          defaultValue='main'
                                           label={
                                             language === 'zh-CN'
-                                              ? '新分支名称（可选）'
-                                              : 'New branch name (optional)'
+                                              ? '初始分支'
+                                              : 'Initial branch'
                                           }
                                           description={
                                             language === 'zh-CN'
-                                              ? '保护分支会自动创建工作分支；提交编号由系统生成。'
-                                              : 'A working branch is created for protected branches. Commit IDs are generated by the server.'
+                                              ? '仅属于这篇文档。版本号将按分支名自动递增，例如 main.1、main.2。'
+                                              : 'Belongs to this document only. Versions increase automatically, for example main.1, main.2.'
                                           }
                                         />
                                       </FormDialog>
@@ -1076,9 +1040,11 @@ export function WorkspaceHierarchyPage({
                                                   : 'outline'
                                               }
                                             >
-                                              {t(
-                                                `admin.workspace.${documentWorkflowState(item)}`
-                                              )}
+                                              {item.head_version_name ||
+                                                item.default_branch_name ||
+                                                t(
+                                                  `admin.workspace.${documentWorkflowState(item)}`
+                                                )}
                                             </Badge>
                                             {item.status !== ACTIVE_STATUS && (
                                               <Badge variant='outline'>

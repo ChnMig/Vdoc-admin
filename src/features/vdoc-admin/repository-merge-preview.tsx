@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  repositoryKeys,
+  type RepositoryScope,
   getRepositoryCommit,
   getRepositoryContent,
   getRepositoryMergeContent,
@@ -16,13 +18,13 @@ export function RepositoryMergePreview({
   projectId,
   request,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   request: RepositoryMergeRequest
 }) {
   const { language, t } = useLanguage()
   const zh = language === 'zh-CN'
   const query = useQuery({
-    queryKey: ['repository', projectId, 'merge-preview', request, zh],
+    queryKey: [...repositoryKeys.all(projectId), 'merge-preview', request, zh],
     queryFn: async ({ signal }) => {
       if (!request.result_files)
         throw new Error(

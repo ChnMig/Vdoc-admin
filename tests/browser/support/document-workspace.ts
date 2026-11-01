@@ -154,7 +154,7 @@ export async function installWorkspace(
     if (request.method() === 'OPTIONS')
       return route.fulfill({ status: 204, headers })
     const url = new URL(request.url())
-    const path = url.pathname
+    const path = url.pathname.replace(/\/repository\/documents$/, '/documents')
     const method = request.method()
     const body = request.postData() ? request.postDataJSON() : undefined
     requests.push({

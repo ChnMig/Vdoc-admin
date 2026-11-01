@@ -162,7 +162,10 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
   }[] = []
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request()
-    const path = new URL(request.url()).pathname
+    const path = new URL(request.url()).pathname.replace(
+      /\/repository\/documents$/,
+      '/documents'
+    )
     const method = request.method()
     if (method === 'OPTIONS') return envelope(route, null)
     if (path === `${rootPath}/identity/me`) return envelope(route, admin)

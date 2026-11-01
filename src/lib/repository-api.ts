@@ -1,4 +1,4 @@
-import { unwrapEnvelope, vdocApi } from './vdoc-api'
+import { unwrapEnvelope, vdocApi, type DocumentDTO } from './vdoc-api'
 
 export type RepositoryFile = {
   document_id: string
@@ -12,6 +12,8 @@ export type RepositoryFile = {
 export type RepositoryBranch = {
   id: string
   project_id: string
+  document_id?: string
+  revision?: number
   name: string
   head_commit_id: string
   generation: number
@@ -24,6 +26,10 @@ export type RepositoryBranch = {
 export type RepositoryCommit = {
   id: string
   project_id: string
+  document_id?: string
+  branch_id?: string
+  revision?: number
+  version_name?: string
   parent_ids: string[]
   tree_hash: string
   message: string
@@ -160,20 +166,70 @@ export type RepositoryDelivery = {
   created_at: string
 }
 
-const repositoryPath = (projectId: string) =>
-  `/api/v1/private/projects/${encodeURIComponent(projectId)}/repository`
+export type RepositoryScope = string | { projectId: string; documentId: string }
+export const repositoryProjectId = (scope: RepositoryScope) =>
+  typeof scope === 'string' ? scope : scope.projectId
+export const repositoryScopeKey = (scope: RepositoryScope) =>
+  typeof scope === 'string' ? scope : `${scope.projectId}:${scope.documentId}`
+export const repositoryPath = (scope: RepositoryScope) => {
+  const project = `/api/v1/private/projects/${encodeURIComponent(repositoryProjectId(scope))}`
+  return typeof scope === 'string'
+    ? `${project}/repository`
+    : `${project}/documents/${encodeURIComponent(scope.documentId)}/repository`
+}
 const segment = encodeURIComponent
 
 export const repositoryKeys = {
-  all: (projectId: string) => ['repository', projectId] as const,
-  branches: (projectId: string) =>
-    ['repository', projectId, 'branches'] as const,
-  commit: (projectId: string, commitId: string) =>
-    ['repository', projectId, 'commit', commitId] as const,
+  all: (scope: RepositoryScope): readonly string[] =>
+    typeof scope === 'string'
+      ? ['repository', scope]
+      : ['repository', scope.projectId, 'document', scope.documentId],
+  branches: (scope: RepositoryScope) =>
+    [...repositoryKeys.all(scope), 'branches'] as const,
+  commit: (scope: RepositoryScope, commitId: string) =>
+    [...repositoryKeys.all(scope), 'commit', commitId] as const,
+  documents: (projectId: string) =>
+    ['repository', projectId, 'documents'] as const,
+}
+
+export type RepositoryDocument = DocumentDTO & {
+  default_branch_id: string
+  default_branch_name: string
+  head_version_name?: string
+}
+
+export function listRepositoryDocuments(
+  projectId: string,
+  signal?: AbortSignal
+) {
+  return unwrapEnvelope<RepositoryDocument[]>(
+    vdocApi.get(`${repositoryPath(projectId)}/documents`, { signal })
+  )
+}
+
+export type RepositoryCreateDocument = {
+  name: string
+  relative_path: string
+  document_type: number
+  description?: string
+  content: string
+  initial_branch: string
+  idempotency_key: string
+}
+
+export function createRepositoryDocument(
+  projectId: string,
+  input: RepositoryCreateDocument
+) {
+  return unwrapEnvelope<{
+    document: RepositoryDocument
+    branch: RepositoryBranch
+    commit: RepositoryCommit
+  }>(vdocApi.post(`${repositoryPath(projectId)}/documents`, input))
 }
 
 export function listRepositoryBranches(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal
 ) {
   return unwrapEnvelope<RepositoryBranch[]>(
@@ -182,7 +238,7 @@ export function listRepositoryBranches(
 }
 
 export function createRepositoryBranch(
-  projectId: string,
+  projectId: RepositoryScope,
   input: { name: string; from_commit_id: string; is_protected?: boolean }
 ) {
   return unwrapEnvelope<RepositoryBranch>(
@@ -190,14 +246,14 @@ export function createRepositoryBranch(
   )
 }
 
-export function bootstrapRepository(projectId: string) {
+export function bootstrapRepository(projectId: RepositoryScope) {
   return unwrapEnvelope<RepositoryBranch[]>(
     vdocApi.post(`${repositoryPath(projectId)}/bootstrap`, {})
   )
 }
 
 export function getRepositoryCommit(
-  projectId: string,
+  projectId: RepositoryScope,
   commitId: string,
   signal?: AbortSignal
 ) {
@@ -209,7 +265,7 @@ export function getRepositoryCommit(
 }
 
 export async function listRepositoryCommits(
-  projectId: string,
+  projectId: RepositoryScope,
   input: { branch_id: string; document_id?: string; cursor?: string },
   signal?: AbortSignal
 ) {
@@ -226,7 +282,7 @@ export async function listRepositoryCommits(
 }
 
 export function getRepositoryContent(
-  projectId: string,
+  projectId: RepositoryScope,
   commitId: string,
   documentId: string,
   signal?: AbortSignal
@@ -240,7 +296,7 @@ export function getRepositoryContent(
 }
 
 export function saveRepositoryCommit(
-  projectId: string,
+  projectId: RepositoryScope,
   branchId: string,
   input: RepositorySave
 ) {
@@ -253,7 +309,7 @@ export function saveRepositoryCommit(
 }
 
 export function compareRepositoryCommits(
-  projectId: string,
+  projectId: RepositoryScope,
   input: {
     from_commit_id: string
     to_commit_id: string
@@ -266,7 +322,7 @@ export function compareRepositoryCommits(
 }
 
 export function listRepositoryMergeRequests(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal
 ) {
   return unwrapEnvelope<RepositoryMergeRequest[]>(
@@ -275,7 +331,7 @@ export function listRepositoryMergeRequests(
 }
 
 export function createRepositoryMergeRequest(
-  projectId: string,
+  projectId: RepositoryScope,
   input: { source_branch_id: string; target_branch_id: string; title?: string }
 ) {
   return unwrapEnvelope<RepositoryMergeRequest>(
@@ -284,7 +340,7 @@ export function createRepositoryMergeRequest(
 }
 
 export function repositoryMergeAction(
-  projectId: string,
+  projectId: RepositoryScope,
   request: RepositoryMergeRequest,
   action: 'approve' | 'merge'
 ) {
@@ -297,7 +353,7 @@ export function repositoryMergeAction(
 }
 
 export function resolveRepositoryMerge(
-  projectId: string,
+  projectId: RepositoryScope,
   request: RepositoryMergeRequest,
   input: {
     idempotency_key: string
@@ -321,7 +377,7 @@ export function resolveRepositoryMerge(
 }
 
 export function getRepositoryMergeContent(
-  projectId: string,
+  projectId: RepositoryScope,
   requestId: string,
   documentId: string,
   signal?: AbortSignal
@@ -340,7 +396,7 @@ export function getRepositoryMergeContent(
 }
 
 export function revertRepositoryCommit(
-  projectId: string,
+  projectId: RepositoryScope,
   branch: RepositoryBranch,
   commitId: string,
   idempotencyKey: string
@@ -359,7 +415,7 @@ export function revertRepositoryCommit(
 }
 
 export function listRepositoryReleases(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal
 ) {
   return unwrapEnvelope<RepositoryRelease[]>(
@@ -368,7 +424,7 @@ export function listRepositoryReleases(
 }
 
 export function publishRepositoryCommit(
-  projectId: string,
+  projectId: RepositoryScope,
   branch: RepositoryBranch,
   commitId: string,
   message?: string
@@ -384,7 +440,7 @@ export function publishRepositoryCommit(
 }
 
 export function listRepositoryEvents(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal,
   after?: number
 ) {
@@ -397,7 +453,7 @@ export function listRepositoryEvents(
 }
 
 export function analyzeRepositoryChange(
-  projectId: string,
+  projectId: RepositoryScope,
   input: {
     from_commit_id?: string
     to_commit_id: string
@@ -412,7 +468,7 @@ export function analyzeRepositoryChange(
 }
 
 export function listRepositoryAnalyses(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal,
   after?: number
 ) {
@@ -425,7 +481,7 @@ export function listRepositoryAnalyses(
 }
 
 export function getRepositoryAnalysis(
-  projectId: string,
+  projectId: RepositoryScope,
   id: string,
   signal?: AbortSignal
 ) {
@@ -437,7 +493,7 @@ export function getRepositoryAnalysis(
 }
 
 export function listRepositorySubscriptions(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal
 ) {
   return unwrapEnvelope<RepositorySubscription[]>(
@@ -446,7 +502,7 @@ export function listRepositorySubscriptions(
 }
 
 export function createRepositorySubscription(
-  projectId: string,
+  projectId: RepositoryScope,
   input: {
     name: string
     kind: RepositorySubscription['kind']
@@ -462,7 +518,7 @@ export function createRepositorySubscription(
 }
 
 export function setRepositorySubscriptionPaused(
-  projectId: string,
+  projectId: RepositoryScope,
   id: string,
   paused: boolean
 ) {
@@ -475,7 +531,7 @@ export function setRepositorySubscriptionPaused(
 }
 
 export function listRepositoryDeliveries(
-  projectId: string,
+  projectId: RepositoryScope,
   signal?: AbortSignal,
   after?: number
 ) {
@@ -487,7 +543,10 @@ export function listRepositoryDeliveries(
   )
 }
 
-export function retryRepositoryDelivery(projectId: string, id: string) {
+export function retryRepositoryDelivery(
+  projectId: RepositoryScope,
+  id: string
+) {
   return unwrapEnvelope<RepositoryDelivery>(
     vdocApi.post(
       `${repositoryPath(projectId)}/event-deliveries/${segment(id)}/retry`,

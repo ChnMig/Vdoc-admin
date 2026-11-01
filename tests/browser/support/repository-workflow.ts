@@ -11,7 +11,8 @@ import type {
 
 export const projectId = 'commit-project'
 export const documentId = 'commit-document'
-export const repositoryPath = `/api/v1/private/projects/${projectId}/repository`
+export const projectRepositoryPath = `/api/v1/private/projects/${projectId}/repository`
+export const repositoryPath = `/api/v1/private/projects/${projectId}/documents/${documentId}/repository`
 export const mainId = 'repo-main'
 export const workId = 'repo-work'
 const timestamp = '2026-10-30T08:00:00Z'
@@ -87,6 +88,10 @@ export async function installRepository(
     const commit: RepositoryCommit = {
       id: identifier(),
       project_id: projectId,
+      document_id: branch?.document_id ?? documentId,
+      branch_id: branch?.id ?? mainId,
+      revision: (branch?.revision ?? 0) + 1,
+      version_name: `${branch?.name ?? 'main'}.${(branch?.revision ?? 0) + 1}`,
       parent_ids: parents ?? (parent ? [parent] : []),
       tree_hash: identifier(),
       message,
@@ -99,6 +104,7 @@ export async function installRepository(
     if (branch) {
       branch.head_commit_id = commit.id
       branch.generation++
+      branch.revision = commit.revision
     }
     events.push({
       id: `event-${serial}`,
@@ -134,6 +140,8 @@ export async function installRepository(
     branches.push({
       id,
       project_id: projectId,
+      document_id: documentId,
+      revision: id === mainId ? 1 : 0,
       name,
       is_protected: protectedBranch,
       head_commit_id: initial.id,
@@ -154,7 +162,11 @@ export async function installRepository(
     created_by: userId,
     created_at: timestamp,
     updated_at: timestamp,
+    default_branch_id: mainId,
+    default_branch_name: 'main',
+    head_version_name: 'main.1',
   }
+  const documents = [document]
   async function ok(route: Route, detail: unknown) {
     return route.fulfill({
       json: {
@@ -234,11 +246,60 @@ export async function installRepository(
       path === `/api/v1/private/projects/${projectId}/documents` &&
       method === 'GET'
     )
-      return ok(route, [document])
-    const local = path.startsWith(repositoryPath)
-      ? path.slice(repositoryPath.length)
-      : ''
-    if (local === '/branches' && method === 'GET') return ok(route, branches)
+      return ok(route, documents)
+    if (path === `${projectRepositoryPath}/documents`) {
+      if (method === 'GET') return ok(route, documents)
+      const id = `server-document-${++serial}`
+      const name = String(body!.initial_branch || 'main')
+      const branch: RepositoryBranch = {
+        id: `server-branch-${++serial}`,
+        project_id: projectId,
+        document_id: id,
+        name,
+        head_commit_id: '',
+        generation: 0,
+        revision: 0,
+        is_protected: false,
+        created_by: userId,
+        created_at: timestamp,
+      }
+      branches.push(branch)
+      const commit = append(
+        branch,
+        [
+          {
+            operation: 'upsert',
+            document_id: id,
+            relative_path: String(body!.relative_path),
+            name: String(body!.name),
+            document_type: Number(body!.document_type),
+            content: String(body!.content),
+          },
+        ],
+        `Create ${body!.name}`
+      )
+      const created = {
+        ...document,
+        id,
+        name: String(body!.name),
+        document_type: Number(body!.document_type),
+        relative_path: String(body!.relative_path),
+        file_name: String(body!.relative_path).split('/').at(-1)!,
+        default_branch_id: branch.id,
+        default_branch_name: name,
+        head_version_name: commit.version_name!,
+      }
+      documents.push(created)
+      return ok(route, { document: created, branch, commit })
+    }
+    const scoped = path.match(/\/documents\/([^/]+)\/repository(\/.*)$/)
+    const currentDocumentId = scoped?.[1]
+    const local = scoped?.[2] ?? ''
+    if (local === '/branches' && method === 'GET')
+      return ok(
+        route,
+        branches.filter((branch) => branch.document_id === currentDocumentId)
+      )
     if (local === '/branches' && method === 'POST') {
       expect(body).toMatchObject({
         name: expect.any(String),
@@ -251,6 +312,7 @@ export async function installRepository(
         name: String(body!.name),
         head_commit_id: String(body!.from_commit_id),
         generation: 1,
+        revision: 0,
         is_protected: false,
       }
       branches.push(branch)
@@ -312,6 +374,8 @@ export async function installRepository(
       expect(input).not.toHaveProperty('version_name')
       expect(input).not.toHaveProperty('id')
       expect(input.idempotency_key).toBeTruthy()
+      expect(input.changes).toHaveLength(1)
+      expect(input.changes[0].document_id).toBe(currentDocumentId)
       if (idempotency.has(input.idempotency_key))
         return ok(route, idempotency.get(input.idempotency_key))
       const branch = branches.find((item) => item.id === save[1])!
@@ -425,7 +489,7 @@ export async function installRepository(
         id: `server-release-${++serial}`,
         branch_id: branch.id,
         commit_id: String(body!.commit_id),
-        version_name: `r-20261030-${serial}`,
+        version_name: commits.get(String(body!.commit_id))!.version_name!,
         message: String(body!.message ?? ''),
         published_by: userId,
         published_at: timestamp,
@@ -513,49 +577,63 @@ export async function installRepository(
   }
 }
 
-/** A legacy-link test can return to the default workflow without fabricating an import. */
-export async function installUnimportedRepository(page: Page, project: string) {
-  const prefix = `/api/v1/private/projects/${project}/repository`
+/** Legacy deep links can return to an automatically projected document branch. */
+export async function installProjectedRepository(page: Page, project: string) {
   const head = 'd'.repeat(64)
-  await page.route(`**${prefix}/branches`, (route) =>
-    route.fulfill({
-      json: {
-        code: 200,
-        status: 'OK',
-        timestamp: 1,
-        detail: [
+  await page.route(
+    new RegExp(
+      `/api/v1/private/projects/${project}/documents/[^/]+/repository/`
+    ),
+    async (route) => {
+      const path = new URL(route.request().url()).pathname
+      const documentID = path.split('/documents/')[1].split('/')[0]
+      const file = {
+        document_id: documentID,
+        relative_path: 'imported.md',
+        name: 'Imported document',
+        document_type: 2,
+        content_hash: head,
+      }
+      const commit = {
+        id: head,
+        project_id: project,
+        document_id: documentID,
+        branch_id: 'projected-main',
+        revision: 1,
+        version_name: 'main.1',
+        parent_ids: [],
+        tree_hash: head,
+        message: 'Imported legacy content',
+        created_by: userId,
+        created_at: timestamp,
+        files: [file],
+      }
+      let detail: unknown = commit
+      if (path.endsWith('/branches'))
+        detail = [
           {
-            id: 'unimported-main',
+            id: 'projected-main',
             project_id: project,
+            document_id: documentID,
             name: 'main',
             head_commit_id: head,
+            revision: 1,
             generation: 1,
-            is_protected: true,
+            is_protected: false,
             created_by: userId,
             created_at: timestamp,
-            import_required: true,
           },
-        ],
-      },
-    })
-  )
-  await page.route(`**${prefix}/commits/${head}`, (route) =>
-    route.fulfill({
-      json: {
-        code: 200,
-        status: 'OK',
-        timestamp: 1,
-        detail: {
-          id: head,
-          project_id: project,
-          parent_ids: [],
-          tree_hash: 'e'.repeat(64),
-          message: 'Awaiting explicit import',
-          created_by: userId,
-          created_at: timestamp,
-          files: [],
-        },
-      },
-    })
+        ]
+      else if (path.endsWith('/commits')) detail = { commits: [commit] }
+      else if (path.endsWith('/content'))
+        detail = {
+          commit_id: head,
+          document: file,
+          content: '# Imported document\n\nExisting content.\n',
+        }
+      await route.fulfill({
+        json: { code: 200, status: 'OK', timestamp: 1, detail },
+      })
+    }
   )
 }

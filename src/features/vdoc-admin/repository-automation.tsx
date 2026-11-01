@@ -8,6 +8,9 @@ import {
 import { Bell, Copy, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
+  repositoryKeys,
+  type RepositoryScope,
+  repositoryScopeKey,
   analyzeRepositoryChange,
   createRepositorySubscription,
   listRepositoryAnalyses,
@@ -57,7 +60,7 @@ export function RepositoryAutomation({
   canManage,
   active = true,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   branch?: RepositoryBranch
   commitId: string
   documentId?: string
@@ -82,9 +85,9 @@ export function RepositoryAutomation({
   const currentSession = () =>
     useAuthStore.getState().auth.sessionVersion === session
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: ['repository', projectId] })
+    queryClient.invalidateQueries({ queryKey: repositoryKeys.all(projectId) })
   const analysesQuery = useInfiniteQuery({
-    queryKey: ['repository', projectId, 'analyses'],
+    queryKey: [...repositoryKeys.all(projectId), 'analyses'],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       listRepositoryAnalyses(projectId, signal, pageParam),
@@ -93,7 +96,7 @@ export function RepositoryAutomation({
     enabled: active && view === 'ai',
   })
   const eventsQuery = useInfiniteQuery({
-    queryKey: ['repository', projectId, 'events'],
+    queryKey: [...repositoryKeys.all(projectId), 'events'],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       listRepositoryEvents(projectId, signal, pageParam),
@@ -102,12 +105,12 @@ export function RepositoryAutomation({
     enabled: active && view === 'events',
   })
   const subscriptionsQuery = useQuery({
-    queryKey: ['repository', projectId, 'subscriptions'],
+    queryKey: [...repositoryKeys.all(projectId), 'subscriptions'],
     queryFn: ({ signal }) => listRepositorySubscriptions(projectId, signal),
     enabled: active && view === 'events' && canManage,
   })
   const deliveriesQuery = useInfiniteQuery({
-    queryKey: ['repository', projectId, 'deliveries'],
+    queryKey: [...repositoryKeys.all(projectId), 'deliveries'],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       listRepositoryDeliveries(projectId, signal, pageParam),
@@ -379,7 +382,7 @@ export function RepositoryAutomation({
                 triggerLabel={zh ? '创建订阅' : 'Create subscription'}
                 pending={subscriptionMutation.isPending}
                 submitLabel={t('admin.common.create')}
-                submissionScope={`${projectId}:${branch?.id}:${documentId ?? ''}`}
+                submissionScope={`${repositoryScopeKey(projectId)}:${branch?.id}:${documentId ?? ''}`}
                 onSubmit={async (data) => {
                   await subscriptionMutation.mutateAsync({
                     name: String(data.get('name') ?? '').trim(),

@@ -1,13 +1,13 @@
 import { useLanguage } from '@/context/language-provider'
 
 const en = {
-  branch: 'Project branch',
+  branch: 'Document branch',
   commit: 'Commit',
   latest: 'Latest commit',
   refresh: 'Refresh',
   read: 'Read',
   edit: 'Edit',
-  history: 'Commit history',
+  history: 'Version history',
   compare: 'Compare',
   merges: 'Merge requests',
   releases: 'Releases',
@@ -23,10 +23,11 @@ const en = {
   protectedDescription:
     'Create a branch to edit, then request review and merge.',
   editBranch: 'Create a branch to edit',
-  save: 'Save and commit',
+  save: 'Save version',
   saving: 'Saving commit…',
   message: 'Commit message (optional)',
-  generated: 'Commit and release identifiers are generated automatically.',
+  generated:
+    'Each save keeps a new version. Earlier versions remain available.',
   unsaved: 'Uncommitted changes',
   changedFiles: 'Changed files',
   discard: 'Discard changes',
@@ -92,22 +93,27 @@ const en = {
   unavailable:
     'Repository data is unavailable. Retry without losing your current edits.',
   success: 'Saved as a new commit',
-  addFile: 'Add another file to this commit',
+  addFile: 'Import content from a file',
   content: 'Content',
   selectedBase: 'Editing baseline',
   legacyLink: 'View existing publication history',
   semantic: 'Semantic check',
   cancelled: 'Cancelled',
+  version: 'Version',
+  nextVersion: 'Next version',
+  more: 'More',
+  importTypeError:
+    'Choose one file with the same document type. To add a document, use New document.',
 } as const
 
 const zh: { [K in keyof typeof en]: string } = {
-  branch: '项目分支',
+  branch: '文档分支',
   commit: '提交',
   latest: '最新提交',
   refresh: '刷新',
   read: '阅读',
   edit: '编辑',
-  history: '提交历史',
+  history: '版本历史',
   compare: '比较',
   merges: '合并请求',
   releases: '发布记录',
@@ -121,10 +127,10 @@ const zh: { [K in keyof typeof en]: string } = {
   protectedBranch: '受保护分支',
   protectedDescription: '创建分支后编辑，再请求审核与合并。',
   editBranch: '新建分支并编辑',
-  save: '保存并提交',
+  save: '保存版本',
   saving: '正在保存提交…',
   message: '提交说明（可选）',
-  generated: '提交号和发布版本号由系统自动生成。',
+  generated: '每次保存都会留下一个新版本，可以随时查看和比较之前的内容。',
   unsaved: '未提交的修改',
   changedFiles: '修改的文件',
   discard: '放弃修改',
@@ -184,12 +190,17 @@ const zh: { [K in keyof typeof en]: string } = {
   next: '下一页',
   unavailable: '暂时无法获取仓库数据，可重试；当前编辑内容会保留。',
   success: '已保存为新提交',
-  addFile: '添加其他文件到本次提交',
+  addFile: '从文件导入内容',
   content: '正文',
   selectedBase: '编辑基线',
   legacyLink: '查看原有发布历史',
   semantic: '语义检查',
   cancelled: '已取消',
+  version: '版本',
+  nextVersion: '本次保存为',
+  more: '更多',
+  importTypeError:
+    '请选择一个与当前文档类型相同的文件。添加其他文档请使用“新建文档”。',
 }
 
 export function useRepositoryCopy() {

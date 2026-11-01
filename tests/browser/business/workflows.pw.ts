@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 import { selectOption } from '../helpers/select-option'
 import {
   installRepository,
-  installUnimportedRepository,
+  installProjectedRepository,
   projectId as repositoryProjectId,
 } from '../support/repository-workflow'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
@@ -218,7 +218,7 @@ async function installAdminApi(
     const request = route.request()
     const method = request.method()
     const url = new URL(request.url())
-    const path = url.pathname
+    const path = url.pathname.replace(/\/repository\/documents$/, '/documents')
 
     if (method === 'OPTIONS') {
       await fulfillOptions(route)
@@ -454,6 +454,7 @@ for (const width of [1280, 390]) {
       `/documents?team_id=commit-team&project_id=${repositoryProjectId}&repository_branch_id=repo-work`
     )
     const files = page.getByRole('tabpanel', { name: 'Documents', exact: true })
+    await files.getByRole('button', { name: 'guides', exact: true }).click()
     await expect(
       files.getByRole('button', { name: 'Shared guide', exact: true })
     ).toBeVisible()
@@ -555,7 +556,7 @@ test('a comparison completed after document navigation stays in its original his
 }) => {
   await installAdminSession(page)
   await installAdminApi(page)
-  await installUnimportedRepository(page, projectId)
+  await installProjectedRepository(page, projectId)
   const otherDocument = {
     ...document,
     id: 'document-other',
@@ -591,7 +592,10 @@ test('a comparison completed after document navigation stays in its original his
   let comparisonFinished = false
   const documentPath = `/api/v1/private/projects/${projectId}/documents`
   await page.route('**/api/v1/**', async (route) => {
-    const path = new URL(route.request().url()).pathname
+    const path = new URL(route.request().url()).pathname.replace(
+      /\/repository\/documents$/,
+      '/documents'
+    )
     const method = route.request().method()
     if (method === 'POST' && path === `${documentPath}/${documentId}/diffs`) {
       comparisonStarted = true
@@ -642,7 +646,7 @@ test('a comparison completed after document navigation stays in its original his
   const otherFile = tree.getByRole('button', { name: /other\.md/ })
   await otherFile.click()
   await expect(
-    page.getByRole('button', { name: 'Import existing documents', exact: true })
+    page.getByRole('combobox', { name: 'Document branch', exact: true })
   ).toBeVisible()
   const switchedUrl = page.url()
   const response = page.waitForResponse(
@@ -654,7 +658,7 @@ test('a comparison completed after document navigation stays in its original his
   await response
   await expect(page).toHaveURL(switchedUrl)
   await expect(
-    page.getByRole('button', { name: 'Import existing documents', exact: true })
+    page.getByRole('combobox', { name: 'Document branch', exact: true })
   ).toBeVisible()
   await expect(
     page.getByText('Linked entity is unavailable', { exact: true })
@@ -739,7 +743,7 @@ test('public share erases the fragment, unlocks, and switches history', async ({
     const request = route.request()
     const method = request.method()
     const url = new URL(request.url())
-    const path = url.pathname
+    const path = url.pathname.replace(/\/repository\/documents$/, '/documents')
 
     if (method === 'OPTIONS') {
       await fulfillOptions(route)
@@ -1048,7 +1052,10 @@ for (const width of [1280, 390]) {
       updated_at: timestamp,
     }
     await page.route('**/api/v1/private/**', async (route) => {
-      const path = new URL(route.request().url()).pathname
+      const path = new URL(route.request().url()).pathname.replace(
+        /\/repository\/documents$/,
+        '/documents'
+      )
       if (route.request().method() === 'OPTIONS') {
         await fulfillOptions(route)
         return

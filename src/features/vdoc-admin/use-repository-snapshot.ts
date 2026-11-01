@@ -4,6 +4,7 @@ import {
   listRepositoryBranches,
   repositoryKeys,
   type RepositoryCommit,
+  type RepositoryDocument,
 } from '@/lib/repository-api'
 import type { DocumentDTO, DocumentFolderDTO } from '@/lib/vdoc-api'
 import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
@@ -26,26 +27,38 @@ export function isLegacyRepositorySelection(search: VdocRouteSearch) {
 export function useRepositorySnapshot(
   projectId: string,
   search: VdocRouteSearch,
-  enabled = true
+  enabled = true,
+  defaultBranchId?: string
 ) {
+  const repositoryScope = { projectId, documentId: search.document_id ?? '' }
   const branchesQuery = useQuery({
-    queryKey: repositoryKeys.branches(projectId),
-    queryFn: ({ signal }) => listRepositoryBranches(projectId, signal),
-    enabled: Boolean(projectId && enabled),
+    queryKey: repositoryKeys.branches(repositoryScope),
+    queryFn: ({ signal }) => listRepositoryBranches(repositoryScope, signal),
+    enabled: Boolean(projectId && repositoryScope.documentId && enabled),
     refetchOnWindowFocus: false,
   })
   const branches = branchesQuery.data ?? []
   const branch = search.repository_branch_id
     ? branches.find((item) => item.id === search.repository_branch_id)
-    : (branches.find((item) => item.name === 'main') ?? branches[0])
+    : (branches.find((item) => item.id === defaultBranchId) ??
+      branches.find((item) => item.name === 'main') ??
+      branches[0])
   const commitId = branch ? (search.commit_id ?? branch.head_commit_id) : ''
   const commitQuery = useQuery({
-    queryKey: repositoryKeys.commit(projectId, commitId),
-    queryFn: ({ signal }) => getRepositoryCommit(projectId, commitId, signal),
+    queryKey: repositoryKeys.commit(repositoryScope, commitId),
+    queryFn: ({ signal }) =>
+      getRepositoryCommit(repositoryScope, commitId, signal),
     enabled: Boolean(projectId && commitId && enabled),
     refetchOnWindowFocus: false,
   })
-  return { branchesQuery, branches, branch, commitId, commitQuery }
+  return {
+    repositoryScope,
+    branchesQuery,
+    branches,
+    branch,
+    commitId,
+    commitQuery,
+  }
 }
 
 export function projectRepositoryTree(
@@ -95,4 +108,41 @@ export function projectRepositoryTree(
     }
   })
   return { documents, folders: [...folders.values()] }
+}
+
+// The navigation catalog is independent of the currently selected document revision.
+export function repositoryDocumentTree(
+  projectId: string,
+  catalog: readonly RepositoryDocument[]
+) {
+  const tree = projectRepositoryTree(
+    {
+      id: '',
+      project_id: projectId,
+      parent_ids: [],
+      tree_hash: '',
+      message: '',
+      created_by: '',
+      created_at: '',
+      files: catalog
+        .filter((d) => d.status === 1)
+        .map((d) => ({
+          document_id: d.id,
+          name: d.name,
+          relative_path: d.relative_path ?? d.file_name ?? d.name,
+          document_type: d.document_type,
+          description: d.description,
+          content_hash: '',
+        })),
+    },
+    catalog
+  )
+  return {
+    ...tree,
+    documents: tree.documents.map((d) => ({
+      ...d,
+      ...catalog.find((item) => item.id === d.id),
+      folder_id: d.folder_id,
+    })),
+  }
 }

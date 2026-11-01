@@ -2,6 +2,8 @@ import { useId, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth-store'
 import {
+  repositoryKeys,
+  type RepositoryScope,
   getRepositoryCommit,
   getRepositoryContent,
   getRepositoryMergeContent,
@@ -32,7 +34,7 @@ export function RepositoryMergeResolver({
   onResolved,
   onCancel,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   request: RepositoryMergeRequest
   onResolved: (request: RepositoryMergeRequest) => Promise<unknown>
   onCancel: () => void
@@ -45,7 +47,7 @@ export function RepositoryMergeResolver({
   const [message, setMessage] = useState('')
   const retry = useRef<{ body: string; key: string } | undefined>(undefined)
   const treeQuery = useQuery({
-    queryKey: ['repository', projectId, 'resolution', request, zh],
+    queryKey: [...repositoryKeys.all(projectId), 'resolution', request, zh],
     queryFn: async ({ signal }) => {
       const [base, source, target] = await Promise.all([
         getRepositoryCommit(projectId, request.base_commit_id, signal),

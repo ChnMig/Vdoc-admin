@@ -7,21 +7,29 @@ import {
   installRepository,
   mainId,
   projectId,
-  repositoryPath,
+  projectRepositoryPath,
   workId,
 } from '../support/repository-workflow'
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 async function tool(page: Page, name: string) {
-  await page
-    .getByRole('navigation', { name: 'Commit', exact: true })
-    .getByRole('button', { name, exact: true })
-    .click()
+  const nav = page.getByRole('navigation', { name: 'Commit', exact: true })
+  const button = nav.getByRole('button', { name, exact: true })
+  if (['Read', 'Edit', 'Version history', 'Compare', 'AI'].includes(name))
+    await button.click()
+  else {
+    await nav
+      .getByRole('button', {
+        name: /^(More|Merge requests|Releases|Activity & subscriptions)$/,
+      })
+      .click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+  }
 }
 async function save(
   page: Page,
   action = () =>
-    page.getByRole('button', { name: 'Save and commit', exact: true }).click()
+    page.getByRole('button', { name: 'Save version', exact: true }).click()
 ) {
   const response = page.waitForResponse(
     (response) =>
@@ -86,7 +94,7 @@ for (const width of [1440, 390]) {
     expect(api.bodies.get(api.initial.id)?.get(documentId)).toBe(
       api.initialBody
     )
-    await tool(page, 'Commit history')
+    await tool(page, 'Version history')
     await expect(
       page.getByRole('main').getByText('First browser save', { exact: true })
     ).toBeVisible()
@@ -146,7 +154,7 @@ for (const width of [1440, 390]) {
     await editor.fill('# Shared guide\n\nPreserve this local change.\n')
     const concurrent = api.advance()
     await page
-      .getByRole('button', { name: 'Save and commit', exact: true })
+      .getByRole('button', { name: 'Save version', exact: true })
       .click()
     await expect(
       page.getByText(
@@ -167,9 +175,7 @@ for (const width of [1440, 390]) {
       .getByRole('textbox', { name: 'Branch name', exact: true })
       .fill('recovery/local-change')
     const recovered = await save(page, () =>
-      dialog
-        .getByRole('button', { name: 'Save and commit', exact: true })
-        .click()
+      dialog.getByRole('button', { name: 'Save version', exact: true }).click()
     )
     await expect(dialog).toHaveCount(0)
     await expect(
@@ -202,7 +208,7 @@ for (const width of [1440, 390]) {
       .fill('# Shared guide\n\nRetry this exact content.\n')
     api.loseSaveResponse()
     await page
-      .getByRole('button', { name: 'Save and commit', exact: true })
+      .getByRole('button', { name: 'Save version', exact: true })
       .click()
     await expect(
       page.getByRole('alert').filter({ hasText: 'Backend request failed' })
@@ -222,7 +228,7 @@ for (const width of [1440, 390]) {
     expect(api.unexpected).toEqual([])
   })
 
-  test(`editing keeps local input across tools and uploads an atomic file set at ${width}px`, async ({
+  test(`editing retains input across tools and imports only the current document at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
@@ -230,52 +236,33 @@ for (const width of [1440, 390]) {
     await api.open()
     await tool(page, 'Edit')
     const editor = page.getByRole('textbox', { name: 'Content', exact: true })
-    await editor.fill('# Shared guide\n\nAtomic local edit.\n')
+    await editor.fill('# Shared guide\n\nKeep this edit.\n')
     await tool(page, 'Read')
-    await expect(
-      page.getByText('Original saved body.', { exact: true })
-    ).toBeVisible()
     await tool(page, 'Edit')
-    await expect(editor).toHaveValue('# Shared guide\n\nAtomic local edit.\n')
-    await page.locator('input[type=file]').setInputFiles([
-      {
-        name: 'notes.txt',
-        mimeType: 'text/plain',
-        buffer: Buffer.from('Literal <script>text</script>\r\n'),
-      },
-      {
-        name: 'second.md',
-        mimeType: 'text/markdown',
-        buffer: Buffer.from('# Another file\n'),
-      },
-    ])
+    await expect(editor).toHaveValue('# Shared guide\n\nKeep this edit.\n')
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'wrong.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Wrong type'),
+    })
     await expect(
-      page.getByText('Changed files: 3', { exact: true })
-    ).toBeVisible()
-    const saved = await save(page)
-    expect(saved.files).toHaveLength(3)
-    expect(
-      api.requests.filter(
-        (request) =>
-          request.method === 'POST' &&
-          request.path.endsWith(`/${workId}/commits`)
+      page.getByText(
+        'Choose one file with the same document type. To add a document, use New document.'
       )
-    ).toHaveLength(1)
-    expect(
-      api.bodies
-        .get(saved.id)
-        ?.get(
-          saved.files.find((file) => file.relative_path === 'notes.txt')!
-            .document_id
-        )
-    ).toBe('Literal <script>text</script>\r\n')
-    const note = saved.files.find((file) => file.relative_path === 'notes.txt')!
-    await page.goto(
-      `/documents/${note.document_id}?project_id=${projectId}&repository_branch_id=${workId}&commit_id=${saved.id}`
-    )
-    await expect(
-      page.getByText('Literal <script>text</script>', { exact: true })
     ).toBeVisible()
+    await expect(editor).toHaveValue('# Shared guide\n\nKeep this edit.\n')
+    await page.locator('input[type=file]').setInputFiles({
+      name: 'replacement.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# Imported body\n\nLiteral <script>text</script>\n'),
+    })
+    const saved = await save(page)
+    expect(saved.files).toHaveLength(1)
+    expect(saved.files[0].document_id).toBe(documentId)
+    expect(saved.files[0].relative_path).toBe('guides/shared.md')
+    expect(api.bodies.get(saved.id)?.get(documentId)).toBe(
+      '# Imported body\n\nLiteral <script>text</script>\n'
+    )
     await expect(page.locator('main script')).toHaveCount(0)
     await noOverflow(page)
     expect(api.unexpected).toEqual([])
@@ -318,9 +305,25 @@ for (const width of [1440, 390]) {
     await expect(dialog.getByRole('textbox', { name: /version/i })).toHaveCount(
       0
     )
-    const commit = await save(page, () =>
-      dialog.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(
+      dialog.getByRole('textbox', { name: 'Initial branch', exact: true })
+    ).toHaveValue('main')
+    await dialog
+      .getByRole('textbox', { name: 'Initial branch', exact: true })
+      .fill('dev')
+    const response = page.waitForResponse(
+      (r) =>
+        r.request().method() === 'POST' &&
+        new URL(r.url()).pathname === `${projectRepositoryPath}/documents`
     )
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click()
+    const created = (await (await response).json()).detail
+    const commit = created.commit as RepositoryCommit
+    expect(commit.version_name).toBe('dev.1')
+    expect(created.branch.is_protected).toBe(false)
+    expect(
+      api.branches.find((branch) => branch.id === workId)?.head_commit_id
+    ).toBe(api.initial.id)
     const file = commit.files.find((file) =>
       file.relative_path.endsWith('uploaded.md')
     )!
@@ -365,7 +368,9 @@ for (const width of [1440, 390]) {
         exact: true,
       })
       .click()
-    await expect(page.getByText(/^r-20261030-/)).toBeVisible()
+    await expect(
+      page.getByRole('main').getByText('main.1', { exact: true })
+    ).toBeVisible()
     expect(api.releases[0].commit_id).toBe(api.initial.id)
     const shareId = 'e'.repeat(32),
       secret = `vdoc_share_${'f'.repeat(48)}`
@@ -384,7 +389,7 @@ for (const width of [1440, 390]) {
       created_at: '2026-10-30T08:00:00Z',
       updated_at: '2026-10-30T08:00:00Z',
     }
-    const sharePath = `${repositoryPath}/releases/${api.releases[0].id}/documents/${documentId}/shares`
+    const sharePath = `${projectRepositoryPath}/releases/${api.releases[0].id}/documents/${documentId}/shares`
     const writes: Record<string, unknown>[] = []
     let created = false
     await page.route(`**${sharePath}**`, async (route) => {
@@ -569,54 +574,31 @@ test('AI and subscriptions send fixed commit references and preserve event activ
   expect(api.unexpected).toEqual([])
 })
 
-test('legacy content requires explicit import before committing', async ({
+test('protected document branches preserve their review requirement', async ({
   page,
 }) => {
-  const api = await installRepository(page, { importRequired: true })
+  const api = await installRepository(page)
   await api.open()
-  const button = page.getByRole('button', {
-    name: 'Import existing documents',
-    exact: true,
-  })
-  await expect(button).toBeVisible()
+  await selectOption(
+    page.getByRole('combobox', { name: 'Document branch', exact: true }),
+    mainId
+  )
   await tool(page, 'Edit')
-  await expect(
-    page.getByRole('textbox', { name: 'Content', exact: true })
-  ).toBeDisabled()
-  await expect(
-    page.getByRole('button', { name: 'Save and commit', exact: true })
-  ).toBeDisabled()
-  expect(api.requests.some((request) => request.method === 'POST')).toBe(false)
-  await button.click()
-  await expect(button).toHaveCount(0)
   await expect(
     page.getByRole('textbox', { name: 'Content', exact: true })
   ).toBeDisabled()
   await page
     .getByRole('button', { name: 'Create a branch to edit', exact: true })
     .click()
-  const branchDialog = page.getByRole('dialog', {
-    name: 'New branch',
-    exact: true,
-  })
-  await branchDialog
+  const dialog = page.getByRole('dialog', { name: 'New branch', exact: true })
+  await dialog
     .getByRole('textbox', { name: 'Branch name', exact: true })
-    .fill('work/imported-content')
-  await branchDialog
-    .getByRole('button', { name: 'New branch', exact: true })
-    .click()
+    .fill('dev')
+  await dialog.getByRole('button', { name: 'New branch', exact: true }).click()
   await expect(
     page.getByRole('textbox', { name: 'Content', exact: true })
   ).toBeEnabled()
-  await expect(
-    page.getByRole('textbox', { name: 'Content', exact: true })
-  ).toHaveValue('# Shared guide\n\nOriginal saved body.\n')
-  expect(
-    api.requests.filter(
-      (request) =>
-        request.method === 'POST' && request.path.endsWith('/bootstrap')
-    )
-  ).toHaveLength(1)
+  expect(api.requests.filter((r) => r.path.endsWith('/bootstrap'))).toEqual([])
   expect(api.unexpected).toEqual([])
 })
 

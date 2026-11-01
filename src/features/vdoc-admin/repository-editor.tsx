@@ -4,6 +4,8 @@ import { FilePlus2, Save, Trash2, Upload } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { readUtf8File } from '@/lib/read-utf8-file'
 import {
+  type RepositoryScope,
+  repositoryScopeKey,
   createRepositoryBranch,
   saveRepositoryCommit,
   type RepositoryBranch,
@@ -55,7 +57,7 @@ export function RepositoryEditor({
   onSaved,
   onBranchCreated,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   branch: RepositoryBranch
   document?: DocumentDTO
   files: RepositoryFile[]
@@ -117,7 +119,8 @@ export function RepositoryEditor({
           },
         ]
       : []
-    const changes = [...selected, ...edit.extras]
+    const changes =
+      typeof projectId === 'string' ? [...selected, ...edit.extras] : selected
     const body = JSON.stringify({
       expected_head_commit_id: edit.baseCommitId,
       expected_generation: edit.generation,
@@ -171,6 +174,19 @@ export function RepositoryEditor({
     setUploadPending(true)
     setUploadError(undefined)
     try {
+      if (typeof projectId !== 'string') {
+        const upload = uploads[0]
+        if (
+          !upload ||
+          uploads.length !== 1 ||
+          documentTypeFromFilename(upload.name) !== document?.document_type
+        )
+          throw new Error(copy.importTypeError)
+        const nextContent = await readUtf8File(upload, t)
+        if (useAuthStore.getState().auth.sessionVersion === session)
+          write({ content: nextContent, extras: [] })
+        return
+      }
       const additions: RepositoryChange[] = []
       let selectedContent: string | undefined
       for (const upload of Array.from(uploads)) {
@@ -222,7 +238,7 @@ export function RepositoryEditor({
           className='font-mono text-xs text-muted-foreground'
           title={edit.baseCommitId}
         >
-          {copy.selectedBase}: {edit.baseCommitId.slice(0, 12)}
+          {copy.nextVersion}: {branch.name}.{(branch.revision ?? 0) + 1}
         </span>
       </div>
       {contentPending && <p role='status'>{t('admin.common.loading')}</p>}
@@ -236,7 +252,7 @@ export function RepositoryEditor({
                 triggerLabel={copy.editBranch}
                 submitLabel={copy.newBranch}
                 pending={branchingMutation.isPending}
-                submissionScope={`${projectId}:${branch.id}:${edit.baseCommitId}`}
+                submissionScope={`${repositoryScopeKey(projectId)}:${branch.id}:${edit.baseCommitId}`}
                 triggerVariant='outline'
                 onSubmit={async (data) => {
                   const created = await branchingMutation.mutateAsync(
@@ -343,7 +359,7 @@ export function RepositoryEditor({
           ref={fileInput}
           type='file'
           className='sr-only'
-          multiple
+          multiple={typeof projectId === 'string'}
           accept='.md,.txt,.yaml,.yml,.json'
           onChange={(event) => void importFiles(event.target.files)}
           disabled={blocked}
@@ -401,7 +417,7 @@ export function RepositoryEditor({
             onChange={(event) => write({ message: event.target.value })}
           />
         </div>
-        <div className='flex flex-wrap gap-2'>
+        <div className='sticky bottom-0 flex flex-wrap gap-2 border-t bg-card py-3'>
           <Button type='submit' disabled={blocked || !hasChanges}>
             <Save aria-hidden className='size-4' />
             {saveMutation.isPending ? copy.saving : copy.save}
@@ -453,7 +469,7 @@ export function RepositoryEditor({
               triggerLabel={copy.preserveBranch}
               submitLabel={copy.save}
               pending={branchingMutation.isPending || saveMutation.isPending}
-              submissionScope={`${projectId}:${branch.id}:${edit.baseCommitId}`}
+              submissionScope={`${repositoryScopeKey(projectId)}:${branch.id}:${edit.baseCommitId}`}
               triggerVariant='outline'
               onSubmit={async (data) => {
                 const created = await branchingMutation.mutateAsync(

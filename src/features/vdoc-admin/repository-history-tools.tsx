@@ -2,6 +2,8 @@ import { lazy, Suspense, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { GitCommitHorizontal, GitMerge, History } from 'lucide-react'
 import {
+  repositoryKeys,
+  type RepositoryScope,
   compareRepositoryCommits,
   createRepositoryMergeRequest,
   listRepositoryCommits,
@@ -47,7 +49,7 @@ export function RepositoryHistoryTools({
   onOpenCommit,
   onChanged,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   branch: RepositoryBranch
   branches: RepositoryBranch[]
   commitId: string
@@ -79,8 +81,7 @@ export function RepositoryHistoryTools({
   const [preview, setPreview] = useState<RepositoryMergeRequest>()
   const commitsQuery = useQuery({
     queryKey: [
-      'repository',
-      projectId,
+      ...repositoryKeys.all(projectId),
       'history',
       branch.id,
       historyFilter ? documentId : '',
@@ -99,7 +100,13 @@ export function RepositoryHistoryTools({
     enabled: view === 'history' || view === 'compare',
   })
   const fromCommitsQuery = useQuery({
-    queryKey: ['repository', projectId, 'history', compareFromBranchId, '', ''],
+    queryKey: [
+      ...repositoryKeys.all(projectId),
+      'history',
+      compareFromBranchId,
+      '',
+      '',
+    ],
     queryFn: ({ signal }) =>
       listRepositoryCommits(
         projectId,
@@ -109,12 +116,12 @@ export function RepositoryHistoryTools({
     enabled: view === 'compare',
   })
   const mergesQuery = useQuery({
-    queryKey: ['repository', projectId, 'merge-requests'],
+    queryKey: [...repositoryKeys.all(projectId), 'merge-requests'],
     queryFn: ({ signal }) => listRepositoryMergeRequests(projectId, signal),
     enabled: view === 'merges',
   })
   const releasesQuery = useQuery({
-    queryKey: ['repository', projectId, 'releases'],
+    queryKey: [...repositoryKeys.all(projectId), 'releases'],
     queryFn: ({ signal }) => listRepositoryReleases(projectId, signal),
     enabled: view === 'releases',
   })
@@ -168,7 +175,7 @@ export function RepositoryHistoryTools({
         <>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <h1 className='text-xl font-semibold'>{copy.history}</h1>
-            {documentId && (
+            {documentId && typeof projectId === 'string' && (
               <Button
                 variant='outline'
                 size='sm'
@@ -197,11 +204,17 @@ export function RepositoryHistoryTools({
                     className='mt-1 size-4 shrink-0 text-muted-foreground'
                   />
                   <div className='min-w-0 flex-1'>
-                    <p className='text-sm font-medium break-words'>
-                      {item.message || item.id.slice(0, 12)}
+                    <p className='flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm break-words'>
+                      <span className='font-medium' title={item.id}>
+                        {item.version_name || item.id.slice(0, 12)}
+                      </span>
+                      {item.message && (
+                        <span className='text-muted-foreground'>
+                          {item.message}
+                        </span>
+                      )}
                     </p>
                     <p className='mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-                      <code title={item.id}>{item.id.slice(0, 12)}</code>
                       <span>{date(item.created_at)}</span>
                       <span
                         className='max-w-48 truncate'
@@ -209,9 +222,11 @@ export function RepositoryHistoryTools({
                       >
                         {item.created_by}
                       </span>
-                      <span>
-                        {copy.files}: {item.files.length}
-                      </span>
+                      {typeof projectId === 'string' && (
+                        <span>
+                          {copy.files}: {item.files.length}
+                        </span>
+                      )}
                     </p>
                     {item.provenance && (
                       <p className='mt-1 text-xs text-muted-foreground'>
@@ -318,7 +333,7 @@ export function RepositoryHistoryTools({
                 value={from}
                 options={(fromCommitsQuery.data?.items ?? []).map((item) => ({
                   value: item.id,
-                  label: `${item.id.slice(0, 10)} · ${item.message}`,
+                  label: `${item.version_name || item.id.slice(0, 10)} · ${item.message}`,
                 }))}
                 onChange={(value) => {
                   onCompareSelection({ from: value, to })
@@ -345,7 +360,7 @@ export function RepositoryHistoryTools({
                           item.id,
                           {
                             value: item.id,
-                            label: `${item.id.slice(0, 10)} · ${item.message}`,
+                            label: `${item.version_name || item.id.slice(0, 10)} · ${item.message}`,
                           },
                         ] as const
                     ),
@@ -372,7 +387,7 @@ export function RepositoryHistoryTools({
             >
               {copy.runCompare}
             </Button>
-            {documentId && (
+            {documentId && typeof projectId === 'string' && (
               <label className='inline-flex items-center gap-2 text-sm'>
                 <input
                   type='checkbox'

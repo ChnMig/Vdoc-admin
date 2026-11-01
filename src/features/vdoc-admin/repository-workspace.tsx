@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import {
+  listRepositoryCommits,
+  repositoryScopeKey,
+  type RepositoryScope,
   bootstrapRepository,
   createRepositoryBranch,
   getRepositoryContent,
@@ -26,6 +29,12 @@ import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { DocumentReader } from '@/features/document-reader/document-reader'
 import {
   FormDialog,
@@ -45,7 +54,6 @@ export function RepositoryWorkspace({
   projectId,
   projectName,
   document,
-  legacyDocuments,
   search,
   canManage,
   canWrite,
@@ -55,7 +63,7 @@ export function RepositoryWorkspace({
 }: {
   projectId: string
   projectName?: string
-  document?: DocumentDTO
+  document?: DocumentDTO & { default_branch_id?: string }
   legacyDocuments: DocumentDTO[]
   search: VdocRouteSearch
   canManage: boolean
@@ -66,8 +74,19 @@ export function RepositoryWorkspace({
 }) {
   const copy = useRepositoryCopy()
   const queryClient = useQueryClient()
-  const { branchesQuery, branches, branch, commitId, commitQuery } =
-    useRepositorySnapshot(projectId, search)
+  const {
+    repositoryScope,
+    branchesQuery,
+    branches,
+    branch,
+    commitId,
+    commitQuery,
+  } = useRepositorySnapshot(
+    projectId,
+    { ...search, document_id: document?.id },
+    true,
+    document?.default_branch_id
+  )
   const view = search.repository_view ?? 'content'
   const [edits, setEdits] = useState<Record<string, RepositoryEdit>>({})
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -79,14 +98,36 @@ export function RepositoryWorkspace({
       ownerRef.current = ''
     }
   }, [scope])
-  const [compareSelection, setCompareSelection] = useState({ from: '', to: '' })
+  const [comparisonScopes, setComparisonScopes] = useState<
+    Record<string, { from: string; to: string }>
+  >({})
+  const comparisonScope = `${projectId}:${document?.id ?? ''}`
+  const compareSelection = comparisonScopes[comparisonScope] ?? {
+    from: '',
+    to: '',
+  }
+  const setCompareSelection = (value: { from: string; to: string }) =>
+    setComparisonScopes((current) => ({ ...current, [comparisonScope]: value }))
+  const versionsQuery = useQuery({
+    queryKey: [...repositoryKeys.all(repositoryScope), 'versions', branch?.id],
+    queryFn: ({ signal }) =>
+      listRepositoryCommits(repositoryScope, { branch_id: branch!.id }, signal),
+    enabled: Boolean(branch),
+  })
+  const versions = versionsQuery.data?.items ?? []
+
   const file = commitQuery.data?.files.find(
     (item) => item.document_id === document?.id
   )
   const contentQuery = useQuery({
-    queryKey: ['repository', projectId, 'content', commitId, document?.id],
+    queryKey: [
+      ...repositoryKeys.all(repositoryScope),
+      'content',
+      commitId,
+      document?.id,
+    ],
     queryFn: ({ signal }) =>
-      getRepositoryContent(projectId, commitId, document!.id, signal),
+      getRepositoryContent(repositoryScope, commitId, document!.id, signal),
     enabled: Boolean(file && document?.id && commitId),
     refetchOnWindowFocus: false,
   })
@@ -104,7 +145,7 @@ export function RepositoryWorkspace({
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: repositoryKeys.all(projectId) })
   const importMutation = useMutation({
-    mutationFn: () => bootstrapRepository(projectId),
+    mutationFn: () => bootstrapRepository(repositoryScope),
     onSuccess: async (imported) => {
       await invalidate()
       if (ownerRef.current !== scope) return
@@ -142,9 +183,12 @@ export function RepositoryWorkspace({
     ...(canWrite ? [{ id: 'edit' as const, label: copy.edit }] : []),
     { id: 'history', label: copy.history },
     { id: 'compare', label: copy.compare },
+
+    { id: 'ai', label: copy.ai },
+  ]
+  const more: { id: RepositoryView; label: string }[] = [
     { id: 'merges', label: copy.merges },
     { id: 'releases', label: copy.releases },
-    { id: 'ai', label: copy.ai },
     { id: 'events', label: copy.events },
   ]
   return (
@@ -155,7 +199,9 @@ export function RepositoryWorkspace({
       <header className='flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-4 py-2'>
         <div className='flex min-w-0 items-center gap-2'>
           {navigationActions}
-          <span className='truncate text-sm font-medium'>{projectName}</span>
+          <h1 className='truncate text-base font-semibold'>
+            {document?.name ?? projectName}
+          </h1>
         </div>
         <div className='flex items-center gap-1'>
           <Button
@@ -168,7 +214,7 @@ export function RepositoryWorkspace({
           </Button>
           {canWrite && interactive && branch && !branch.import_required && (
             <RepositoryBranchDialog
-              projectId={projectId}
+              projectId={repositoryScope}
               fromCommitId={commitId}
               onCreated={(created) => {
                 void invalidate()
@@ -178,7 +224,7 @@ export function RepositoryWorkspace({
           )}
         </div>
       </header>
-      <div className='grid shrink-0 gap-3 border-b bg-[var(--surface-control)] px-4 py-3 sm:grid-cols-[minmax(11rem,18rem)_minmax(0,1fr)]'>
+      <div className='grid shrink-0 gap-3 border-b bg-[var(--surface-control)] px-4 py-3 sm:grid-cols-[minmax(8rem,14rem)_minmax(10rem,18rem)_minmax(0,1fr)]'>
         <NativeSelect
           label={copy.branch}
           placeholder={copy.branch}
@@ -190,13 +236,46 @@ export function RepositoryWorkspace({
           disabled={branchesQuery.isPending}
           onChange={branchChanged}
         />
+        <NativeSelect
+          label={copy.version}
+          placeholder={copy.version}
+          value={search.commit_id ?? 'latest'}
+          options={[
+            {
+              value: 'latest',
+              label: `${copy.latest}${versions[0]?.version_name ? ` · ${versions[0].version_name}` : ''}`,
+            },
+            ...versions.map((item) => ({
+              value: item.id,
+              label: item.version_name || item.id.slice(0, 12),
+            })),
+            ...(search.commit_id &&
+            !versions.some((item) => item.id === search.commit_id)
+              ? [
+                  {
+                    value: search.commit_id,
+                    label:
+                      commitQuery.data?.version_name ||
+                      search.commit_id.slice(0, 12),
+                  },
+                ]
+              : []),
+          ]}
+          disabled={!branch || versionsQuery.isPending}
+          onChange={(value) =>
+            onSearchChange({
+              commit_id: value === 'latest' ? undefined : value,
+              repository_view: 'content',
+            })
+          }
+        />
         <div className='flex min-w-0 flex-wrap items-end gap-2 pb-1 text-xs'>
           <span
             className='inline-flex items-center gap-1.5 font-mono'
             title={commitId}
           >
             <GitCommitHorizontal aria-hidden className='size-4' />
-            {commitId.slice(0, 12)}
+            {commitQuery.data?.version_name || copy.noCommits}
           </span>
           {branch?.is_protected && (
             <Badge variant='outline'>
@@ -204,7 +283,7 @@ export function RepositoryWorkspace({
               {copy.protectedBranch}
             </Badge>
           )}
-          {search.commit_id && (
+          {search.commit_id && search.commit_id !== branch?.head_commit_id && (
             <Button
               variant='link'
               size='sm'
@@ -214,7 +293,7 @@ export function RepositoryWorkspace({
               {copy.latest}
             </Button>
           )}
-          {dirty && (
+          {edit?.dirty && (
             <span role='status' className='text-muted-foreground'>
               {copy.unsaved}
             </span>
@@ -236,6 +315,25 @@ export function RepositoryWorkspace({
             {item.label}
           </Button>
         ))}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size='sm'
+              variant={
+                more.some((item) => item.id === view) ? 'secondary' : 'ghost'
+              }
+            >
+              {more.find((item) => item.id === view)?.label ?? copy.more}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end'>
+            {more.map((item) => (
+              <DropdownMenuItem key={item.id} onSelect={() => setView(item.id)}>
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
       <main
         id='content'
@@ -252,11 +350,7 @@ export function RepositoryWorkspace({
                 <AlertDescription>{copy.unavailable}</AlertDescription>
               </Alert>
             )}
-          {(branch?.import_required ||
-            (commitQuery.data?.files.length === 0 &&
-              legacyDocuments.some(
-                (item) => item.latest_draft_id || item.latest_version_id
-              ))) && (
+          {branch?.import_required && (
             <div className='grid gap-3 border-b pb-5'>
               <p className='max-w-prose text-sm leading-6 text-muted-foreground'>
                 {copy.importDescription}
@@ -286,11 +380,12 @@ export function RepositoryWorkspace({
           )}
           {commitQuery.isSuccess && (
             <div hidden={view !== 'content'}>
-              {search.commit_id && (
-                <p className='text-xs text-muted-foreground'>
-                  {copy.immutable}
-                </p>
-              )}
+              {search.commit_id &&
+                search.commit_id !== branch?.head_commit_id && (
+                  <p className='text-xs text-muted-foreground'>
+                    {copy.immutable}
+                  </p>
+                )}
               {document ? (
                 <>
                   <LoadingErrorState state={contentQuery} />
@@ -373,7 +468,7 @@ export function RepositoryWorkspace({
               <div hidden={view !== 'edit'}>
                 <RepositoryEditor
                   key={editKey}
-                  projectId={projectId}
+                  projectId={repositoryScope}
                   branch={branch}
                   document={document}
                   baseCommitId={commitId}
@@ -394,7 +489,7 @@ export function RepositoryWorkspace({
                       return next
                     })
                     queryClient.setQueryData(
-                      repositoryKeys.commit(projectId, saved.id),
+                      repositoryKeys.commit(repositoryScope, saved.id),
                       saved
                     )
                     await invalidate()
@@ -436,7 +531,7 @@ export function RepositoryWorkspace({
             >
               <RepositoryHistoryTools
                 key={`${projectId}:${branch.id}:${document?.id ?? ''}`}
-                projectId={projectId}
+                projectId={repositoryScope}
                 branch={branch}
                 branches={branches}
                 commitId={commitId}
@@ -455,7 +550,7 @@ export function RepositoryWorkspace({
             <div hidden={view !== 'ai' && view !== 'events'}>
               <RepositoryAutomation
                 key={`${projectId}:${document?.id ?? ''}`}
-                projectId={projectId}
+                projectId={repositoryScope}
                 branch={branch}
                 commitId={commitId}
                 documentId={document?.id}
@@ -499,7 +594,7 @@ export function RepositoryBranchDialog({
   onCreated,
   label,
 }: {
-  projectId: string
+  projectId: RepositoryScope
   fromCommitId: string
   onCreated: (branch: RepositoryBranch) => void
   label?: string
@@ -515,7 +610,7 @@ export function RepositoryBranchDialog({
       triggerLabel={label ?? copy.newBranch}
       submitLabel={copy.newBranch}
       pending={mutation.isPending}
-      submissionScope={`${projectId}:${fromCommitId}`}
+      submissionScope={`${repositoryScopeKey(projectId)}:${fromCommitId}`}
       onSubmit={async (data) =>
         onCreated(
           await mutation.mutateAsync(String(data.get('name') ?? '').trim())

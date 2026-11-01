@@ -9,6 +9,7 @@ import {
   parseDocumentShareSecret,
 } from '@/lib/document-share-url'
 import { resolvePublicShareBaseUrl } from '@/lib/public-share-config'
+import { repositoryScopeKey, type RepositoryScope } from '@/lib/repository-api'
 import {
   createRepositoryShare,
   listRepositoryShares,
@@ -30,7 +31,7 @@ import { Label } from '@/components/ui/label'
 import { LoadingErrorState, NativeSelect } from './page-shared'
 
 type Props = {
-  projectId: string
+  projectId: RepositoryScope
   documentId: string
   releaseId: string
   disabled?: boolean
@@ -56,7 +57,7 @@ export function RepositoryShareDialog(props: Props) {
       </DialogTrigger>
       {open && !props.disabled && (
         <RepositorySharePanel
-          key={`${sessionVersion}:${props.projectId}:${props.releaseId}:${props.documentId}`}
+          key={`${sessionVersion}:${repositoryScopeKey(props.projectId)}:${props.releaseId}:${props.documentId}`}
           {...props}
         />
       )}

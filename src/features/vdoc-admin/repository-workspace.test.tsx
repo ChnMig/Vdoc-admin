@@ -7,6 +7,7 @@ import {
   getRepositoryCommit,
   getRepositoryContent,
   listRepositoryBranches,
+  listRepositoryCommits,
   saveRepositoryCommit,
   type RepositoryBranch,
   type RepositoryCommit,
@@ -21,6 +22,7 @@ vi.mock('@/lib/repository-api', async (load) => ({
   getRepositoryCommit: vi.fn(),
   getRepositoryContent: vi.fn(),
   listRepositoryBranches: vi.fn(),
+  listRepositoryCommits: vi.fn(),
   saveRepositoryCommit: vi.fn(),
 }))
 const branch: RepositoryBranch = {
@@ -111,6 +113,10 @@ describe('commit workspace', () => {
     vi.resetAllMocks()
     globalThis.document.cookie = 'vdoc-admin-language=en; path=/'
     vi.mocked(listRepositoryBranches).mockResolvedValue([branch])
+    vi.mocked(listRepositoryCommits).mockResolvedValue({
+      items: [commit],
+      nextCursor: undefined,
+    })
     vi.mocked(getRepositoryCommit).mockResolvedValue(commit)
     vi.mocked(getRepositoryContent).mockResolvedValue({
       commit_id: 'head',
@@ -129,7 +135,7 @@ describe('commit workspace', () => {
     const view = setup({ repository_view: 'edit', commit_id: 'head' })
     await waitFor(() =>
       expect(getRepositoryContent).toHaveBeenCalledWith(
-        'p',
+        { projectId: 'p', documentId: 'doc' },
         'head',
         'doc',
         expect.any(AbortSignal)
@@ -197,6 +203,6 @@ describe('commit workspace', () => {
     const view = setup({ repository_view: 'edit' })
     await view.findByRole('button', { name: 'Import existing documents' })
     expect(await view.findByRole('textbox', { name: 'Content' })).toBeDisabled()
-    expect(view.getByRole('button', { name: 'Save and commit' })).toBeDisabled()
+    expect(view.getByRole('button', { name: 'Save version' })).toBeDisabled()
   })
 })

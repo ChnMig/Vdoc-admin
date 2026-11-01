@@ -17,7 +17,7 @@ import {
   closeMobileFiles,
   openTool,
 } from '../support/document-workspace'
-import { installUnimportedRepository } from '../support/repository-workflow'
+import { installProjectedRepository } from '../support/repository-workflow'
 
 const evidenceDirectory = resolve(
   '../.artifacts/document-workspace-interactions-20261025-beta10/regression'
@@ -437,7 +437,7 @@ for (const width of [1440, 1920, 390]) {
   }) => {
     await page.setViewportSize({ width, height: 1000 })
     const api = await installWorkspace(page)
-    await installUnimportedRepository(page, projectId)
+    await installProjectedRepository(page, projectId)
     await openDocument(page)
     await expect(page.locator('[data-document-page]')).toBeVisible()
     await expect(
@@ -460,8 +460,8 @@ for (const width of [1440, 1920, 390]) {
       .click()
     await expect(page).toHaveURL(new RegExp(`/documents/${documentId}\\?`))
     await expect(
-      page.getByRole('button', {
-        name: 'Import existing documents',
+      page.getByRole('combobox', {
+        name: 'Document branch',
         exact: true,
       })
     ).toBeVisible()

@@ -1,4 +1,5 @@
 import type { DocumentShareExpiryPreset } from './document-share-api'
+import { repositoryProjectId, type RepositoryScope } from './repository-api'
 import {
   type RequestOptions,
   unwrapEnvelope,
@@ -23,12 +24,16 @@ export type RepositoryShare = {
 
 type RepositoryShareSecret = { share: RepositoryShare; secret: string }
 
-function path(projectId: string, releaseId: string, documentId: string) {
-  return `/api/v1/private/projects/${encodeURIComponent(projectId)}/repository/releases/${encodeURIComponent(releaseId)}/documents/${encodeURIComponent(documentId)}/shares`
+function path(
+  projectId: RepositoryScope,
+  releaseId: string,
+  documentId: string
+) {
+  return `/api/v1/private/projects/${encodeURIComponent(repositoryProjectId(projectId))}/repository/releases/${encodeURIComponent(releaseId)}/documents/${encodeURIComponent(documentId)}/shares`
 }
 
 export function listRepositoryShares(
-  projectId: string,
+  projectId: RepositoryScope,
   releaseId: string,
   documentId: string,
   options?: RequestOptions
@@ -41,7 +46,7 @@ export function listRepositoryShares(
 }
 
 export function createRepositoryShare(
-  projectId: string,
+  projectId: RepositoryScope,
   releaseId: string,
   documentId: string,
   payload: { expiry_preset: DocumentShareExpiryPreset; password?: string }
@@ -52,7 +57,7 @@ export function createRepositoryShare(
 }
 
 export function revealRepositoryShare(
-  projectId: string,
+  projectId: RepositoryScope,
   releaseId: string,
   documentId: string,
   shareId: string
@@ -65,7 +70,7 @@ export function revealRepositoryShare(
 }
 
 export function revokeRepositoryShare(
-  projectId: string,
+  projectId: RepositoryScope,
   releaseId: string,
   documentId: string,
   shareId: string
