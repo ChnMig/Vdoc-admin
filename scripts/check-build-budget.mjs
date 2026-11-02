@@ -38,15 +38,14 @@ const requiredPages = [
   'mcp-tokens/index',
   'projects/index',
   'settings/index',
-  'skill/index',
   'teams/index',
   'users/index',
 ]
 for (const page of requiredPages) {
   assert(manifest[`src/routes/_authenticated/${page}.tsx?tsr-split=component`], `${page} must remain an independently loaded page`)
 }
-for (const legacy of ['drafts', 'versions', 'diffs']) {
-  assert(!manifest[`src/routes/_authenticated/${legacy}/index.tsx?tsr-split=component`], `${legacy} must redirect into the document workspace instead of loading an obsolete page`)
+for (const legacy of ['drafts', 'versions', 'diffs', 'skill']) {
+  assert(!manifest[`src/routes/_authenticated/${legacy}/index.tsx?tsr-split=component`], `${legacy} must redirect instead of loading an obsolete page`)
 }
 const pages = Object.keys(manifest).filter((key) => /^src\/routes\/_authenticated\/(?:.+\/)?(?:index|\$documentId)\.tsx\?tsr-split=component$/.test(key))
 assert(pages.length >= limits.minimumPageChunks, 'Workbench pages must load independently')

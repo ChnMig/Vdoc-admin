@@ -1,10 +1,4 @@
-import {
-  FolderTree,
-  GraduationCap,
-  History,
-  KeyRound,
-  Settings,
-} from 'lucide-react'
+import { FolderTree, History, KeyRound, Settings } from 'lucide-react'
 import { Logo } from '@/assets/logo'
 import { getAdminBranding } from '@/lib/branding'
 import { type SidebarData } from '../types'
@@ -46,12 +40,6 @@ export const sidebarData: SidebarData = {
           titleKey: 'nav.mcpTokens',
           url: '/mcp-tokens',
           icon: KeyRound,
-        },
-        {
-          title: 'Vdoc Skill',
-          titleKey: 'nav.skill',
-          url: '/skill',
-          icon: GraduationCap,
         },
       ],
     },

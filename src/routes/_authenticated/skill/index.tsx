@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { SkillPage } from '@/features/vdoc-admin/skill-page'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/skill/')({
-  component: SkillPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/mcp-tokens', replace: true })
+  },
 })

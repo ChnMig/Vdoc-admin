@@ -4,7 +4,7 @@
     "entryGzipBytes": 200000,
     "pageChunkBytes": 40000,
     "routeGzipBytes": 300000,
-    "minimumPageChunks": 10
+    "minimumPageChunks": 9
   },
-  "pageStructureNote": "The document workspace replaces the drafts, versions, and diffs pages with redirects and adds a standalone document route, leaving 10 independently loaded workbench pages."
+  "pageStructureNote": "The document workspace replaces the drafts, versions, and diffs pages with redirects and adds a standalone document route. Agent access uses MCP Tokens; the retired Skill page redirects there, leaving 9 independently loaded workbench pages."
 }

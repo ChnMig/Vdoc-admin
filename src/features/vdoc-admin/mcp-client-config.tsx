@@ -11,7 +11,7 @@ export function MCPClientConfig({
   baseUrl: string
   token?: string
 }) {
-  const { t } = useLanguage()
+  const { language, t } = useLanguage()
   const beta = resolveAdminReleaseChannel() === 'beta'
   const serverName = beta ? 'vdoc_beta' : 'vdoc'
   const command = beta ? '<ABSOLUTE_BETA_MCP_PATH>' : 'npx'
@@ -79,6 +79,14 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
       <p className='mt-3 text-sm text-muted-foreground'>
         {t('admin.token.clientVerify')}
       </p>
+      <a
+        href={`https://chnmig.github.io/Vdoc-site/${language === 'en' ? 'en/' : ''}mcp-tools#release-channels`}
+        target='_blank'
+        rel='noreferrer'
+        className='w-fit rounded-sm text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+      >
+        {t('admin.token.setupGuide')}
+      </a>
     </Tabs>
   )
 }

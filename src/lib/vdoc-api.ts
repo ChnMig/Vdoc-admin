@@ -811,6 +811,27 @@ export function getSystemVersion(options?: RequestOptions) {
   )
 }
 
+export type AuditRetentionDTO = { audit_retention_days: number }
+
+export function getAuditRetention(options?: RequestOptions) {
+  return unwrapEnvelope<AuditRetentionDTO>(
+    vdocApi.get('/api/v1/private/system/audit-retention', {
+      signal: options?.signal,
+    })
+  )
+}
+
+export function updateAuditRetention(
+  payload: AuditRetentionDTO,
+  options?: RequestOptions
+) {
+  return unwrapEnvelope<AuditRetentionDTO>(
+    vdocApi.put('/api/v1/private/system/audit-retention', payload, {
+      signal: options?.signal,
+    })
+  )
+}
+
 export function checkSystemUpdates(options?: RequestOptions) {
   return unwrapEnvelope<SystemUpdatesDTO>(
     vdocApi.get('/api/v1/private/system/updates', { signal: options?.signal })

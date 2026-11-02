@@ -100,6 +100,45 @@ beforeEach(() => {
   api.revokeMCPToken.mockResolvedValue({ ...token, status: 2 })
 })
 
+it.each([
+  ['read', [1, 3]],
+  ['draft', [2, 4]],
+  ['both', [1, 2, 3, 4]],
+] as const)(
+  'creates format-independent %s permissions',
+  async (mode, scopes) => {
+    api.createMCPToken.mockResolvedValue({ ...token, scopes, token: secret })
+    const { user, screen } = setup()
+    await user.click(
+      await screen.findByRole('button', { name: 'Create MCP token' })
+    )
+    const dialog = screen.getByRole('dialog', { name: 'Create MCP token' })
+    expect(within(dialog).getAllByRole('checkbox')).toHaveLength(2)
+    const read = within(dialog).getByRole('checkbox', {
+      name: 'Read documents',
+    })
+    const draft = within(dialog).getByRole('checkbox', {
+      name: 'Create and update drafts',
+    })
+    expect(read).toBeChecked()
+    expect(draft).not.toBeChecked()
+    if (mode === 'draft') await user.click(read)
+    if (mode !== 'read') await user.click(draft)
+    await user.type(
+      within(dialog).getByLabelText('Name'),
+      'Unified permissions'
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() =>
+      expect(api.createMCPToken).toHaveBeenCalledWith({
+        name: 'Unified permissions',
+        scopes: [...scopes],
+        expires_at: null,
+      })
+    )
+  }
+)
+
 describe('MCPTokensPage refreshed secret lifecycle', () => {
   it.each([
     ['revoked', [{ ...token, status: 2 }]],
@@ -182,12 +221,17 @@ describe('MCPTokensPage refreshed secret lifecycle', () => {
       pending.resolve({ items: [token], total: 1 })
       await pending.promise
     })
+    // Wait for React Query to finish the first refresh before starting the
+    // failing one; otherwise it can deduplicate against the resolved request.
+    await waitFor(() =>
+      expect(client.getQueryState(['mcp-tokens'])?.fetchStatus).toBe('idle')
+    )
     api.listMCPTokens.mockRejectedValueOnce(
       new Error('Temporary network failure')
     )
     await refresh(client)
     expect(screen.container.textContent).toContain(secret)
-    expect(screen.container.textContent).toContain('Temporary network failure')
+    expect(await screen.findByText('Temporary network failure')).toBeVisible()
   })
 
   it.each([

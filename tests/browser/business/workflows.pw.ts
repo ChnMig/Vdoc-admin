@@ -227,6 +227,13 @@ async function installAdminApi(
     if (request.headers()['authorization'] !== adminToken) {
       throw new Error('Admin API request did not carry the active session.')
     }
+    if (
+      method === 'GET' &&
+      ['/api/v1/private/mcp-tokens', '/api/v1/private/mcp-usage'].includes(path)
+    ) {
+      await fulfillEnvelope(route, [], { total: 0 })
+      return
+    }
     if (method === 'GET' && path === '/api/v1/private/identity/me') {
       await fulfillEnvelope(route, adminUser)
       return
@@ -412,6 +419,30 @@ async function installAdminApi(
   })
 }
 
+test('retired Skill bookmark redirects to MCP access without a Skill navigation entry', async ({
+  page,
+}) => {
+  await installAdminSession(page)
+  await installAdminApi(page)
+  await page.goto('/skill/')
+  await expect(page).toHaveURL(/\/mcp-tokens\/?$/)
+  await expect(
+    page.getByRole('heading', { name: 'MCP Tokens', exact: true })
+  ).toBeVisible()
+  await expect(
+    page.getByRole('link', { name: 'Vdoc Skill', exact: true })
+  ).toHaveCount(0)
+  await page
+    .getByRole('tab', { name: 'MCP client configuration', exact: true })
+    .click()
+  await expect(
+    page.getByRole('link', { name: 'MCP setup guide', exact: true })
+  ).toHaveAttribute(
+    'href',
+    'https://chnmig.github.io/Vdoc-site/en/mcp-tools#release-channels'
+  )
+})
+
 for (const width of [1280, 390]) {
   test(`client configuration stays inside its card at ${width}px`, async ({
     page,
@@ -419,10 +450,13 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 })
     await installAdminSession(page)
     await installAdminApi(page)
-    await page.goto('/skill/')
+    await page.goto('/mcp-tokens/')
+    await page
+      .getByRole('tab', { name: 'MCP client configuration', exact: true })
+      .click()
     for (const client of ['Codex', 'Cursor']) {
       await page.getByRole('tab', { name: client, exact: true }).click()
-      const panel = page.getByRole('tabpanel')
+      const panel = page.getByRole('tabpanel').last()
       await expect(panel).toBeVisible()
       expect(
         await panel.evaluate((element) => {
@@ -443,6 +477,11 @@ for (const width of [1280, 390]) {
           })
       ).toBe(true)
     }
+    await page.screenshot({
+      path: `.artifacts/impeccable/mcp-only/client-config-${width}.png`,
+      fullPage: true,
+      animations: 'disabled',
+    })
   })
 
   test(`workspace lists documents before loading committed content at ${width}px`, async ({

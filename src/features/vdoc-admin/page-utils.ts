@@ -19,9 +19,7 @@ import {
 import { useLanguage } from '@/context/language-provider'
 
 export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#9d03c8321b8be5660a9ebbf824ae94ce4251f1b7'
-
-export const vdocMcpReleaseVersion = '0.4.0-beta.4'
+  'github:ChnMig/Vdoc-mcp#84705b299ee260a445302043294c03d38e2b8f7d'
 
 export const ACTIVE_STATUS = 1
 
@@ -80,7 +78,6 @@ export type PageKey =
   | 'diffs'
   | 'audit'
   | 'mcpTokens'
-  | 'skill'
   | 'settings'
 
 export type QueryState = {
@@ -125,8 +122,7 @@ export const pageNextRoute: Record<PageKey, string> = {
   versions: '/diffs',
   diffs: '/mcp-tokens',
   audit: '/settings',
-  mcpTokens: '/skill',
-  skill: '/mcp-tokens',
+  mcpTokens: '/documents',
   settings: '/',
 }
 

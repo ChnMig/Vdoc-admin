@@ -34,7 +34,13 @@ const ReleaseStatusPanel = lazy(() =>
   }))
 )
 
-const categories = ['account', 'appearance', 'ai', 'version'] as const
+const AuditRetentionPanel = lazy(() =>
+  import('./audit-retention-panel').then(({ AuditRetentionPanel }) => ({
+    default: AuditRetentionPanel,
+  }))
+)
+
+const categories = ['account', 'appearance', 'ai', 'system', 'version'] as const
 type SettingsCategory = (typeof categories)[number]
 
 export function SettingsPage() {
@@ -47,6 +53,12 @@ export function SettingsPage() {
     queryFn: ({ signal }) => getIdentity({ signal }),
   })
   const identity = identityQuery.data ?? authUser
+  const visibleCategories = categories.filter(
+    (item) => item !== 'system' || identity?.is_super_admin
+  )
+  const activeCategory = visibleCategories.includes(category)
+    ? category
+    : 'account'
 
   return (
     <>
@@ -65,7 +77,7 @@ export function SettingsPage() {
           </p>
         </div>
         <Tabs
-          value={category}
+          value={activeCategory}
           onValueChange={(value) => {
             const next = value as SettingsCategory
             setCategory(next)
@@ -77,9 +89,9 @@ export function SettingsPage() {
         >
           <TabsList
             aria-label={t('admin.settings.navigation')}
-            className='grid h-auto w-full grid-cols-4 justify-start gap-1 rounded-none border-b bg-transparent p-0 sm:flex sm:gap-4'
+            className='flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0 sm:gap-4'
           >
-            {categories.map((item) => (
+            {visibleCategories.map((item) => (
               <TabsTrigger
                 key={item}
                 value={item}
@@ -89,11 +101,11 @@ export function SettingsPage() {
               </TabsTrigger>
             ))}
           </TabsList>
-          {categories.map((item) => (
+          {visibleCategories.map((item) => (
             <TabsContent
               key={item}
               value={item}
-              hidden={category !== item}
+              hidden={activeCategory !== item}
               forceMount
               className='min-w-0 data-[state=inactive]:hidden'
             >
@@ -140,6 +152,15 @@ export function SettingsPage() {
                     </div>
                   )}
                   {item === 'appearance' && <AppearanceSettings />}
+                  {item === 'system' && (
+                    <Suspense
+                      fallback={
+                        <p role='status'>{t('admin.common.loading')}</p>
+                      }
+                    >
+                      <AuditRetentionPanel />
+                    </Suspense>
+                  )}
                   {item === 'ai' && identity && (
                     <Suspense
                       fallback={

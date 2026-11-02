@@ -461,7 +461,18 @@ export function MCPTokensPage({
                 submitLabel={t('admin.common.create')}
                 pending={createMutation.isPending}
                 onSubmit={(formData) => {
-                  const scopes = formData.getAll('scopes').map(Number)
+                  // Keep the wire scopes compatible with existing adapters while
+                  // presenting one permission for every document format.
+                  const scopes = formData
+                    .getAll('permissions')
+                    .flatMap((permission) =>
+                      permission === 'read'
+                        ? [1, 3]
+                        : permission === 'draft'
+                          ? [2, 4]
+                          : []
+                    )
+                    .sort((a, b) => a - b)
                   if (scopes.length === 0) {
                     throw new Error(t('admin.token.scopeRequired'))
                   }
@@ -505,25 +516,40 @@ export function MCPTokensPage({
                     {t('admin.token.scopesTitle')}
                   </legend>
                   {[
-                    [1, t('admin.token.apiRead')],
-                    [2, t('admin.token.apiDraft')],
-                    [3, t('admin.token.docRead')],
-                    [4, t('admin.token.docDraft')],
-                  ].map(([scope, label]) => (
+                    [
+                      'read',
+                      t('admin.token.readDocuments'),
+                      t('admin.token.readDocumentsDescription'),
+                    ],
+                    [
+                      'draft',
+                      t('admin.token.editDrafts'),
+                      t('admin.token.editDraftsDescription'),
+                    ],
+                  ].map(([permission, label, description]) => (
                     <label
-                      key={String(scope)}
+                      key={permission}
                       className='flex items-start gap-3 rounded-md border bg-[var(--surface-control)] p-3 text-sm'
                     >
                       <Checkbox
-                        name='scopes'
-                        value={String(scope)}
-                        defaultChecked={scope === 1}
+                        name='permissions'
+                        value={permission}
+                        defaultChecked={permission === 'read'}
+                        aria-label={label}
                         className='mt-0.5 rounded-sm'
                       />
-                      <span>{label}</span>
+                      <span className='grid gap-1'>
+                        <span className='font-medium'>{label}</span>
+                        <span className='leading-5 text-muted-foreground'>
+                          {description}
+                        </span>
+                      </span>
                     </label>
                   ))}
                 </fieldset>
+                <p className='text-sm leading-6 text-muted-foreground'>
+                  {t('admin.token.permissionsHint')}
+                </p>
               </FormDialog>
             }
             tokens={tokensQuery.data?.items ?? []}

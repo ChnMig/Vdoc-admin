@@ -46,7 +46,6 @@ const en = {
     diffs: 'Diffs',
     audit: 'Audit Logs',
     mcpTokens: 'MCP Tokens',
-    skill: 'Vdoc Skill',
     settings: 'Settings',
   },
   team: {
@@ -1122,6 +1121,7 @@ const en = {
         account: 'Account',
         appearance: 'Appearance',
         ai: 'AI',
+        system: 'Global',
         version: 'Version',
       },
       accountTitle: 'Account details',
@@ -1136,6 +1136,24 @@ const en = {
       serviceDescription:
         'Connection details for this deployment, useful when troubleshooting.',
       healthFailed: 'Unable to connect',
+      retention: {
+        title: 'Audit log retention',
+        description:
+          'Applies to all users and projects. Only system administrators can change this setting.',
+        label: 'Retention (days)',
+        help: 'Default: 30 calendar days. Automatic cleanup runs daily at 01:00 Beijing time (UTC+8). 1 keeps logs from yesterday at midnight onwards; 0 retains none.',
+        impact:
+          'Expired audit logs are permanently deleted. Reducing retention also removes older logs. Documents, chats and version history are kept.',
+        zero: 'Saving 0 stops retaining new audit logs and permanently clears existing audit logs. Documents, chats and version history are kept.',
+        save: 'Save retention',
+        saving: 'Saving…',
+        saved:
+          'Saved for all users and projects. The policy is active now; existing logs are cleaned up under the new policy in the background.',
+        failed: 'Could not save. Your changes are kept; try saving again.',
+        invalid: 'Enter a whole number from 0 to 36,500.',
+        loadFailed: 'Could not load the current retention setting.',
+        retry: 'Try again',
+      },
     },
     release: {
       title: 'Version and updates',
@@ -1191,10 +1209,12 @@ const en = {
         'Use your local date and time. Leave blank for no expiration.',
       futureExpiryRequired:
         'Expiry must be a valid date and time in the future.',
-      apiRead: 'api:read — query OpenAPI contracts and diffs',
-      apiDraft: 'api:draft — create and update OpenAPI drafts',
-      docRead: 'doc:read — query Markdown documents and diffs',
-      docDraft: 'doc:draft — create and update Markdown drafts',
+      readDocuments: 'Read documents',
+      readDocumentsDescription: 'View documents, versions and changes.',
+      editDrafts: 'Create and update drafts',
+      editDraftsDescription: 'Create drafts and edit their content.',
+      permissionsHint:
+        'Applies to all documents. Access is still limited by your project role.',
       secretAvailable: 'Active token secret',
       secretGuidance:
         'Active tokens can be viewed and copied again. Revoked or expired tokens remain redacted.',
@@ -1213,13 +1233,14 @@ const en = {
       cursorSteps:
         'Merge this entry into your personal MCP configuration, save it, then enable or restart Vdoc in Cursor Settings → Tools & MCP.',
       betaClientSetup:
-        'Install the beta adapter from the Vdoc Skill page first. Replace <ABSOLUTE_BETA_MCP_PATH> with the absolute command path printed by the installer. The beta adapter uses its own directory at ~/.local/share/vdoc/mcp/beta.',
+        'Install the beta MCP adapter using the MCP setup guide below. Replace <ABSOLUTE_BETA_MCP_PATH> with the absolute command path printed by the installer. The beta adapter uses its own directory at ~/.local/share/vdoc/mcp/beta.',
       betaCodexSteps:
         'Add vdoc_beta alongside your existing server configuration. Use the backend URL and token from this beta environment, then restart vdoc_beta or open a new Codex session and check /mcp.',
       betaCursorSteps:
         'Merge vdoc_beta alongside your existing MCP entries. Use the backend URL and token from this beta environment, then enable or restart vdoc_beta in Cursor Settings → Tools & MCP.',
       clientVerify:
         'Keep the token in your private configuration. After connecting, query a published document with an explicit branch, then refresh the connection evidence above.',
+      setupGuide: 'MCP setup guide',
       configTitle: 'MCP client configuration',
       configDescription:
         'Run the Vdoc stdio adapter. The token stays in VDOC_MCP_TOKEN instead of command arguments or copied HTTP headers.',
@@ -1245,31 +1266,6 @@ const en = {
       invalidTitle: 'Linked entity is unavailable',
       invalidDescription:
         'Vdoc did not switch to another record. These exact targets do not exist in your visible scope: {targets}',
-    },
-    skill: {
-      commandTitle: 'Install command',
-      packageStepTitle: 'Install adapter and Skill',
-      mcpStepTitle: 'Configure your AI client',
-      verifyStepTitle: 'Verify the connection',
-      installDetails: 'Installation details',
-      installTitle: 'Install the official Skill',
-      installDescription:
-        'The Vdoc Skill teaches agents to query reviewed facts, compare versions, and submit drafts without bypassing human publication.',
-      betaInstallDescription:
-        'This beta environment installs the MCP adapter in a separate beta directory and links its bundled Skill only into the current test project. Run these commands from a separate beta project; keep your stable project and personal Skill installation intact.',
-      betaStepPackage:
-        'The commands use a pinned reviewed Release that includes install-channel.mjs and install-channel.mjs.sha256. Verify the installer checksum before running --channel beta. Rerun to receive the newest published beta adapter and Skill; download or verification failures stop the install.',
-      betaStepVerify:
-        'Use the installer’s absolute command path in the vdoc_beta configuration below. Reload the agent in this beta project, verify list_projects, list_documents, and read tools, and select vdoc_beta for testing.',
-      stepPackage:
-        'Install the MCP package, then link its bundled Skill into your agent directory. Existing Skill files are preserved.',
-      stepMcp:
-        'Run the Vdoc MCP stdio adapter with the backend URL and an appropriately scoped active token in environment variables.',
-      stepVerify:
-        'Restart the agent and verify list_projects, list_documents, and read tools before draft workflows.',
-      boundaryTitle: 'Human publication boundary',
-      boundaryDescription:
-        'The Skill and MCP may create, update, and submit drafts. Only Project Admin or SuperAdmin can approve and publish in this workbench.',
     },
     diff: {
       comparisonContext: 'Version comparison',
@@ -1560,14 +1556,6 @@ const en = {
         cue: 'Tokens give agents access to approved Vdoc facts, not direct publication rights.',
         next: 'Issue a scoped token, run tools/list and a read call, then refresh connection evidence.',
       },
-      skill: {
-        title: 'Vdoc Skill',
-        description:
-          'Install the official agent workflow package and connect it to the Vdoc MCP endpoint.',
-        stage: 'Agent access',
-        cue: 'MCP provides tools; the Skill supplies the safe workflow and output templates.',
-        next: 'Install the package, configure an active scoped token, then verify read tools before submitting drafts.',
-      },
       settings: {
         title: 'Settings',
         description:
@@ -1857,7 +1845,6 @@ const zhCN = {
     diffs: '差异',
     audit: '审计日志',
     mcpTokens: 'MCP 令牌',
-    skill: 'Vdoc Skill',
     settings: '设置',
   },
   team: {
@@ -2867,6 +2854,7 @@ const zhCN = {
         account: '账号',
         appearance: '外观',
         ai: 'AI 配置',
+        system: '全局配置',
         version: '版本',
       },
       accountTitle: '账号信息',
@@ -2879,6 +2867,22 @@ const zhCN = {
       serviceTitle: '服务连接',
       serviceDescription: '当前部署的连接信息，可在排查问题时查看。',
       healthFailed: '无法连接服务',
+      retention: {
+        title: '审计日志保留',
+        description: '对所有用户和项目生效，仅系统管理员可以修改。',
+        label: '保留天数',
+        help: '默认 30 天，按自然日计算。每天北京时间 01:00 自动清理。1 天保留昨天零点起的日志，0 表示不留存。',
+        impact:
+          '到期的审计日志将永久删除，缩短天数也会清理超期日志。文档、聊天和版本历史不受影响。',
+        zero: '保存为 0 后，停止留存新审计日志，并永久清空已有审计日志。文档、聊天和版本历史不受影响。',
+        save: '保存保留设置',
+        saving: '正在保存…',
+        saved: '已对所有用户和项目生效，已有日志按新规则在后台清理。',
+        failed: '保存失败，已保留你的输入，请重试。',
+        invalid: '请输入 0–36500 的整数。',
+        loadFailed: '无法读取当前保留设置，请重试。',
+        retry: '重新加载',
+      },
     },
     release: {
       title: '版本与更新',
@@ -2928,10 +2932,11 @@ const zhCN = {
       scopeRequired: '请至少选择一个令牌权限范围。',
       expiryHint: '按本地时间选择日期和时间；留空则永不过期。',
       futureExpiryRequired: '过期时间必须是有效的未来日期和时间。',
-      apiRead: 'api:read — 查询 OpenAPI 契约和差异',
-      apiDraft: 'api:draft — 创建和更新 OpenAPI 草稿',
-      docRead: 'doc:read — 查询 Markdown 文档和差异',
-      docDraft: 'doc:draft — 创建和更新 Markdown 草稿',
+      readDocuments: '读取文档',
+      readDocumentsDescription: '查看文档、版本和差异。',
+      editDrafts: '创建和更新草稿',
+      editDraftsDescription: '创建草稿并修改草稿内容。',
+      permissionsHint: '适用于所有文档，实际访问范围仍受你的项目角色限制。',
       secretAvailable: '有效令牌明文',
       secretGuidance: '有效令牌可再次查看和复制；已撤销或过期令牌保持脱敏。',
       copy: '复制令牌',
@@ -2949,13 +2954,14 @@ const zhCN = {
       cursorSteps:
         '将这一项合并到个人 MCP 配置并保存，在 Cursor Settings → Tools & MCP 中启用或重启 Vdoc。',
       betaClientSetup:
-        '先在 Vdoc Skill 页面安装 beta 适配器，将 <ABSOLUTE_BETA_MCP_PATH> 替换为安装器输出的绝对命令路径。Beta 适配器使用独立目录 ~/.local/share/vdoc/mcp/beta。',
+        '先按下方 MCP 接入指南安装 beta 适配器，将 <ABSOLUTE_BETA_MCP_PATH> 替换为安装器输出的绝对命令路径。Beta 适配器使用独立目录 ~/.local/share/vdoc/mcp/beta。',
       betaCodexSteps:
         '在已有服务配置旁新增 vdoc_beta，使用当前 beta 环境的后端地址和令牌，重启 vdoc_beta 或新开 Codex 会话，再用 /mcp 查看连接状态。',
       betaCursorSteps:
         '在已有 MCP 配置中新增 vdoc_beta，使用当前 beta 环境的后端地址和令牌，在 Cursor Settings → Tools & MCP 中启用或重启 vdoc_beta。',
       clientVerify:
         '令牌只保存在私密配置中。连接后，请明确分支并查询一份已发布文档，再刷新连接证据。',
+      setupGuide: 'MCP 接入指南',
       configTitle: 'MCP 客户端配置',
       configDescription:
         '运行 Vdoc stdio 适配器，并把令牌放入 VDOC_MCP_TOKEN 环境变量，而不是命令参数或 HTTP 配置。',
@@ -2981,31 +2987,6 @@ const zhCN = {
       invalidTitle: '链接实体不可用',
       invalidDescription:
         'Vdoc 没有静默切换到其他记录。以下精确目标不存在或不在你的可见范围内：{targets}',
-    },
-    skill: {
-      commandTitle: '安装命令',
-      packageStepTitle: '安装适配器和 Skill',
-      mcpStepTitle: '配置 AI 客户端',
-      verifyStepTitle: '验证连接',
-      installDetails: '安装说明',
-      installTitle: '安装官方 Skill',
-      installDescription:
-        'Vdoc Skill 指导智能体查询已审阅事实、比较版本并提交草稿，同时不绕过人工发布。',
-      betaInstallDescription:
-        '当前 beta 环境将 MCP 适配器安装到独立的 beta 目录，并仅把随包 Skill 链接到当前测试项目。请在独立的 beta 项目中运行命令，保留稳定项目和个人 Skill 安装。',
-      betaStepPackage:
-        '以下命令固定使用包含 install-channel.mjs 和 install-channel.mjs.sha256 的已审核 Release；校验安装器摘要后再以 --channel beta 运行。重新运行可获取最新已发布的 beta 适配器和 Skill；下载或校验失败会中止安装。',
-      betaStepVerify:
-        '将安装器输出的绝对命令路径填入下方 vdoc_beta 配置。在当前 beta 项目中重新加载智能体，验证 list_projects、list_documents 和读取工具，并选择 vdoc_beta 进行测试。',
-      stepPackage:
-        '安装 MCP 包，再将随包提供的 Skill 链接到 Agent 目录；已有 Skill 文件不会被覆盖。',
-      stepMcp:
-        '运行 Vdoc MCP stdio 适配器，并通过环境变量配置后端地址和限定范围的有效令牌。',
-      stepVerify:
-        '重启智能体，先验证 list_projects、list_documents 和读取工具，再执行草稿工作流。',
-      boundaryTitle: '人工发布边界',
-      boundaryDescription:
-        'Skill 和 MCP 可以创建、更新并提交草稿；只有 Project Admin 或 SuperAdmin 能在工作台批准并发布。',
     },
     diff: {
       comparisonContext: '版本比较',
@@ -3283,13 +3264,6 @@ const zhCN = {
         stage: '智能体访问',
         cue: '令牌允许智能体访问已批准的 Vdoc 事实，而不是直接发布。',
         next: '签发限定范围令牌，执行 tools/list 和一次读取，再刷新连接证据。',
-      },
-      skill: {
-        title: 'Vdoc Skill',
-        description: '安装官方智能体工作流包，并连接 Vdoc MCP 端点。',
-        stage: '智能体访问',
-        cue: 'MCP 提供工具，Skill 提供安全工作流和输出模板。',
-        next: '安装包、配置有效的限定范围令牌，并在提交草稿前验证读取工具。',
       },
       settings: {
         title: '设置',
