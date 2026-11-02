@@ -1229,11 +1229,11 @@ const en = {
       claudeSteps:
         'Merge this entry into the top-level mcpServers in your private ~/.claude.json, keeping the other settings. Restart Claude Code, then use /mcp to check Vdoc. Do not put the token in a shared .mcp.json.',
       betaClaudeSteps:
-        'Add vdoc_beta to the top-level mcpServers in your private ~/.claude.json. Use the absolute beta adapter path and this environment’s backend URL and token. Restart Claude Code and check /mcp; keep vdoc alongside it.',
+        'Add vdoc_beta to the top-level mcpServers in your private ~/.claude.json. Use @chnmig/vdoc-mcp@beta and this environment’s backend URL and token. Restart Claude Code and check /mcp; keep vdoc alongside it.',
       cursorSteps:
         'Merge this entry into your personal MCP configuration, save it, then enable or restart Vdoc in Cursor Settings → Tools & MCP.',
       betaClientSetup:
-        'Install the beta MCP adapter using the MCP setup guide below. Replace <ABSOLUTE_BETA_MCP_PATH> with the absolute command path printed by the installer. The beta adapter uses its own directory at ~/.local/share/vdoc/mcp/beta.',
+        'npx runs the latest published @chnmig/vdoc-mcp@beta. Restart the MCP connection to update; use this beta environment’s backend URL and token. A version warning asks you to align the client and server.',
       betaCodexSteps:
         'Add vdoc_beta alongside your existing server configuration. Use the backend URL and token from this beta environment, then restart vdoc_beta or open a new Codex session and check /mcp.',
       betaCursorSteps:
@@ -2950,11 +2950,11 @@ const zhCN = {
       claudeSteps:
         '将这一项合并到个人 ~/.claude.json 顶层的 mcpServers，保留其他设置。重启 Claude Code，再用 /mcp 检查 Vdoc；不要将令牌写入共享的 .mcp.json。',
       betaClaudeSteps:
-        '在个人 ~/.claude.json 顶层的 mcpServers 中新增 vdoc_beta，使用 beta 适配器绝对路径及当前环境的后端地址和令牌。重启 Claude Code 后用 /mcp 检查，可与 vdoc 同时保留。',
+        '在个人 ~/.claude.json 顶层的 mcpServers 中新增 vdoc_beta，使用 @chnmig/vdoc-mcp@beta 及当前环境的后端地址和令牌。重启 Claude Code 后用 /mcp 检查，可与 vdoc 同时保留。',
       cursorSteps:
         '将这一项合并到个人 MCP 配置并保存，在 Cursor Settings → Tools & MCP 中启用或重启 Vdoc。',
       betaClientSetup:
-        '先按下方 MCP 接入指南安装 beta 适配器，将 <ABSOLUTE_BETA_MCP_PATH> 替换为安装器输出的绝对命令路径。Beta 适配器使用独立目录 ~/.local/share/vdoc/mcp/beta。',
+        'npx 使用最新发布的 @chnmig/vdoc-mcp@beta，重启 MCP 连接时更新。请使用当前 beta 环境的后端地址和令牌；若提示版本不一致，请将客户端与服务端对齐。',
       betaCodexSteps:
         '在已有服务配置旁新增 vdoc_beta，使用当前 beta 环境的后端地址和令牌，重启 vdoc_beta 或新开 Codex 会话，再用 /mcp 查看连接状态。',
       betaCursorSteps:

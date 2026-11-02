@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import packageInfo from '../../../package.json'
 import { MCPClientConfig } from './mcp-client-config'
-import { vdocMcpSource } from './page-utils'
+import { vdocMcpBetaSource, vdocMcpSource } from './page-utils'
 
 const originalRuntimeConfig = window.__VDOC_ADMIN_CONFIG__
 
@@ -45,7 +45,7 @@ it.each(['release', 'beta'] as const)(
   }
 )
 
-it('preserves the pinned release client configurations when the channel is absent', async () => {
+it('uses the latest npm release client configurations when the channel is absent', async () => {
   const user = userEvent.setup()
   const { container } = render(
     <MCPClientConfig baseUrl='https://api.example.test' token='release-token' />
@@ -91,9 +91,11 @@ it('uses the isolated beta adapter and retains this environment URL and token in
     '[mcp_servers.vdoc_beta]'
   )
   expect(container.querySelector('pre')?.textContent).toContain(
-    'command = "<ABSOLUTE_BETA_MCP_PATH>"'
+    'command = "npx"'
   )
-  expect(container.querySelector('pre')?.textContent).not.toContain('npx')
+  expect(container.querySelector('pre')?.textContent).toContain(
+    vdocMcpBetaSource
+  )
   expect(container.querySelector('pre')?.textContent).not.toContain(
     vdocMcpSource
   )
@@ -104,9 +106,8 @@ it('uses the isolated beta adapter and retains this environment URL and token in
     'VDOC_MCP_TOKEN = "beta-token"'
   )
   expect(container.textContent).toContain(
-    'absolute command path printed by the installer'
+    'latest published @chnmig/vdoc-mcp@beta'
   )
-  expect(container.textContent).toContain('~/.local/share/vdoc/mcp/beta')
   expect(screen.getByRole('link', { name: 'MCP setup guide' })).toHaveAttribute(
     'href',
     `https://github.com/ChnMig/Vdoc-site/blob/v${packageInfo.version}/docs/en/mcp-tools.md`
@@ -116,7 +117,8 @@ it('uses the isolated beta adapter and retains this environment URL and token in
     {
       mcpServers: {
         vdoc_beta: {
-          command: '<ABSOLUTE_BETA_MCP_PATH>',
+          command: 'npx',
+          args: ['--yes', vdocMcpBetaSource],
           env: {
             VDOC_BASE_URL: 'https://beta-api.example.test',
             VDOC_MCP_TOKEN: 'beta-token',
@@ -149,9 +151,11 @@ it.each(['release', 'beta'] as const)(
       VDOC_BASE_URL: 'https://vdoc.example.test',
       VDOC_MCP_TOKEN: 'fixture-token',
     })
-    expect(server.command).toBe(
-      releaseChannel === 'beta' ? '<ABSOLUTE_BETA_MCP_PATH>' : 'npx'
-    )
+    expect(server.command).toBe('npx')
+    expect(server.args).toEqual([
+      '--yes',
+      releaseChannel === 'beta' ? vdocMcpBetaSource : vdocMcpSource,
+    ])
     expect(screen.getAllByText(/~\/.claude.json/).length).toBeGreaterThan(0)
   }
 )

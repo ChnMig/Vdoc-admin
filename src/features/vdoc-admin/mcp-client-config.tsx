@@ -3,7 +3,8 @@ import { useLanguage } from '@/context/language-provider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import packageInfo from '../../../package.json'
 import { CodeSnippet } from './code-snippet'
-import { stringify, vdocMcpSource } from './page-utils'
+import { MCPInstallPrompt } from './mcp-install-prompt'
+import { stringify, vdocMcpBetaSource, vdocMcpSource } from './page-utils'
 
 export function MCPClientConfig({
   baseUrl,
@@ -19,10 +20,9 @@ export function MCPClientConfig({
     ? `https://github.com/ChnMig/Vdoc-site/blob/v${packageInfo.version}/docs/${guidePath}.md`
     : `https://chnmig.github.io/Vdoc-site/${guidePath}#release-channels`
   const serverName = beta ? 'vdoc_beta' : 'vdoc'
-  const command = beta ? '<ABSOLUTE_BETA_MCP_PATH>' : 'npx'
-  const args = beta
-    ? ''
-    : `\nargs = ["--yes", ${JSON.stringify(vdocMcpSource)}]`
+  const command = 'npx'
+  const source = beta ? vdocMcpBetaSource : vdocMcpSource
+  const args = `\nargs = ["--yes", ${JSON.stringify(source)}]`
   const codex = `[mcp_servers.${serverName}]
 command = ${JSON.stringify(command)}${args}
 startup_timeout_sec = 60
@@ -35,63 +35,74 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
     mcpServers: {
       [serverName]: {
         command,
-        ...(beta ? {} : { args: ['--yes', vdocMcpSource] }),
+        args: ['--yes', source],
         env: { VDOC_BASE_URL: baseUrl, VDOC_MCP_TOKEN: token },
       },
     },
   })
   return (
-    <Tabs defaultValue='codex' className='min-w-0'>
-      {beta && (
-        <p className='mb-3 text-sm text-muted-foreground'>
-          {t('admin.token.betaClientSetup')}
-        </p>
-      )}
-      <TabsList aria-label={t('admin.token.clientLabel')}>
-        <TabsTrigger value='codex'>Codex</TabsTrigger>
-        <TabsTrigger value='cursor'>Cursor</TabsTrigger>
-        <TabsTrigger value='claude'>Claude Code</TabsTrigger>
-      </TabsList>
-      {(
-        [
-          [
-            'codex',
-            '~/.codex/config.toml',
-            codex,
-            t(beta ? 'admin.token.betaCodexSteps' : 'admin.token.codexSteps'),
-          ],
-          [
-            'claude',
-            '~/.claude.json',
-            cursor,
-            t(beta ? 'admin.token.betaClaudeSteps' : 'admin.token.claudeSteps'),
-          ],
-          [
-            'cursor',
-            '~/.cursor/mcp.json',
-            cursor,
-            t(beta ? 'admin.token.betaCursorSteps' : 'admin.token.cursorSteps'),
-          ],
-        ] as const
-      ).map(([client, path, content, steps]) => (
-        <TabsContent key={client} value={client} className='min-w-0 space-y-3'>
-          <p className='text-sm text-muted-foreground'>
-            <code>{path}</code> — {steps}
+    <div className='grid min-w-0 gap-6'>
+      <MCPInstallPrompt channel={beta ? 'beta' : 'release'} />
+      <Tabs defaultValue='codex' className='min-w-0'>
+        {beta && (
+          <p className='mb-3 text-sm text-muted-foreground'>
+            {t('admin.token.betaClientSetup')}
           </p>
-          <CodeSnippet title={path} content={content} />
-        </TabsContent>
-      ))}
-      <p className='mt-3 text-sm text-muted-foreground'>
-        {t('admin.token.clientVerify')}
-      </p>
-      <a
-        href={setupGuide}
-        target='_blank'
-        rel='noreferrer'
-        className='w-fit rounded-sm text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
-      >
-        {t('admin.token.setupGuide')}
-      </a>
-    </Tabs>
+        )}
+        <TabsList aria-label={t('admin.token.clientLabel')}>
+          <TabsTrigger value='codex'>Codex</TabsTrigger>
+          <TabsTrigger value='cursor'>Cursor</TabsTrigger>
+          <TabsTrigger value='claude'>Claude Code</TabsTrigger>
+        </TabsList>
+        {(
+          [
+            [
+              'codex',
+              '~/.codex/config.toml',
+              codex,
+              t(beta ? 'admin.token.betaCodexSteps' : 'admin.token.codexSteps'),
+            ],
+            [
+              'claude',
+              '~/.claude.json',
+              cursor,
+              t(
+                beta ? 'admin.token.betaClaudeSteps' : 'admin.token.claudeSteps'
+              ),
+            ],
+            [
+              'cursor',
+              '~/.cursor/mcp.json',
+              cursor,
+              t(
+                beta ? 'admin.token.betaCursorSteps' : 'admin.token.cursorSteps'
+              ),
+            ],
+          ] as const
+        ).map(([client, path, content, steps]) => (
+          <TabsContent
+            key={client}
+            value={client}
+            className='min-w-0 space-y-3'
+          >
+            <p className='text-sm text-muted-foreground'>
+              <code>{path}</code> — {steps}
+            </p>
+            <CodeSnippet title={path} content={content} />
+          </TabsContent>
+        ))}
+        <p className='mt-3 text-sm text-muted-foreground'>
+          {t('admin.token.clientVerify')}
+        </p>
+        <a
+          href={setupGuide}
+          target='_blank'
+          rel='noreferrer'
+          className='w-fit rounded-sm text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+        >
+          {t('admin.token.setupGuide')}
+        </a>
+      </Tabs>
+    </div>
   )
 }

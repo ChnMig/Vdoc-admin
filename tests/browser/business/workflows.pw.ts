@@ -454,10 +454,30 @@ for (const width of [1280, 390]) {
     await page
       .getByRole('tab', { name: 'MCP client configuration', exact: true })
       .click()
+    await expect(
+      page.getByRole('heading', {
+        name: 'Let AI install, update, or uninstall MCP',
+      })
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Copy install prompt' })
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Update', exact: true }).click()
+    await expect(
+      page.getByRole('button', { name: 'Copy update prompt' })
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Uninstall', exact: true }).click()
+    await expect(
+      page.getByRole('button', { name: 'Copy uninstall prompt' })
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Install', exact: true }).click()
     for (const client of ['Codex', 'Cursor']) {
       await page.getByRole('tab', { name: client, exact: true }).click()
       const panel = page.getByRole('tabpanel').last()
       await expect(panel).toBeVisible()
+      await expect(panel.locator('pre')).toContainText(
+        '@chnmig/vdoc-mcp@latest'
+      )
       expect(
         await panel.evaluate((element) => {
           const card = element.closest('[data-slot="card"]')

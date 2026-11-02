@@ -18,8 +18,8 @@ import {
 } from '@/lib/vdoc-query-invalidation'
 import { useLanguage } from '@/context/language-provider'
 
-export const vdocMcpSource =
-  'github:ChnMig/Vdoc-mcp#84705b299ee260a445302043294c03d38e2b8f7d'
+export const vdocMcpSource = '@chnmig/vdoc-mcp@latest'
+export const vdocMcpBetaSource = '@chnmig/vdoc-mcp@beta'
 
 export const ACTIVE_STATUS = 1
 
