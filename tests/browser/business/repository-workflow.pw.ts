@@ -747,9 +747,28 @@ for (const width of [1440, 390]) {
       expect(
         await assistant.evaluate((element) => element.matches(':modal'))
       ).toBe(false)
-      expect(
-        (await reader.boundingBox())!.x + (await reader.boundingBox())!.width
-      ).toBeLessThanOrEqual((await assistant.boundingBox())!.x + 1)
+      await expect
+        .poll(async () =>
+          Math.round(
+            (await page.locator('.document-assistant-dock').boundingBox())!
+              .width
+          )
+        )
+        .toBe(368)
+      // Measure both edges in one frame after the dock's grid transition.
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const reading = document
+              .querySelector('[data-document-reading-pane]')!
+              .getBoundingClientRect()
+            const assistant = document
+              .querySelector('dialog.document-assistant-panel')!
+              .getBoundingClientRect()
+            return reading.right - assistant.left
+          })
+        )
+        .toBeLessThanOrEqual(1)
     } else {
       expect(
         await assistant.evaluate((element) => element.matches(':modal'))
