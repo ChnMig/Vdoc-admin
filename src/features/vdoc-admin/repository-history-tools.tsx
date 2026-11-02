@@ -42,6 +42,7 @@ export function RepositoryHistoryTools({
   commitId,
   documentId,
   view,
+  active = true,
   canManage,
   canWrite,
   compareSelection,
@@ -55,6 +56,7 @@ export function RepositoryHistoryTools({
   commitId: string
   documentId?: string
   view: RepositoryView
+  active?: boolean
   canManage: boolean
   canWrite: boolean
   compareSelection: { from: string; to: string }
@@ -97,7 +99,7 @@ export function RepositoryHistoryTools({
         },
         signal
       ),
-    enabled: view === 'history' || view === 'compare',
+    enabled: active && (view === 'history' || view === 'compare'),
   })
   const fromCommitsQuery = useQuery({
     queryKey: [
@@ -113,17 +115,17 @@ export function RepositoryHistoryTools({
         { branch_id: compareFromBranchId },
         signal
       ),
-    enabled: view === 'compare',
+    enabled: active && view === 'compare',
   })
   const mergesQuery = useQuery({
     queryKey: [...repositoryKeys.all(projectId), 'merge-requests'],
     queryFn: ({ signal }) => listRepositoryMergeRequests(projectId, signal),
-    enabled: view === 'merges',
+    enabled: active && view === 'merges',
   })
   const releasesQuery = useQuery({
     queryKey: [...repositoryKeys.all(projectId), 'releases'],
     queryFn: ({ signal }) => listRepositoryReleases(projectId, signal),
-    enabled: view === 'releases',
+    enabled: active && view === 'releases',
   })
   const comparisonMutation = useMutation({
     mutationFn: (input: {

@@ -9,7 +9,12 @@ import {
   parseDocumentShareSecret,
 } from '@/lib/document-share-url'
 import { resolvePublicShareBaseUrl } from '@/lib/public-share-config'
-import { repositoryScopeKey, type RepositoryScope } from '@/lib/repository-api'
+import {
+  listRepositoryReleases,
+  repositoryKeys,
+  repositoryScopeKey,
+  type RepositoryScope,
+} from '@/lib/repository-api'
 import {
   createRepositoryShare,
   listRepositoryShares,
@@ -35,6 +40,7 @@ type Props = {
   documentId: string
   releaseId: string
   disabled?: boolean
+  versionName?: string
 }
 
 export function RepositoryShareDialog(props: Props) {
@@ -65,7 +71,93 @@ export function RepositoryShareDialog(props: Props) {
   )
 }
 
-function RepositorySharePanel({ projectId, releaseId, documentId }: Props) {
+// The document header shares the exact version being read. It never publishes implicitly.
+export function RepositoryDocumentShareDialog({
+  projectId,
+  documentId,
+  commitId,
+  versionName,
+  disabled,
+  onPublish,
+}: Omit<Props, 'releaseId'> & { commitId: string; onPublish: () => void }) {
+  const { t, language } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const releases = useQuery({
+    queryKey: [...repositoryKeys.all(projectId), 'releases'],
+    queryFn: ({ signal }) => listRepositoryReleases(projectId, signal),
+    enabled: open && !disabled,
+  })
+  const release = releases.data?.find((item) => item.commit_id === commitId)
+  return (
+    <Dialog open={open && !disabled} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant='outline'
+          size='sm'
+          disabled={disabled}
+          aria-label={t('admin.workspace.share')}
+        >
+          <Share2 aria-hidden />
+          <span className='hidden sm:inline'>{t('admin.workspace.share')}</span>
+        </Button>
+      </DialogTrigger>
+      {open &&
+        !disabled &&
+        (release ? (
+          <RepositorySharePanel
+            projectId={projectId}
+            documentId={documentId}
+            releaseId={release.id}
+            versionName={versionName}
+          />
+        ) : (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('admin.workspace.share')}</DialogTitle>
+              <DialogDescription>
+                {language === 'zh-CN'
+                  ? '分享链接固定指向当前版本，之后的编辑不会改变链接中的内容。'
+                  : 'A share link stays pinned to this version. Later edits do not change its content.'}
+              </DialogDescription>
+            </DialogHeader>
+            <LoadingErrorState state={releases} />
+            {releases.isError && (
+              <Button variant='outline' onClick={() => void releases.refetch()}>
+                {t('admin.workspace.retry')}
+              </Button>
+            )}
+            {releases.isSuccess && (
+              <>
+                <p className='text-sm leading-6'>
+                  {language === 'zh-CN'
+                    ? `当前版本 ${versionName || commitId.slice(0, 12)} 尚未发布。请先审阅并发布，再创建公开分享链接。`
+                    : `Version ${versionName || commitId.slice(0, 12)} has not been published. Review and publish it before creating a public share link.`}
+                </p>
+                <Button
+                  className='w-fit'
+                  onClick={() => {
+                    setOpen(false)
+                    onPublish()
+                  }}
+                >
+                  {language === 'zh-CN'
+                    ? '前往审阅与发布'
+                    : 'Review before sharing'}
+                </Button>
+              </>
+            )}
+          </DialogContent>
+        ))}
+    </Dialog>
+  )
+}
+
+function RepositorySharePanel({
+  projectId,
+  releaseId,
+  documentId,
+  versionName,
+}: Props) {
   const { language, t } = useLanguage()
   const zh = language === 'zh-CN'
   const copy = zh
@@ -186,6 +278,7 @@ function RepositorySharePanel({ projectId, releaseId, documentId }: Props) {
         <DialogTitle>{copy.title}</DialogTitle>
         <DialogDescription>{copy.description}</DialogDescription>
       </DialogHeader>
+      {versionName && <p className='text-sm font-medium'>{versionName}</p>}
       <form
         className='grid gap-4'
         onSubmit={(event) => {

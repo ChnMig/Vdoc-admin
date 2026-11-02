@@ -190,7 +190,7 @@ describe('commit workspace', () => {
     await view.user.click(view.getByRole('button', { name: 'Edit' }))
     const editor = await view.findByRole('textbox', { name: 'Content' })
     await view.user.type(editor, ' addition')
-    await view.user.click(view.getByRole('button', { name: 'Read' }))
+    await view.user.click(view.getByRole('button', { name: 'Back to preview' }))
     expect(await view.findByText('Exact source last line')).toBe(body)
     await view.user.click(view.getByRole('button', { name: 'Edit' }))
     expect(view.getByRole('textbox', { name: 'Content' })).toBe(editor)

@@ -1,19 +1,17 @@
-# Project repository workspace
+# Document workspace
 
-Mode: Operate, with Read for fixed document content. Extend the established Control Plane world; this work does not select a replacement visual direction.
+Mode: Operate and Read. Preserve the established Control Plane tokens and the approved Yuque-like document layout.
 
 ## Direction contract
 
-**THESIS:** A project has one immutable history. Branch, commit and publication context remain visible while users edit, review or read.
+**THESIS:** A project organizes documents. Every document owns independent branches and numbered history. Workflow changes must preserve the document reading layout.
 
-**OWN-WORLD:** Use the existing neutral surfaces, navy primary action, semantic theme tokens, compact type, bordered file rail and shared Radix controls. Preserve normal focus and error treatments.
+**OWN-WORLD:** Existing neutral surfaces, navy actions, compact typography, document tree and shared controls.
 
-**STORY:** Open a project, select its branch, save a content change, inspect the resulting commit and compare it with earlier content. Review the exact merge candidate before approving; publish and share a fixed result.
+**STORY:** Select a document, read its selected branch/version, edit and save a new numbered version, then inspect history or compare. Share only after explicit publication.
 
-**FIRST VIEWPORT:** Keep project files in the desktop rail. Put project identity, branch and short commit above a horizontally scrollable tool navigation. The content or task form occupies the remaining readable width. On mobile, disclose files and retain the branch and active tool.
+**FIRST VIEWPORT:** Left project document tree; central reader up to 52rem; right outline at 15rem and vertical tools at 3rem. Header actions are Share, Edit and reading utilities. Branch/version selection and New branch remain above the content. No horizontal task tabs. Mobile uses a file sheet, tool menu and outline dialog.
 
-**FORM:** Established workspace extension; seed: none (unavailable). The signature interaction is opening a historical commit without changing its content when HEAD moves. Use the incumbent short state transitions, respect reduced motion and preserve input across tool changes.
+**FORM:** Use the stable document shell as the visual baseline. AI opens independently beside reading or editing at 23rem; one persistent native dialog supports dock, modal, expand/collapse and focus restoration. Keep reader, editor and visited tool state through tool changes. History remains scoped to the selected document and branch.
 
-**FINISH:** unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
-
-No raster artwork is introduced by this feature. Final evidence includes a live desktop/mobile save-history path, exact candidate preview and the documented component checks.
+**FINISH:** Verify desktop and mobile reading, outline navigation, retained scroll/input, AI resizing/focus, branch/version independence, publication/share permissions, keyboard access and no overflow. Retain screenshots and test evidence with the release. No new raster assets.

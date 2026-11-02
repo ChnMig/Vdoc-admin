@@ -1,11 +1,9 @@
 import {
   lazy,
   Suspense,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type CSSProperties,
 } from 'react'
@@ -17,11 +15,8 @@ import {
   GitCompareArrows,
   Link2,
   ListTree,
-  Maximize2,
-  Minimize2,
   Settings2,
   SquarePen,
-  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DocumentDTO } from '@/lib/vdoc-api'
@@ -38,6 +33,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RepositoryLink } from '@/components/repository-link'
 import { DocumentReadingPreferences } from '@/features/document-reader/document-reader'
+import { DocumentAssistantPanel } from './document-assistant-panel'
+import { useWideDocumentLayout } from './document-layout-hooks'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceContent } from './document-workspace-content'
 import { emptyDocumentSelection } from './document-workspace-model'
@@ -123,9 +120,6 @@ export function DocumentWorkspaceDetail({
       ? 'content'
       : requestedView
   const [assistantOpen, setAssistantOpen] = useState(requestedView === 'ai')
-  const [assistantVisited, setAssistantVisited] = useState(assistantOpen)
-  const [assistantExpanded, setAssistantExpanded] = useState(false)
-  if (assistantOpen && !assistantVisited) setAssistantVisited(true)
   const [previousRequestedView, setPreviousRequestedView] =
     useState(requestedView)
   if (requestedView !== previousRequestedView) {
@@ -133,43 +127,9 @@ export function DocumentWorkspaceDetail({
     if (requestedView === 'ai') setAssistantOpen(true)
   }
   const wideLayout = useWideDocumentLayout()
-  const assistantModal = !wideLayout || assistantExpanded
   const [shareOpen, setShareOpen] = useState(false)
   const [outlineOpen, setOutlineOpen] = useState(false)
-  const externalModalOpen = useExternalDocumentModal()
-  const assistantPresented =
-    assistantOpen &&
-    (!assistantModal ||
-      !(
-        externalModalOpen ||
-        shareOpen ||
-        requestedView === 'share' ||
-        outlineOpen
-      ))
-  const assistantRef = useRef<HTMLDialogElement>(null)
   const assistantTriggerRef = useRef<HTMLButtonElement>(null)
-  const restoreAssistantFocus = useRef(false)
-  const assistantTitleId = useId()
-  useLayoutEffect(() => {
-    const panel = assistantRef.current
-    if (!panel) return
-    if (!assistantPresented || (assistantModal && hasExternalDocumentModal())) {
-      if (panel.open) panel.close()
-      if (restoreAssistantFocus.current) {
-        assistantTriggerRef.current?.focus({ preventScroll: true })
-        restoreAssistantFocus.current = false
-      }
-      return
-    }
-    const focused = panel.contains(globalThis.document.activeElement)
-      ? (globalThis.document.activeElement as HTMLElement)
-      : null
-    // Changing modal presentation retains the same dialog and AI subtree.
-    if (panel.open) panel.close()
-    if (assistantModal) panel.showModal()
-    else panel.show()
-    focused?.focus({ preventScroll: true })
-  }, [assistantPresented, assistantModal])
   const shareTriggerRef = useRef<HTMLButtonElement>(null)
   const [settingsTab, setSettingsTab] = useState('document')
   const contentRootRef = useRef<HTMLDivElement>(null)
@@ -297,7 +257,6 @@ export function DocumentWorkspaceDetail({
     onSearchChange({ workspace_view: 'content' })
   }
   const closeAssistant = () => {
-    restoreAssistantFocus.current = true
     setAssistantOpen(false)
     if (requestedView === 'ai')
       onSearchChange({ workspace_view: 'content' }, true)
@@ -645,133 +604,23 @@ export function DocumentWorkspaceDetail({
                 {!outlineOpen && outline}
               </div>
             </aside>
-            <dialog
-              ref={assistantRef}
-              inert={!assistantPresented}
-              className='document-assistant-panel bg-card text-foreground'
-              data-expanded={assistantExpanded || undefined}
-              aria-labelledby={assistantTitleId}
-              aria-modal={
-                assistantPresented && assistantModal ? true : undefined
-              }
-              onKeyDown={(event) => {
-                if (
-                  assistantModal &&
-                  event.key === 'Tab' &&
-                  !event.defaultPrevented
-                ) {
-                  const focusable = Array.from(
-                    event.currentTarget.querySelectorAll<HTMLElement>(
-                      'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-                    )
-                  ).filter(
-                    (element) =>
-                      !element.matches(':disabled') &&
-                      !element.closest(
-                        '[hidden], [inert], [aria-hidden="true"]'
-                      ) &&
-                      element.getClientRects().length > 0
-                  )
-                  const first = focusable[0]
-                  const last = focusable[focusable.length - 1]
-                  const active = globalThis.document.activeElement
-                  if (
-                    event.shiftKey &&
-                    (active === first || active === event.currentTarget)
-                  ) {
-                    event.preventDefault()
-                    last?.focus()
-                  } else if (!event.shiftKey && active === last) {
-                    event.preventDefault()
-                    first?.focus()
-                  }
-                }
-                if (
-                  !assistantModal &&
-                  event.key === 'Escape' &&
-                  !event.defaultPrevented
-                ) {
-                  event.preventDefault()
-                  closeAssistant()
-                }
-              }}
-              onCancel={(event) => {
-                event.preventDefault()
-                closeAssistant()
-              }}
-              onClick={(event) => {
-                if (!assistantModal || event.target !== event.currentTarget)
-                  return
-                const bounds = event.currentTarget.getBoundingClientRect()
-                if (
-                  event.clientX < bounds.left ||
-                  event.clientX > bounds.right ||
-                  event.clientY < bounds.top ||
-                  event.clientY > bounds.bottom
-                )
-                  closeAssistant()
-              }}
+            <DocumentAssistantPanel
+              open={assistantOpen}
+              suspended={shareOpen || requestedView === 'share' || outlineOpen}
+              onClose={closeAssistant}
+              triggerRef={assistantTriggerRef}
             >
-              <div className='flex h-full min-h-0 min-w-0 flex-col'>
-                <div className='flex shrink-0 items-center justify-between gap-2 border-b px-5 py-3'>
-                  <h2
-                    id={assistantTitleId}
-                    className='flex items-center gap-2 text-sm font-semibold'
-                  >
-                    <Bot aria-hidden className='size-4 text-primary' />
-                    {t('admin.workspace.ai')}
-                  </h2>
-                  <div className='flex items-center gap-1'>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='size-8'
-                      aria-label={t(
-                        assistantExpanded
-                          ? 'admin.ai.collapseChat'
-                          : 'admin.ai.expandChat'
-                      )}
-                      title={t(
-                        assistantExpanded
-                          ? 'admin.ai.collapseChat'
-                          : 'admin.ai.expandChat'
-                      )}
-                      aria-pressed={assistantExpanded}
-                      onClick={() => setAssistantExpanded(!assistantExpanded)}
-                    >
-                      {assistantExpanded ? (
-                        <Minimize2 aria-hidden className='size-4' />
-                      ) : (
-                        <Maximize2 aria-hidden className='size-4' />
-                      )}
-                    </Button>
-                    <Button
-                      variant='ghost'
-                      size='icon'
-                      className='size-8'
-                      aria-label={t('admin.workspace.closeAssistant')}
-                      onClick={closeAssistant}
-                    >
-                      <X aria-hidden className='size-4' />
-                    </Button>
-                  </div>
-                </div>
-                <div className='min-h-0 min-w-0 flex-1 overflow-hidden p-4'>
-                  {assistantVisited && (
-                    <Suspense fallback={<ToolSkeleton />}>
-                      <DocumentWorkspaceAI
-                        projectId={projectId}
-                        document={document}
-                        selection={selection}
-                        interactive={interactive}
-                        summaryInteractive={interactive && branch?.status === 1}
-                        canRegenerate={canWrite && branch?.status === 1}
-                      />
-                    </Suspense>
-                  )}
-                </div>
-              </div>
-            </dialog>
+              <Suspense fallback={<ToolSkeleton />}>
+                <DocumentWorkspaceAI
+                  projectId={projectId}
+                  document={document}
+                  selection={selection}
+                  interactive={interactive}
+                  summaryInteractive={interactive && branch?.status === 1}
+                  canRegenerate={canWrite && branch?.status === 1}
+                />
+              </Suspense>
+            </DocumentAssistantPanel>
           </div>
           <nav
             className='hidden min-h-0 flex-col items-center gap-2 border-s bg-card px-1 py-4 xl:flex'
@@ -931,50 +780,6 @@ function ToolSkeleton() {
       <div aria-hidden className='h-9 w-52 rounded-md bg-muted' />
       <div aria-hidden className='h-28 rounded-md bg-muted/70' />
     </div>
-  )
-}
-// All shared Radix dialogs, confirmations and sheets yield the mobile top layer.
-// Observe their owned state, not aria-hidden/inert side effects from focus scopes.
-const externalDocumentModalSelector = [
-  '[role="dialog"][data-state="open"][data-slot="dialog-content"]',
-  '[role="alertdialog"][data-state="open"][data-slot="alert-dialog-content"]',
-  '[role="dialog"][data-state="open"][data-slot="sheet-content"]',
-].join(',')
-function hasExternalDocumentModal() {
-  return Array.from(
-    globalThis.document.querySelectorAll<HTMLElement>(
-      externalDocumentModalSelector
-    )
-  ).some((modal) => !modal.closest('dialog.document-assistant-panel, [hidden]'))
-}
-function subscribeExternalDocumentModals(callback: () => void) {
-  const observer = new MutationObserver(callback)
-  observer.observe(globalThis.document.body, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ['data-state', 'data-slot', 'role', 'hidden'],
-  })
-  return () => observer.disconnect()
-}
-function useExternalDocumentModal() {
-  return useSyncExternalStore(
-    subscribeExternalDocumentModals,
-    hasExternalDocumentModal,
-    () => false
-  )
-}
-const wideDocumentQuery = '(min-width: 1280px)'
-function subscribeWideDocumentLayout(callback: () => void) {
-  const media = window.matchMedia(wideDocumentQuery)
-  media.addEventListener('change', callback)
-  return () => media.removeEventListener('change', callback)
-}
-function useWideDocumentLayout() {
-  return useSyncExternalStore(
-    subscribeWideDocumentLayout,
-    () => window.matchMedia(wideDocumentQuery).matches,
-    () => false
   )
 }
 function RetainedSection({

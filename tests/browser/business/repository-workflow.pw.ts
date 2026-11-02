@@ -13,15 +13,25 @@ import {
 import { registerCapabilitySecret } from '../support/secret-safety.mjs'
 
 async function tool(page: Page, name: string) {
-  const nav = page.getByRole('navigation', { name: 'Commit', exact: true })
-  const button = nav.getByRole('button', { name, exact: true })
-  if (['Read', 'Edit', 'Version history', 'Compare', 'AI'].includes(name))
-    await button.click()
-  else {
-    await nav
+  await expect(page.locator('[data-document-page]')).toBeVisible()
+  if (name === 'Edit' || name === 'Read') {
+    await page
       .getByRole('button', {
-        name: /^(More|Merge requests|Releases|Activity & subscriptions)$/,
+        name: name === 'Read' ? 'Back to preview' : 'Edit',
+        exact: true,
       })
+      .click()
+    return
+  }
+  const nav = page.getByRole('navigation', {
+    name: 'Document tools',
+    exact: true,
+  })
+  if (await nav.isVisible()) {
+    await nav.getByRole('button', { name, exact: true }).click()
+  } else {
+    await page
+      .getByRole('button', { name: 'Document tools', exact: true })
       .click()
     await page.getByRole('menuitem', { name, exact: true }).click()
   }
@@ -353,7 +363,19 @@ for (const width of [1440, 390]) {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     const api = await installRepository(page)
     await api.open()
-    await tool(page, 'Releases')
+    await page.getByRole('button', { name: 'Share', exact: true }).click()
+    const unpublished = page.getByRole('dialog', { name: 'Share', exact: true })
+    await expect(unpublished).toContainText('has not been published')
+    expect(api.releases).toHaveLength(0)
+    expect(
+      api.requests.some(
+        (request) =>
+          request.method === 'POST' && request.path.endsWith('/releases')
+      )
+    ).toBe(false)
+    await unpublished
+      .getByRole('button', { name: 'Review before sharing', exact: true })
+      .click()
     await expect(page.getByRole('textbox', { name: /version/i })).toHaveCount(0)
     await page
       .getByRole('button', {
@@ -415,9 +437,7 @@ for (const width of [1440, 390]) {
         },
       })
     })
-    await page
-      .getByRole('button', { name: 'Share release', exact: true })
-      .click()
+    await page.getByRole('button', { name: 'Share', exact: true }).click()
     const dialog = page.getByRole('dialog', {
       name: 'Share release',
       exact: true,
@@ -611,9 +631,7 @@ test('reader permissions hide commit, publication and subscription mutations', a
     page.getByText('Original saved body.', { exact: true })
   ).toBeVisible()
   await expect(
-    page
-      .getByRole('navigation', { name: 'Commit', exact: true })
-      .getByRole('button', { name: 'Edit', exact: true })
+    page.getByRole('button', { name: 'Edit', exact: true })
   ).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: 'New branch', exact: true })
@@ -635,5 +653,218 @@ test('reader permissions hide commit, publication and subscription mutations', a
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze()
   expect(a11y.violations).toEqual([])
+  expect(api.unexpected).toEqual([])
+})
+
+for (const width of [1440, 390]) {
+  test(`document layout keeps reading, outline, tools and assistant independent at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 960 })
+    const api = await installRepository(page)
+    const body =
+      '# Shared guide\n\n' +
+      Array.from(
+        { length: 18 },
+        (_, index) =>
+          `## Section ${index + 1}\n\n${'Read and edit this document without losing your place. '.repeat(12)}\n`
+      ).join('\n')
+    api.bodies.get(api.initial.id)!.set(documentId, body)
+    await api.open()
+    const reader = page.locator('[data-document-reading-pane]')
+    await expect(
+      reader.getByRole('heading', { name: 'Section 18', exact: true })
+    ).toBeAttached()
+    await expect(
+      page.getByRole('navigation', { name: 'Commit', exact: true })
+    ).toHaveCount(0)
+    await expect(
+      page.locator('[data-document-page] > [role=tablist]')
+    ).toHaveCount(0)
+    const rail = page.getByRole('navigation', {
+      name: 'Document tools',
+      exact: true,
+    })
+    if (width >= 1280) {
+      await expect(rail).toBeVisible()
+      const bounds = (await rail.boundingBox())!
+      expect(bounds.width).toBeLessThan(60)
+      expect(bounds.x).toBeGreaterThan(width - 65)
+      await expect(
+        page.getByRole('complementary', { name: 'On this page' })
+      ).toBeVisible()
+      await expect
+        .poll(async () =>
+          Math.round(
+            (await page
+              .getByRole('complementary', { name: 'On this page' })
+              .boundingBox())!.width
+          )
+        )
+        .toBe(240)
+      await page
+        .getByRole('complementary', { name: 'On this page' })
+        .getByRole('link', { name: 'Section 8', exact: true })
+        .click()
+    } else {
+      await expect(rail).not.toBeVisible()
+      await tool(page, 'On this page')
+      const outline = page.getByRole('dialog', {
+        name: 'On this page',
+        exact: true,
+      })
+      await outline
+        .getByRole('link', { name: 'Section 8', exact: true })
+        .click()
+      await expect(outline).not.toBeVisible()
+    }
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(300)
+    await expect
+      .poll(async () => {
+        const heading = await reader
+          .getByRole('heading', { name: 'Section 8', exact: true })
+          .boundingBox()
+        return Math.round(heading!.y - (await reader.boundingBox())!.y)
+      })
+      .toBe(32)
+    // Use a settled position so assertions are independent of smooth-scroll timing.
+    await reader.evaluate((element) =>
+      element.scrollTo({ top: 500, behavior: 'instant' })
+    )
+    await tool(page, 'Version history')
+    await expect(reader).toBeHidden()
+    await tool(page, 'Read')
+    await expect(reader).toBeVisible()
+    await expect
+      .poll(() => reader.evaluate((element) => element.scrollTop))
+      .toBe(500)
+    await tool(page, 'AI')
+    const assistant = page.locator('dialog.document-assistant-panel')
+    await expect(assistant).toBeVisible()
+    await expect(reader).toBeVisible()
+    if (width >= 1280) {
+      expect(
+        await assistant.evaluate((element) => element.matches(':modal'))
+      ).toBe(false)
+      expect(
+        (await reader.boundingBox())!.x + (await reader.boundingBox())!.width
+      ).toBeLessThanOrEqual((await assistant.boundingBox())!.x + 1)
+    } else {
+      expect(
+        await assistant.evaluate((element) => element.matches(':modal'))
+      ).toBe(true)
+    }
+    const question = assistant.getByRole('textbox', {
+      name: 'Question or analysis instructions (optional)',
+      exact: true,
+    })
+    await question.fill('Keep this unsent question while I read.')
+    await page.screenshot({
+      animations: 'disabled',
+      path: testInfo.outputPath(`document-assistant-${width}.png`),
+    })
+    await assistant
+      .getByRole('button', { name: 'Close document AI', exact: true })
+      .click()
+    await expect(assistant).not.toBeVisible()
+    if (width >= 1280)
+      await expect(
+        rail.getByRole('button', { name: 'AI', exact: true })
+      ).toBeFocused()
+    else
+      await expect(
+        page.getByRole('button', { name: 'Document tools', exact: true })
+      ).toBeFocused()
+    await tool(page, 'AI')
+    await expect(question).toHaveValue(
+      'Keep this unsent question while I read.'
+    )
+    await assistant
+      .getByRole('button', { name: 'Close document AI', exact: true })
+      .click()
+    await tool(page, 'Edit')
+    const editor = page.getByRole('textbox', { name: 'Content', exact: true })
+    await editor.fill(body + '\nUncommitted edit.')
+    await tool(page, 'Version history')
+    await tool(page, 'Edit')
+    await expect(editor).toHaveValue(body + '\nUncommitted edit.')
+    await tool(page, 'Read')
+    await reader.evaluate((element) =>
+      element.scrollTo({ top: 0, behavior: 'instant' })
+    )
+    await page.screenshot({
+      animations: 'disabled',
+      path: testInfo.outputPath(`document-reading-${width}.png`),
+    })
+    await noOverflow(page)
+    const a11y = await new AxeBuilder({ page })
+      .include('[data-document-page]')
+      .withTags(['wcag2a', 'wcag2aa'])
+      .analyze()
+    expect(a11y.violations).toEqual([])
+    expect(api.unexpected).toEqual([])
+  })
+}
+
+test('assistant retains its input and focus across dock, modal and competing dialogs', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 960 })
+  const api = await installRepository(page)
+  await api.open()
+  await tool(page, 'AI')
+  const assistant = page.locator('dialog.document-assistant-panel')
+  const question = assistant.getByRole('textbox', {
+    name: 'Question or analysis instructions (optional)',
+    exact: true,
+  })
+  await question.fill('A question that survives resizing.')
+  await question.evaluate((element) =>
+    element.setAttribute('data-original-input', 'true')
+  )
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(assistant).toHaveAttribute('aria-modal', 'true')
+  await expect(question).toBeFocused()
+  await expect(question).toHaveAttribute('data-original-input', 'true')
+  await expect(question).toHaveValue('A question that survives resizing.')
+  await question.press('Escape')
+  await expect(assistant).not.toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Document tools', exact: true })
+  ).toBeFocused()
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await tool(page, 'AI')
+  await assistant
+    .getByRole('button', { name: 'Expand AI workspace', exact: true })
+    .click()
+  await expect(assistant).toHaveAttribute('aria-modal', 'true')
+  await expect(question).toHaveAttribute('data-original-input', 'true')
+  await assistant
+    .getByRole('button', { name: 'Collapse AI workspace', exact: true })
+    .click()
+  await expect(assistant).not.toHaveAttribute('aria-modal')
+  await page.getByRole('button', { name: 'New branch', exact: true }).click()
+  const branchDialog = page.getByRole('dialog', {
+    name: 'New branch',
+    exact: true,
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(branchDialog).toBeVisible()
+  await expect(assistant).not.toBeVisible()
+  await branchDialog
+    .getByRole('textbox', { name: 'Branch name', exact: true })
+    .fill('draft')
+  await branchDialog
+    .getByRole('textbox', { name: 'Branch name', exact: true })
+    .press('Escape')
+  await expect(branchDialog).not.toBeVisible()
+  await expect(assistant).toBeVisible()
+  await expect(question).toHaveValue('A question that survives resizing.')
+  await noOverflow(page)
+  await page.screenshot({
+    path: testInfo.outputPath('assistant-resized-mobile.png'),
+  })
   expect(api.unexpected).toEqual([])
 })

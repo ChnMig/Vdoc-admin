@@ -59,6 +59,8 @@ export function RepositoryAutomation({
   view,
   canManage,
   active = true,
+  presentation = 'page',
+  versionName,
 }: {
   projectId: RepositoryScope
   branch?: RepositoryBranch
@@ -68,6 +70,8 @@ export function RepositoryAutomation({
   view: 'ai' | 'events'
   canManage: boolean
   active?: boolean
+  presentation?: 'page' | 'sidebar'
+  versionName?: string
 }) {
   const copy = useRepositoryCopy()
   const { t, language } = useLanguage()
@@ -187,7 +191,9 @@ export function RepositoryAutomation({
     return (
       <div className='grid min-w-0 gap-5'>
         <div>
-          <h1 className='text-xl font-semibold'>{copy.ai}</h1>
+          {presentation === 'page' && (
+            <h1 className='text-xl font-semibold'>{copy.ai}</h1>
+          )}
           <p className='mt-2 max-w-prose text-sm leading-6 text-muted-foreground'>
             {copy.aiDescription}
           </p>
@@ -197,14 +203,18 @@ export function RepositoryAutomation({
             <dt className='text-muted-foreground'>
               {zh ? '目标提交' : 'Target commit'}
             </dt>
-            <dd className='mt-1 font-mono break-all'>{commitId}</dd>
+            <dd className='mt-1 font-mono break-all' title={commitId}>
+              {versionName || commitId.slice(0, 12)}
+            </dd>
           </div>
           {fromCommitId && (
             <div>
               <dt className='text-muted-foreground'>
                 {zh ? '基线提交' : 'Base commit'}
               </dt>
-              <dd className='mt-1 font-mono break-all'>{fromCommitId}</dd>
+              <dd className='mt-1 font-mono break-all' title={fromCommitId}>
+                {fromCommitId.slice(0, 12)}
+              </dd>
             </div>
           )}
         </dl>
