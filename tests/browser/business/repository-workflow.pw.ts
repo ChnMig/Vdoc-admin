@@ -696,9 +696,8 @@ for (const width of [1440, 390]) {
       await expect
         .poll(async () =>
           Math.round(
-            (await page
-              .getByRole('complementary', { name: 'On this page' })
-              .boundingBox())!.width
+            (await page.locator('.document-assistant-dock').boundingBox())!
+              .width
           )
         )
         .toBe(240)
