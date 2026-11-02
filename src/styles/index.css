@@ -391,3 +391,46 @@
   cursor: not-allowed;
   opacity: 0.5;
 }
+
+/* Tools expand over the reader without moving or recreating their content. */
+.document-tool-sidebar {
+  position: absolute;
+  z-index: 30;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: min(100%, var(--document-tool-width));
+  border-inline-start: 1px solid var(--border);
+  transition: width var(--motion-duration-panel) var(--motion-ease-standard);
+}
+.document-tool-sidebar[hidden],
+.document-tool-backdrop[hidden] {
+  display: none;
+}
+.document-tool-sidebar[data-expanded] {
+  width: 100%;
+}
+.document-tool-backdrop {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+@media (min-width: 1280px) {
+  .document-tool-sidebar {
+    inset-inline-end: 3rem;
+  }
+  .document-tool-sidebar[data-expanded] {
+    width: min(64rem, calc(100% - 3rem));
+  }
+  .document-tool-backdrop {
+    inset-inline-end: 3rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .document-tool-sidebar {
+    transition: none;
+  }
+}

@@ -37,18 +37,109 @@ import {
 } from './page-shared'
 import { useRepositoryCopy } from './repository-copy'
 
-const eventTypes = [
-  'commit.created',
-  'branch.created',
-  'branch.updated',
-  'merge_request.created',
-  'merge_request.approved',
-  'merge_request.merged',
-  'merge_request.resolved',
-  'release.published',
-  'ai.analysis.succeeded',
-  'ai.analysis.failed',
+const eventGroups = [
+  {
+    zh: '版本与分支',
+    en: 'Versions and branches',
+    events: [
+      [
+        'commit.created',
+        '保存了新版本',
+        'Version saved',
+        '文档提交成功，产生一个新的版本号。',
+        'A document save creates a numbered version.',
+      ],
+      [
+        'branch.created',
+        '创建了分支',
+        'Branch created',
+        '从已有版本创建了一条新分支。',
+        'A new branch starts from an existing version.',
+      ],
+      [
+        'branch.updated',
+        '分支有更新',
+        'Branch updated',
+        '分支指向的最新版本发生变化。',
+        'The latest version on a branch changes.',
+      ],
+    ],
+  },
+  {
+    zh: '审核与合并',
+    en: 'Review and merge',
+    events: [
+      [
+        'merge_request.created',
+        '提交了合并请求',
+        'Merge requested',
+        '有人申请把一个分支的内容合并到另一个分支。',
+        'Someone proposes merging changes into another branch.',
+      ],
+      [
+        'merge_request.approved',
+        '合并请求通过审核',
+        'Merge approved',
+        '审核人已批准本次合并。',
+        'A reviewer approves the merge.',
+      ],
+      [
+        'merge_request.resolved',
+        '合并冲突已处理',
+        'Conflicts resolved',
+        '冲突内容已调整，可继续审核或合并。',
+        'Conflicts are resolved for review or merging.',
+      ],
+      [
+        'merge_request.merged',
+        '分支合并完成',
+        'Merge completed',
+        '变更已合入目标分支。',
+        'Changes are merged into the target branch.',
+      ],
+    ],
+  },
+  {
+    zh: '发布',
+    en: 'Publication',
+    events: [
+      [
+        'release.published',
+        '发布了正式内容',
+        'Release published',
+        '管理员已发布指定版本，供分享和引用。',
+        'An administrator publishes a version for sharing and reference.',
+      ],
+    ],
+  },
+  {
+    zh: 'AI 分析',
+    en: 'AI analysis',
+    events: [
+      [
+        'ai.analysis.succeeded',
+        '版本分析完成',
+        'Analysis completed',
+        'AI 版本分析结果已生成。',
+        'An AI version analysis is ready.',
+      ],
+      [
+        'ai.analysis.failed',
+        '版本分析失败',
+        'Analysis failed',
+        'AI 版本分析未完成，需要检查后重试。',
+        'An AI version analysis failed and may need a retry.',
+      ],
+    ],
+  },
 ]
+
+function eventLabel(type: string, zh: boolean) {
+  const event = eventGroups
+    .flatMap((group) => group.events)
+    .find((item) => item[0] === type)
+  return event ? event[zh ? 1 : 2] : type
+}
 
 export function RepositoryAutomation({
   projectId,
@@ -324,7 +415,9 @@ export function RepositoryAutomation({
   return (
     <div className='grid min-w-0 gap-7'>
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <h1 className='text-xl font-semibold'>{copy.events}</h1>
+        <h3 className='text-sm font-semibold'>
+          {zh ? '最近活动' : 'Recent activity'}
+        </h3>
         <Button variant='outline' size='sm' onClick={() => void refresh()}>
           <RefreshCw aria-hidden className='size-4' />
           {copy.refresh}
@@ -335,7 +428,9 @@ export function RepositoryAutomation({
         {events.map((event) => (
           <li key={event.id} className='grid gap-1 py-3 text-sm'>
             <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
-              <span className='font-medium'>{event.event_type}</span>
+              <span className='font-medium'>
+                {eventLabel(event.event_type, zh)}
+              </span>
               <span className='font-mono text-xs text-muted-foreground'>
                 #{event.sequence}
               </span>
@@ -384,11 +479,16 @@ export function RepositoryAutomation({
         <>
           <section className='grid gap-4 border-t pt-5'>
             <div className='flex flex-wrap items-center justify-between gap-2'>
-              <h2 className='text-lg font-semibold'>
+              <h2 className='text-sm font-semibold'>
                 {zh ? '事件订阅' : 'Event subscriptions'}
               </h2>
               <FormDialog
                 title={zh ? '创建订阅' : 'Create subscription'}
+                description={
+                  zh
+                    ? '选择哪些变化需要通知，以及通知发送到哪里。'
+                    : 'Choose which changes to follow and where notifications are delivered.'
+                }
                 triggerLabel={zh ? '创建订阅' : 'Create subscription'}
                 pending={subscriptionMutation.isPending}
                 submitLabel={t('admin.common.create')}
@@ -437,26 +537,62 @@ export function RepositoryAutomation({
                     }
                   />
                 )}
-                <fieldset className='grid gap-2'>
-                  <legend className='mb-2 text-sm font-medium'>
-                    {zh ? '订阅事件' : 'Events'}
-                  </legend>
-                  {eventTypes.map((type) => (
-                    <label
-                      key={type}
-                      className='flex items-center gap-2 text-xs'
-                    >
-                      <input
-                        type='checkbox'
-                        name='event_types'
-                        value={type}
-                        defaultChecked={type === 'release.published'}
-                        className='size-4 accent-primary'
-                      />
-                      {type}
-                    </label>
+                <div className='grid gap-5 border-t pt-4'>
+                  <p className='text-sm font-medium'>
+                    {zh ? '关注哪些变化' : 'Changes to follow'}
+                  </p>
+                  {eventGroups.map((group) => (
+                    <fieldset key={group.en} className='grid gap-2'>
+                      <legend className='mb-2 text-xs font-semibold text-muted-foreground'>
+                        {zh ? group.zh : group.en}
+                      </legend>
+                      {group.events.map(
+                        ([
+                          type,
+                          labelZh,
+                          labelEn,
+                          descriptionZh,
+                          descriptionEn,
+                        ]) => (
+                          <label
+                            key={type}
+                            className='flex cursor-pointer items-start gap-3 rounded-md px-2 py-2 hover:bg-muted/50'
+                          >
+                            <input
+                              type='checkbox'
+                              name='event_types'
+                              value={type}
+                              defaultChecked={type === 'release.published'}
+                              className='mt-0.5 size-4 shrink-0 accent-primary'
+                            />
+                            <span className='grid gap-1'>
+                              <span className='text-sm font-medium'>
+                                {zh ? labelZh : labelEn}
+                              </span>
+                              <span className='text-xs leading-5 text-muted-foreground'>
+                                {zh ? descriptionZh : descriptionEn}
+                              </span>
+                            </span>
+                          </label>
+                        )
+                      )}
+                    </fieldset>
                   ))}
-                </fieldset>
+                </div>
+                <div className='grid gap-2 border-t pt-4'>
+                  <p className='text-sm font-medium'>
+                    {zh ? '接收范围' : 'Notification scope'}
+                  </p>
+                  <p className='text-xs leading-5 text-muted-foreground'>
+                    {documentId
+                      ? zh
+                        ? '当前文档的事件。勾选分支后，仅接收该分支的变化。'
+                        : 'Events for this document. Select a branch to narrow the notifications.'
+                      : zh
+                        ? '默认接收整个项目的事件，可进一步限定范围。'
+                        : 'Follow the project, or narrow the scope below.'}
+                  </p>
+                </div>
                 {branch && (
                   <label className='flex items-center gap-2 text-sm'>
                     <input
@@ -467,7 +603,7 @@ export function RepositoryAutomation({
                     {zh ? '仅当前分支' : 'Current branch only'} ({branch.name})
                   </label>
                 )}
-                {documentId && (
+                {documentId && typeof projectId === 'string' && (
                   <label className='flex items-center gap-2 text-sm'>
                     <input
                       type='checkbox'
@@ -554,8 +690,15 @@ export function RepositoryAutomation({
                       </Badge>
                     </p>
                     <p className='text-xs text-muted-foreground'>
-                      {subscription.kind} ·{' '}
-                      {subscription.event_types.join(', ')}
+                      {subscription.kind === 'in_app'
+                        ? zh
+                          ? '站内通知'
+                          : 'In-app'
+                        : 'Webhook'}{' '}
+                      ·{' '}
+                      {subscription.event_types
+                        .map((type) => eventLabel(type, zh))
+                        .join(' · ')}
                     </p>
                     {subscription.url && (
                       <p className='max-w-xl truncate text-xs text-muted-foreground'>
@@ -598,7 +741,7 @@ export function RepositoryAutomation({
               )}
           </section>
           <section className='grid gap-4 border-t pt-5'>
-            <h2 className='text-lg font-semibold'>
+            <h2 className='text-sm font-semibold'>
               {zh ? '推送记录' : 'Delivery history'}
             </h2>
             <LoadingErrorState state={deliveriesQuery} />
@@ -617,7 +760,7 @@ export function RepositoryAutomation({
                 >
                   <div className='grid min-w-0 gap-1'>
                     <p className='text-sm'>
-                      {delivery.event_type}{' '}
+                      {eventLabel(delivery.event_type, zh)}{' '}
                       <Badge variant='outline'>{status(delivery.status)}</Badge>
                     </p>
                     <p className='text-xs text-muted-foreground'>

@@ -49,6 +49,7 @@ export function RepositoryHistoryTools({
   onCompareSelection,
   onOpenCommit,
   onChanged,
+  presentation = 'page',
 }: {
   projectId: RepositoryScope
   branch: RepositoryBranch
@@ -63,6 +64,7 @@ export function RepositoryHistoryTools({
   onCompareSelection: (value: { from: string; to: string }) => void
   onOpenCommit: (id: string) => void
   onChanged: () => Promise<unknown>
+  presentation?: 'page' | 'sidebar'
 }) {
   const copy = useRepositoryCopy()
   const { t, language } = useLanguage()
@@ -172,11 +174,13 @@ export function RepositoryHistoryTools({
     ''
   const to = compareSelection.to || commitId
   return (
-    <div className='grid min-w-0 gap-5'>
+    <div className='@container/tools grid min-w-0 gap-5'>
       {view === 'history' && (
         <>
-          <div className='flex flex-wrap items-center justify-between gap-3'>
-            <h1 className='text-xl font-semibold'>{copy.history}</h1>
+          <div className='flex flex-wrap items-center justify-between gap-3 empty:hidden'>
+            {presentation === 'page' && (
+              <h1 className='text-xl font-semibold'>{copy.history}</h1>
+            )}
             {documentId && typeof projectId === 'string' && (
               <Button
                 variant='outline'
@@ -312,8 +316,10 @@ export function RepositoryHistoryTools({
       )}
       {view === 'compare' && (
         <>
-          <h1 className='text-xl font-semibold'>{copy.compare}</h1>
-          <div className='grid min-w-0 gap-4 md:grid-cols-2'>
+          {presentation === 'page' && (
+            <h1 className='text-xl font-semibold'>{copy.compare}</h1>
+          )}
+          <div className='grid min-w-0 gap-4 @min-[36rem]/tools:grid-cols-2'>
             <div className='grid gap-3'>
               <NativeSelect
                 label={copy.sourceBranch}
@@ -407,7 +413,9 @@ export function RepositoryHistoryTools({
       )}
       {view === 'merges' && (
         <>
-          <h1 className='text-xl font-semibold'>{copy.merges}</h1>
+          {presentation === 'page' && (
+            <h1 className='text-xl font-semibold'>{copy.merges}</h1>
+          )}
           {canWrite && (
             <form
               className='grid gap-4 border-b pb-5'
@@ -416,7 +424,7 @@ export function RepositoryHistoryTools({
                 mergeMutation.mutate()
               }}
             >
-              <div className='grid gap-4 sm:grid-cols-2'>
+              <div className='grid gap-4 @min-[36rem]/tools:grid-cols-2'>
                 <NativeSelect
                   label={copy.sourceBranch}
                   placeholder={copy.sourceBranch}
@@ -633,13 +641,15 @@ export function RepositoryHistoryTools({
       )}
       {view === 'releases' && (
         <>
-          <h1 className='text-xl font-semibold'>{copy.releases}</h1>
+          {presentation === 'page' && (
+            <h1 className='text-xl font-semibold'>{copy.releases}</h1>
+          )}
           <p className='max-w-prose text-sm leading-6 text-muted-foreground'>
             {copy.publicationBoundary}
           </p>
           {canManage && (
             <div className='grid gap-3 border-b pb-5'>
-              <p className='flex items-center gap-2 font-mono text-xs'>
+              <p className='flex min-w-0 items-center gap-2 font-mono text-xs break-all'>
                 <GitCommitHorizontal aria-hidden className='size-4' />
                 {commitId}
               </p>

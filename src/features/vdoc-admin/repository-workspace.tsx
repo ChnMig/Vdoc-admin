@@ -40,13 +40,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -57,8 +50,8 @@ import {
   DocumentReader,
   DocumentReadingPreferences,
 } from '@/features/document-reader/document-reader'
-import { DocumentAssistantPanel } from './document-assistant-panel'
 import { useWideDocumentLayout } from './document-layout-hooks'
+import { DocumentToolSidebar } from './document-tool-sidebar'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceOutline } from './document-workspace-outline'
 import {
@@ -69,6 +62,7 @@ import {
 } from './page-shared'
 import { RepositoryAutomation } from './repository-automation'
 import { useRepositoryCopy } from './repository-copy'
+import { RepositoryDocumentAI } from './repository-document-ai'
 import { RepositoryEditor, type RepositoryEdit } from './repository-editor'
 import { RepositoryHistoryTools } from './repository-history-tools'
 import { RepositoryDocumentShareDialog } from './repository-share-dialog'
@@ -98,7 +92,7 @@ export function RepositoryWorkspace({
   navigationActions?: ReactNode
   onSearchChange: (patch: Partial<VdocRouteSearch>, replace?: boolean) => void
 }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const copy = useRepositoryCopy()
   const queryClient = useQueryClient()
   const {
@@ -115,17 +109,33 @@ export function RepositoryWorkspace({
     document?.default_branch_id
   )
   const requestedView = search.repository_view ?? 'content'
-  const view = requestedView === 'ai' ? 'content' : requestedView
-  const [assistantOpen, setAssistantOpen] = useState(requestedView === 'ai')
+  const [view, setMainView] = useState<'content' | 'edit'>(
+    requestedView === 'edit' ? 'edit' : 'content'
+  )
+  const [tool, setTool] = useState<RepositoryView | 'outline'>(
+    requestedView === 'content' || requestedView === 'edit'
+      ? 'outline'
+      : requestedView
+  )
+  const [sidebarOpen, setSidebarOpen] = useState<boolean | undefined>(
+    requestedView === 'content' || requestedView === 'edit' ? undefined : true
+  )
+  const [expanded, setExpanded] = useState(false)
   const [previousRequestedView, setPreviousRequestedView] =
     useState(requestedView)
   if (requestedView !== previousRequestedView) {
     setPreviousRequestedView(requestedView)
-    if (requestedView === 'ai') setAssistantOpen(true)
+    if (requestedView === 'content' || requestedView === 'edit')
+      setMainView(requestedView)
+    else {
+      setTool(requestedView)
+      setSidebarOpen(true)
+    }
   }
-  const [outlineOpen, setOutlineOpen] = useState(false)
   const wideLayout = useWideDocumentLayout()
-  const assistantTriggerRef = useRef<HTMLButtonElement>(null)
+  const sidebarVisible = sidebarOpen ?? wideLayout
+  const sidebarOverlay = expanded || !wideLayout
+  const toolTriggerRef = useRef<HTMLButtonElement>(null)
   const contentRootRef = useRef<HTMLDivElement>(null)
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -209,6 +219,9 @@ export function RepositoryWorkspace({
   const setView = (next: RepositoryView) =>
     onSearchChange({ repository_view: next })
   const openCommit = (commit: RepositoryCommit | string) => {
+    setTool('outline')
+    setSidebarOpen(wideLayout)
+    setExpanded(false)
     onSearchChange({
       commit_id: typeof commit === 'string' ? commit : commit.id,
       repository_view: 'content',
@@ -224,18 +237,23 @@ export function RepositoryWorkspace({
   }
   const startEditing = () => {
     if (!branch) return
+    setExpanded(false)
+    if (!wideLayout) setSidebarOpen(false)
     onSearchChange({ commit_id: undefined, repository_view: 'edit' })
   }
   const isReading = view === 'content'
   const readingKey = `${sessionVersion}:${projectId}:${document?.id ?? ''}:${branch?.id ?? ''}:${commitId}`
   const goToContent = () => {
+    setExpanded(false)
+    if (!wideLayout) setSidebarOpen(false)
     restoreReadingFocus.current = true
     setView('content')
   }
-  const closeAssistant = () => {
-    setAssistantOpen(false)
-    if (requestedView === 'ai')
-      onSearchChange({ repository_view: 'content' }, true)
+  const closeSidebar = () => {
+    setSidebarOpen(false)
+    setExpanded(false)
+    if (requestedView !== 'content' && requestedView !== 'edit')
+      onSearchChange({ repository_view: view }, true)
   }
   const toolItems = [
     { id: 'history' as const, label: copy.history, icon: History },
@@ -245,11 +263,11 @@ export function RepositoryWorkspace({
     { id: 'releases' as const, label: copy.releases, icon: Send },
     { id: 'events' as const, label: copy.events, icon: History },
   ]
-  const activateTool = (next: RepositoryView) => {
-    if (next === 'ai') {
-      if (assistantOpen) closeAssistant()
-      else setAssistantOpen(true)
-    } else setView(next)
+  const activateTool = (next: RepositoryView | 'outline') => {
+    setTool(next)
+    setSidebarOpen(true)
+    if (next !== 'outline') setView(next)
+    else onSearchChange({ repository_view: view }, true)
   }
   return (
     <section
@@ -288,16 +306,27 @@ export function RepositoryWorkspace({
                 size='icon'
                 className='xl:hidden'
                 aria-label={t('admin.workspace.tools')}
-                ref={!wideLayout ? assistantTriggerRef : undefined}
+                ref={!wideLayout ? toolTriggerRef : undefined}
               >
                 <MoreHorizontal aria-hidden />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
+            <DropdownMenuContent
+              align='end'
+              onCloseAutoFocus={(event) => {
+                if (!wideLayout && sidebarVisible) {
+                  event.preventDefault()
+                  requestAnimationFrame(() =>
+                    globalThis.document
+                      .querySelector<HTMLElement>('.document-tool-sidebar')
+                      ?.focus({ preventScroll: true })
+                  )
+                }
+              }}
+            >
               <DropdownMenuItem
                 onSelect={() => {
-                  goToContent()
-                  setOutlineOpen(true)
+                  activateTool('outline')
                 }}
               >
                 <ListTree aria-hidden />
@@ -347,7 +376,7 @@ export function RepositoryWorkspace({
           <RepositoryLink />
         </div>
       </header>
-      <div className='grid shrink-0 grid-cols-2 items-center gap-x-4 gap-y-2 border-b px-4 py-2 sm:grid-cols-[minmax(8rem,12rem)_minmax(10rem,16rem)_minmax(0,1fr)] sm:px-6'>
+      <div className='grid shrink-0 grid-cols-2 items-end gap-x-4 gap-y-2 border-b px-4 py-2 sm:grid-cols-[minmax(8rem,12rem)_minmax(10rem,16rem)_minmax(0,1fr)] sm:px-6'>
         <NativeSelect
           label={copy.branch}
           placeholder={copy.branch}
@@ -392,14 +421,7 @@ export function RepositoryWorkspace({
             })
           }
         />
-        <div className='col-span-2 flex min-w-0 flex-wrap items-center gap-2 text-xs sm:col-span-1'>
-          <span
-            className='inline-flex items-center gap-1.5 font-mono'
-            title={commitId}
-          >
-            <GitCommitHorizontal aria-hidden className='size-4' />
-            {commitQuery.data?.version_name || copy.noCommits}
-          </span>
+        <div className='col-span-2 flex min-h-9 min-w-0 flex-wrap items-center gap-2 text-xs sm:col-span-1'>
           {branch?.is_protected && (
             <Badge variant='outline'>
               <LockKeyhole aria-hidden className='me-1 size-3' />
@@ -445,20 +467,23 @@ export function RepositoryWorkspace({
         </div>
       </div>
       <div
-        className='document-workspace-layout grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_var(--document-aside-width)_3rem]'
-        data-ai-open={assistantOpen || undefined}
+        className='document-workspace-layout repository-document-layout relative grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_var(--document-aside-width)_3rem]'
+        data-tool={tool}
+        data-sidebar-open={sidebarVisible || undefined}
         style={
           {
-            '--document-aside-width': assistantOpen
-              ? '23rem'
-              : isReading
+            '--document-aside-width': sidebarVisible
+              ? tool === 'outline'
                 ? '15rem'
-                : '0rem',
+                : '24rem'
+              : '0rem',
+            '--document-tool-width': tool === 'outline' ? '15rem' : '24rem',
           } as CSSProperties
         }
       >
         <main
           id='content'
+          inert={sidebarVisible && sidebarOverlay}
           ref={mainRef}
           tabIndex={-1}
           className='relative flex min-h-0 min-w-0 flex-col focus:outline-none'
@@ -534,9 +559,17 @@ export function RepositoryWorkspace({
                             }
                             content={contentQuery.data.content}
                             metadata={
-                              <p className='text-xs text-muted-foreground'>
-                                {commitQuery.data?.message}
-                              </p>
+                              <details className='text-xs text-muted-foreground'>
+                                <summary className='w-fit cursor-pointer leading-6'>
+                                  {language === 'zh-CN'
+                                    ? '版本说明'
+                                    : 'Version details'}{' '}
+                                  · {commitQuery.data?.version_name}
+                                </summary>
+                                <p className='mt-2 break-words'>
+                                  {commitQuery.data?.message}
+                                </p>
+                              </details>
                             }
                           />
                         )
@@ -673,54 +706,6 @@ export function RepositoryWorkspace({
                 </div>
               )}
           </RepositoryToolPane>
-          {(['history', 'compare', 'merges', 'releases'] as const).map(
-            (tool) => (
-              <RepositoryToolPane
-                key={`${projectId}:${branch?.id}:${document?.id ?? ''}:${tool}`}
-                active={view === tool}
-                onClose={goToContent}
-              >
-                {branch && (
-                  <RepositoryHistoryTools
-                    projectId={repositoryScope}
-                    branch={branch}
-                    branches={branches}
-                    commitId={commitId}
-                    documentId={document?.id}
-                    view={tool}
-                    active={view === tool}
-                    canManage={
-                      canManage && interactive && !branch.import_required
-                    }
-                    canWrite={
-                      canWrite && interactive && !branch.import_required
-                    }
-                    compareSelection={compareSelection}
-                    onCompareSelection={setCompareSelection}
-                    onOpenCommit={openCommit}
-                    onChanged={invalidate}
-                  />
-                )}
-              </RepositoryToolPane>
-            )
-          )}
-          <RepositoryToolPane
-            key={`${projectId}:${document?.id ?? ''}:events`}
-            active={view === 'events'}
-            onClose={goToContent}
-          >
-            {commitId && (
-              <RepositoryAutomation
-                projectId={repositoryScope}
-                branch={branch}
-                commitId={commitId}
-                documentId={document?.id}
-                view='events'
-                active={view === 'events'}
-                canManage={canManage && interactive}
-              />
-            )}
-          </RepositoryToolPane>
           {document?.latest_version_id && (
             <Button
               className='w-fit'
@@ -741,71 +726,121 @@ export function RepositoryWorkspace({
             </Button>
           )}
         </main>
-        <div className='document-assistant-dock contents min-h-0 min-w-0 xl:block xl:border-s'>
-          <aside
-            hidden={assistantOpen || !isReading}
-            className={
-              assistantOpen || !isReading
-                ? 'hidden'
-                : 'hidden h-full min-h-0 min-w-0 flex-col bg-card xl:flex'
-            }
-            aria-label={t('admin.workspace.outline')}
+        <DocumentToolSidebar
+          open={sidebarVisible}
+          expanded={expanded}
+          overlay={sidebarOverlay}
+          title={
+            tool === 'outline'
+              ? t('admin.workspace.outline')
+              : (toolItems.find((item) => item.id === tool)?.label ?? copy.ai)
+          }
+          onExpand={() => setExpanded((value) => !value)}
+          onClose={closeSidebar}
+          triggerRef={toolTriggerRef}
+        >
+          <RepositoryToolPane
+            active={sidebarVisible && tool === 'outline'}
+            onClose={closeSidebar}
+            sidebar
           >
-            <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5'>
-              {!outlineOpen && (
-                <DocumentWorkspaceOutline
-                  contentRootRef={contentRootRef}
-                  scrollRootRef={scrollRootRef}
-                  contextKey={readingKey}
-                />
-              )}
-            </div>
-          </aside>
-          <DocumentAssistantPanel
-            key={`${sessionVersion}:${projectId}:${document?.id ?? ''}`}
-            open={assistantOpen}
-            suspended={outlineOpen}
-            onClose={closeAssistant}
-            triggerRef={assistantTriggerRef}
+            <DocumentWorkspaceOutline
+              contentRootRef={contentRootRef}
+              scrollRootRef={scrollRootRef}
+              contextKey={readingKey}
+              showTitle={false}
+              onNavigate={!wideLayout ? closeSidebar : undefined}
+            />
+          </RepositoryToolPane>
+          {(['history', 'compare', 'merges', 'releases'] as const).map(
+            (pane) => (
+              <RepositoryToolPane
+                key={`${projectId}:${branch?.id}:${document?.id ?? ''}:${pane}`}
+                active={sidebarVisible && tool === pane}
+                onClose={closeSidebar}
+                sidebar
+              >
+                {branch && (
+                  <RepositoryHistoryTools
+                    projectId={repositoryScope}
+                    branch={branch}
+                    branches={branches}
+                    commitId={commitId}
+                    documentId={document?.id}
+                    view={pane}
+                    presentation='sidebar'
+                    active={sidebarVisible && tool === pane}
+                    canManage={
+                      canManage && interactive && !branch.import_required
+                    }
+                    canWrite={
+                      canWrite && interactive && !branch.import_required
+                    }
+                    compareSelection={compareSelection}
+                    onCompareSelection={setCompareSelection}
+                    onOpenCommit={openCommit}
+                    onChanged={invalidate}
+                  />
+                )}
+              </RepositoryToolPane>
+            )
+          )}
+          <RepositoryToolPane
+            key={`${projectId}:${document?.id ?? ''}:events`}
+            active={sidebarVisible && tool === 'events'}
+            onClose={closeSidebar}
+            sidebar
           >
-            <div className='h-full min-h-0 overflow-y-auto overscroll-contain'>
-              {commitId ? (
-                <RepositoryAutomation
-                  projectId={repositoryScope}
-                  branch={branch}
-                  commitId={commitId}
-                  documentId={document?.id}
-                  fromCommitId={
-                    compareSelection.from || commitQuery.data?.parent_ids[0]
-                  }
-                  presentation='sidebar'
-                  versionName={commitQuery.data?.version_name}
-                  view='ai'
-                  active={assistantOpen}
-                  canManage={canManage && interactive}
-                />
-              ) : (
-                <p role='status' className='text-sm text-muted-foreground'>
-                  {copy.noCommits}
-                </p>
-              )}
-            </div>
-          </DocumentAssistantPanel>
-        </div>
+            {commitId && (
+              <RepositoryAutomation
+                projectId={repositoryScope}
+                branch={branch}
+                commitId={commitId}
+                documentId={document?.id}
+                view='events'
+                active={sidebarVisible && tool === 'events'}
+                canManage={canManage && interactive}
+              />
+            )}
+          </RepositoryToolPane>
+          <RepositoryToolPane
+            active={sidebarVisible && tool === 'ai'}
+            onClose={closeSidebar}
+            sidebar
+            fill
+          >
+            <RepositoryDocumentAI
+              project={projectId}
+              projectId={repositoryScope}
+              branch={branch}
+              commitId={commitId}
+              documentId={document?.id}
+              fromCommitId={
+                compareSelection.from || commitQuery.data?.parent_ids[0]
+              }
+              versionName={commitQuery.data?.version_name}
+              active={sidebarVisible && tool === 'ai'}
+              canManage={canManage && interactive}
+              interactive={interactive}
+            />
+          </RepositoryToolPane>
+        </DocumentToolSidebar>
         <nav
-          className='hidden min-h-0 flex-col items-center gap-2 overflow-y-auto border-s bg-card px-1 py-4 xl:flex'
+          className='hidden min-h-0 flex-col items-center gap-2 overflow-y-auto border-s bg-card px-1 py-4 xl:col-start-3 xl:flex'
           aria-label={t('admin.workspace.tools')}
         >
           <Button
-            variant={isReading && !assistantOpen ? 'secondary' : 'ghost'}
+            variant={
+              sidebarVisible && tool === 'outline' ? 'secondary' : 'ghost'
+            }
             size='icon'
             className='size-9 shrink-0'
             title={t('admin.workspace.outline')}
             aria-label={t('admin.workspace.outline')}
-            aria-pressed={isReading && !assistantOpen}
+            aria-pressed={sidebarVisible && tool === 'outline'}
+            ref={tool === 'outline' && wideLayout ? toolTriggerRef : undefined}
             onClick={() => {
-              closeAssistant()
-              goToContent()
+              activateTool('outline')
             }}
           >
             <ListTree aria-hidden className='size-4' />
@@ -813,17 +848,13 @@ export function RepositoryWorkspace({
           {toolItems.map(({ id, label, icon: Icon }) => (
             <Button
               key={id}
-              variant={
-                (id === 'ai' ? assistantOpen : view === id)
-                  ? 'secondary'
-                  : 'ghost'
-              }
+              variant={sidebarVisible && tool === id ? 'secondary' : 'ghost'}
               size='icon'
               className='size-9 shrink-0'
               title={label}
               aria-label={label}
-              aria-pressed={id === 'ai' ? assistantOpen : view === id}
-              ref={id === 'ai' && wideLayout ? assistantTriggerRef : undefined}
+              aria-pressed={sidebarVisible && tool === id}
+              ref={id === tool && wideLayout ? toolTriggerRef : undefined}
               onClick={() => activateTool(id)}
             >
               <Icon aria-hidden className='size-4' />
@@ -831,24 +862,6 @@ export function RepositoryWorkspace({
           ))}
         </nav>
       </div>
-      <Dialog open={outlineOpen} onOpenChange={setOutlineOpen}>
-        <DialogContent className='max-h-[85svh] overflow-y-auto'>
-          <DialogHeader>
-            <DialogTitle>{t('admin.workspace.outline')}</DialogTitle>
-            <DialogDescription>
-              {document?.name ?? projectName}
-            </DialogDescription>
-          </DialogHeader>
-          {outlineOpen && (
-            <DocumentWorkspaceOutline
-              contentRootRef={contentRootRef}
-              scrollRootRef={scrollRootRef}
-              contextKey={readingKey}
-              onNavigate={() => setOutlineOpen(false)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </section>
   )
 }
@@ -895,11 +908,15 @@ function RepositoryToolPane({
   active,
   onClose,
   backButton = true,
+  sidebar = false,
+  fill = false,
   children,
 }: {
   active: boolean
   onClose: () => void
   backButton?: boolean
+  sidebar?: boolean
+  fill?: boolean
   children: ReactNode
 }) {
   const { t } = useLanguage()
@@ -911,10 +928,18 @@ function RepositoryToolPane({
       hidden={!active}
       data-document-tool-pane
       data-pane-active={active || undefined}
-      className='document-pane-transition min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain'
+      className={`min-h-0 min-w-0 flex-1 ${fill ? 'flex flex-col overflow-hidden' : 'overflow-y-auto overscroll-contain'}`}
     >
-      <div className='mx-auto max-w-[82rem] min-w-0 px-5 py-6 sm:px-10 sm:py-8'>
-        {backButton && (
+      <div
+        className={
+          fill
+            ? 'h-full min-h-0 min-w-0'
+            : sidebar
+              ? 'min-w-0 p-4'
+              : 'mx-auto max-w-[82rem] min-w-0 px-5 py-6 sm:px-10 sm:py-8'
+        }
+      >
+        {backButton && !sidebar && (
           <div className='mb-5 flex justify-end border-b pb-3'>
             <Button variant='ghost' size='sm' onClick={onClose}>
               <BookOpen aria-hidden />

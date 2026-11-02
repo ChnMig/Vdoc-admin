@@ -106,11 +106,13 @@ for (const width of [1440, 390]) {
     )
     await tool(page, 'Version history')
     await expect(
-      page.getByRole('main').getByText('First browser save', { exact: true })
+      page
+        .locator('.document-tool-sidebar')
+        .getByText('First browser save', { exact: true })
     ).toBeVisible()
     await expect(
       page
-        .getByRole('main')
+        .locator('.document-tool-sidebar')
         .getByText('Second browser save', { exact: true })
         .filter({ visible: true })
     ).toBeVisible()
@@ -121,7 +123,7 @@ for (const width of [1440, 390]) {
         .filter({ visible: true })
     ).toBeVisible()
     await page
-      .getByRole('main')
+      .locator('.document-tool-sidebar')
       .getByRole('button', { name: 'Open', exact: true })
       .click()
     await expect(page).toHaveURL(new RegExp(`commit_id=${api.initial.id}`))
@@ -391,7 +393,9 @@ for (const width of [1440, 390]) {
       })
       .click()
     await expect(
-      page.getByRole('main').getByText('main.1', { exact: true })
+      page
+        .locator('.document-tool-sidebar')
+        .getByText('main.1', { exact: true })
     ).toBeVisible()
     expect(api.releases[0].commit_id).toBe(api.initial.id)
     const shareId = 'e'.repeat(32),
@@ -537,6 +541,7 @@ test('AI and subscriptions send fixed commit references and preserve event activ
   const latest = api.advance()
   await api.open()
   await tool(page, 'AI')
+  await page.getByRole('tab', { name: 'Version analysis', exact: true }).click()
   await page
     .getByRole('textbox', {
       name: 'Question or analysis instructions (optional)',
@@ -562,7 +567,7 @@ test('AI and subscriptions send fixed commit references and preserve event activ
   })
   await tool(page, 'Activity & subscriptions')
   await expect(
-    page.getByText('commit.created', { exact: true }).first()
+    page.getByText('Version saved', { exact: true }).first()
   ).toBeVisible()
   await page
     .getByRole('button', { name: 'Create subscription', exact: true })
@@ -575,7 +580,6 @@ test('AI and subscriptions send fixed commit references and preserve event activ
     .getByRole('textbox', { name: 'Name', exact: true })
     .fill('Release notifications')
   await dialog.getByLabel('Current branch only (work)', { exact: true }).check()
-  await dialog.getByLabel('Current document only', { exact: true }).check()
   await dialog.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(
     page.getByRole('listitem').filter({ hasText: 'Release notifications' })
@@ -584,7 +588,6 @@ test('AI and subscriptions send fixed commit references and preserve event activ
     kind: 'in_app',
     event_types: ['release.published'],
     branch_id: workId,
-    document_id: documentId,
   })
   await page.getByRole('button', { name: 'Pause', exact: true }).click()
   await expect(
@@ -696,8 +699,7 @@ for (const width of [1440, 390]) {
       await expect
         .poll(async () =>
           Math.round(
-            (await page.locator('.document-assistant-dock').boundingBox())!
-              .width
+            (await page.locator('.document-tool-sidebar').boundingBox())!.width
           )
         )
         .toBe(240)
@@ -733,14 +735,16 @@ for (const width of [1440, 390]) {
       element.scrollTo({ top: 500, behavior: 'instant' })
     )
     await tool(page, 'Version history')
-    await expect(reader).toBeHidden()
-    await tool(page, 'Read')
+    await expect(reader).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Close sidebar', exact: true })
+      .click()
     await expect(reader).toBeVisible()
     await expect
       .poll(() => reader.evaluate((element) => element.scrollTop))
       .toBe(500)
     await tool(page, 'AI')
-    const assistant = page.locator('dialog.document-assistant-panel')
+    const assistant = page.locator('.document-tool-sidebar')
     await expect(assistant).toBeVisible()
     await expect(reader).toBeVisible()
     if (width >= 1280) {
@@ -750,11 +754,10 @@ for (const width of [1440, 390]) {
       await expect
         .poll(async () =>
           Math.round(
-            (await page.locator('.document-assistant-dock').boundingBox())!
-              .width
+            (await page.locator('.document-tool-sidebar').boundingBox())!.width
           )
         )
-        .toBe(368)
+        .toBe(384)
       // Measure both edges in one frame after the dock's grid transition.
       await expect
         .poll(() =>
@@ -763,19 +766,17 @@ for (const width of [1440, 390]) {
               .querySelector('[data-document-reading-pane]')!
               .getBoundingClientRect()
             const assistant = document
-              .querySelector('dialog.document-assistant-panel')!
+              .querySelector('.document-tool-sidebar')!
               .getBoundingClientRect()
             return reading.right - assistant.left
           })
         )
         .toBeLessThanOrEqual(1)
     } else {
-      expect(
-        await assistant.evaluate((element) => element.matches(':modal'))
-      ).toBe(true)
+      await expect(assistant).toHaveAttribute('aria-modal', 'true')
     }
     const question = assistant.getByRole('textbox', {
-      name: 'Question or analysis instructions (optional)',
+      name: 'AI chat message',
       exact: true,
     })
     await question.fill('Keep this unsent question while I read.')
@@ -784,7 +785,7 @@ for (const width of [1440, 390]) {
       path: testInfo.outputPath(`document-assistant-${width}.png`),
     })
     await assistant
-      .getByRole('button', { name: 'Close document AI', exact: true })
+      .getByRole('button', { name: 'Close sidebar', exact: true })
       .click()
     await expect(assistant).not.toBeVisible()
     if (width >= 1280)
@@ -800,13 +801,15 @@ for (const width of [1440, 390]) {
       'Keep this unsent question while I read.'
     )
     await assistant
-      .getByRole('button', { name: 'Close document AI', exact: true })
+      .getByRole('button', { name: 'Close sidebar', exact: true })
       .click()
     await tool(page, 'Edit')
     const editor = page.getByRole('textbox', { name: 'Content', exact: true })
     await editor.fill(body + '\nUncommitted edit.')
     await tool(page, 'Version history')
-    await tool(page, 'Edit')
+    await page
+      .getByRole('button', { name: 'Close sidebar', exact: true })
+      .click()
     await expect(editor).toHaveValue(body + '\nUncommitted edit.')
     await tool(page, 'Read')
     await reader.evaluate((element) =>
@@ -826,16 +829,16 @@ for (const width of [1440, 390]) {
   })
 }
 
-test('assistant retains its input and focus across dock, modal and competing dialogs', async ({
+test('sidebar retains its DOM, input and focus across expansion, resize and competing forms', async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 960 })
   const api = await installRepository(page)
   await api.open()
   await tool(page, 'AI')
-  const assistant = page.locator('dialog.document-assistant-panel')
+  const assistant = page.locator('.document-tool-sidebar')
   const question = assistant.getByRole('textbox', {
-    name: 'Question or analysis instructions (optional)',
+    name: 'AI chat message',
     exact: true,
   })
   await question.fill('A question that survives resizing.')
@@ -855,12 +858,12 @@ test('assistant retains its input and focus across dock, modal and competing dia
   await page.setViewportSize({ width: 1440, height: 960 })
   await tool(page, 'AI')
   await assistant
-    .getByRole('button', { name: 'Expand AI workspace', exact: true })
+    .getByRole('button', { name: 'Expand sidebar', exact: true })
     .click()
   await expect(assistant).toHaveAttribute('aria-modal', 'true')
   await expect(question).toHaveAttribute('data-original-input', 'true')
   await assistant
-    .getByRole('button', { name: 'Collapse AI workspace', exact: true })
+    .getByRole('button', { name: 'Collapse sidebar', exact: true })
     .click()
   await expect(assistant).not.toHaveAttribute('aria-modal')
   await page.getByRole('button', { name: 'New branch', exact: true }).click()
@@ -870,7 +873,7 @@ test('assistant retains its input and focus across dock, modal and competing dia
   })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(branchDialog).toBeVisible()
-  await expect(assistant).not.toBeVisible()
+  await expect(assistant).toHaveAttribute('inert', '')
   await branchDialog
     .getByRole('textbox', { name: 'Branch name', exact: true })
     .fill('draft')
@@ -883,6 +886,121 @@ test('assistant retains its input and focus across dock, modal and competing dia
   await noOverflow(page)
   await page.screenshot({
     path: testInfo.outputPath('assistant-resized-mobile.png'),
+  })
+  expect(api.unexpected).toEqual([])
+})
+
+test('all tools expand in place and document chat retains history, drafts and answers', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 960 })
+  const api = await installRepository(page)
+  await api.open()
+  const sidebar = page.locator('.document-tool-sidebar')
+  const reader = page.locator('[data-document-reading-pane]')
+  await tool(page, 'AI')
+  const message = sidebar.getByRole('textbox', {
+    name: 'AI chat message',
+    exact: true,
+  })
+  await expect(
+    sidebar.getByText('Your earlier document discussion is still here.')
+  ).toBeVisible()
+  await message.fill('Explain main.1')
+  await sidebar
+    .getByRole('button', { name: 'Send AI message', exact: true })
+    .click()
+  await expect(
+    sidebar.getByText(/The document contains the saved branch versions/)
+  ).toBeVisible()
+  await message.fill('Unsent follow-up')
+  await message.evaluate((element) =>
+    element.setAttribute('data-retained', 'true')
+  )
+  const url = page.url()
+  const contentReads = api.requests.filter((request) =>
+    request.path.includes('/content/')
+  ).length
+  await expect
+    .poll(async () => Math.round((await sidebar.boundingBox())!.width))
+    .toBe(384)
+  await expect
+    .poll(async () => Math.round((await reader.boundingBox())!.width))
+    .toBe(736)
+  const readerWidth = (await reader.boundingBox())!.width
+  const small = (await sidebar.boundingBox())!
+  for (let count = 0; count < 3; count++) {
+    await sidebar
+      .getByRole('button', { name: 'Expand sidebar', exact: true })
+      .click()
+    await expect
+      .poll(async () => (await sidebar.boundingBox())!.width)
+      .toBeGreaterThan(small.width + 200)
+    expect((await sidebar.boundingBox())!.x).toBeLessThan(small.x)
+    expect((await reader.boundingBox())!.width).toBeCloseTo(readerWidth, 0)
+    await expect(message).toHaveValue('Unsent follow-up')
+    await expect(message).toHaveAttribute('data-retained', 'true')
+    await sidebar
+      .getByRole('button', { name: 'Collapse sidebar', exact: true })
+      .click()
+    await expect
+      .poll(async () => Math.round((await sidebar.boundingBox())!.width))
+      .toBe(Math.round(small.width))
+  }
+  expect(page.url()).toBe(url)
+  expect(
+    api.requests.filter((request) => request.path.includes('/content/')).length
+  ).toBe(contentReads)
+  await sidebar
+    .getByRole('tab', { name: 'Version analysis', exact: true })
+    .click()
+  await sidebar
+    .getByRole('textbox', {
+      name: 'Question or analysis instructions (optional)',
+      exact: true,
+    })
+    .fill('Keep analysis instructions')
+  for (const name of [
+    'Version history',
+    'Compare',
+    'Merge requests',
+    'Releases',
+    'Activity & subscriptions',
+    'On this page',
+  ]) {
+    await tool(page, name)
+    await expect(reader).toBeVisible()
+    await sidebar
+      .getByRole('button', { name: 'Expand sidebar', exact: true })
+      .click()
+    await expect(sidebar).toHaveAttribute('data-expanded', 'true')
+    await sidebar
+      .getByRole('button', { name: 'Collapse sidebar', exact: true })
+      .click()
+    await noOverflow(page)
+  }
+  await tool(page, 'AI')
+  await expect(
+    sidebar.getByRole('textbox', {
+      name: 'Question or analysis instructions (optional)',
+      exact: true,
+    })
+  ).toHaveValue('Keep analysis instructions')
+  await sidebar.getByRole('tab', { name: 'Chat', exact: true }).click()
+  await expect(message).toHaveValue('Unsent follow-up')
+  await expect(message).toHaveAttribute('data-retained', 'true')
+  await sidebar
+    .getByRole('button', { name: 'Send AI message', exact: true })
+    .click()
+  await expect(
+    sidebar.getByText(/The document contains the saved branch versions/)
+  ).toHaveCount(2)
+  await sidebar
+    .getByRole('button', { name: 'Expand sidebar', exact: true })
+    .click()
+  await page.screenshot({
+    animations: 'disabled',
+    path: testInfo.outputPath('expanded-chat.png'),
   })
   expect(api.unexpected).toEqual([])
 })

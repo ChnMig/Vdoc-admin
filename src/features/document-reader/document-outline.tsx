@@ -17,6 +17,7 @@ type DocumentWorkspaceOutlineProps = {
   scrollRootRef?: RefObject<HTMLElement | null>
   contextKey: string
   onNavigate?: () => void
+  showTitle?: boolean
 }
 
 export function DocumentWorkspaceOutline(props: DocumentWorkspaceOutlineProps) {
@@ -29,6 +30,7 @@ function DocumentOutline({
   scrollRootRef,
   contextKey,
   onNavigate,
+  showTitle = true,
 }: DocumentWorkspaceOutlineProps) {
   const { t } = useLanguage()
   const instanceId = useId().replace(/[^a-zA-Z0-9_-]/g, '')
@@ -149,24 +151,39 @@ function DocumentOutline({
     }
   }, [contentRootRef, scrollRootRef, contextKey, instanceId])
 
-  const baseLevel = Math.min(...entries.map((entry) => entry.level))
+  // A single opening H1 is the article title, not a folder containing every section.
+  // Compress skipped heading levels so an H2 → H4 jump adds only one level.
+  const titleEntry =
+    entries[0]?.level === 1 &&
+    entries.filter((entry) => entry.level === 1).length === 1
+  const levels: number[] = []
+  const depths = entries.map((entry, index) => {
+    if (index === 0 && titleEntry) return 0
+    while (levels.length && levels[levels.length - 1] >= entry.level)
+      levels.pop()
+    const depth = levels.length
+    levels.push(entry.level)
+    return depth
+  })
   return (
     <nav aria-label={t('admin.workspace.outline')} className='min-w-0'>
-      <p className='mb-4 text-xs font-medium text-foreground'>
-        {t('admin.workspace.outline')}
-      </p>
+      {showTitle && (
+        <p className='mb-4 text-xs font-medium text-foreground'>
+          {t('admin.workspace.outline')}
+        </p>
+      )}
       {entries.length ? (
-        <ol className='space-y-1 border-s border-border/70 text-sm'>
-          {entries.map((entry) => (
-            <li key={entry.id}>
+        <ol className='space-y-1 text-sm'>
+          {entries.map((entry, index) => (
+            <li key={entry.id} data-outline-depth={depths[index]}>
               <a
                 href={`#${encodeURIComponent(entry.id)}`}
                 aria-current={entry.id === activeId ? 'location' : undefined}
                 className={cn(
-                  '-ms-px block border-s-2 border-transparent py-1.5 pe-2 leading-5 break-words transition-colors hover:text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                  ['ps-3', 'ps-6', 'ps-9', 'ps-12'][entry.level - baseLevel],
+                  'block rounded-md py-2 pe-2 leading-5 break-words transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  ['ps-2', 'ps-5', 'ps-8', 'ps-11'][depths[index]],
                   entry.id === activeId
-                    ? 'border-primary font-medium text-primary'
+                    ? 'bg-muted font-medium text-primary'
                     : 'text-muted-foreground'
                 )}
                 onClick={(event) => {

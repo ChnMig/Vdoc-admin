@@ -56,6 +56,46 @@ describe('DocumentWorkspaceOutline', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
+  it('keeps article sections at the root and compresses skipped heading levels', async () => {
+    const screen = render(
+      <Reader
+        content={
+          <>
+            <h1>Article</h1>
+            <h2>First</h2>
+            <h4>Nested</h4>
+            <h2>Second</h2>
+          </>
+        }
+      />
+    )
+    const links = await screen.findAllByRole('link')
+    expect(
+      links.map((link) =>
+        link.closest('li')?.getAttribute('data-outline-depth')
+      )
+    ).toEqual(['0', '0', '1', '0'])
+    screen.rerender(
+      <Reader
+        content={
+          <>
+            <h1>Chapter one</h1>
+            <h2>Section</h2>
+            <h1>Chapter two</h1>
+            <h3>Subsection</h3>
+          </>
+        }
+      />
+    )
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('link')
+          .map((link) => link.closest('li')?.getAttribute('data-outline-depth'))
+      ).toEqual(['0', '1', '0', '1'])
+    )
+  })
+
   it('shares valid anchors when a dialog outline opens and closes beside the inline outline', async () => {
     const content = <h2>Shared section</h2>
     const screen = render(<Reader content={content} />)

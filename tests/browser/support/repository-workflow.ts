@@ -51,6 +51,15 @@ export async function installRepository(
   const analyses: Record<string, unknown>[] = []
   const subscriptions: Record<string, unknown>[] = []
   const events: Record<string, unknown>[] = []
+  const chatMessages: Record<string, unknown>[] = [
+    {
+      id: 'prior-answer',
+      session_id: 'document-chat',
+      role: 'assistant',
+      content: 'Your earlier document discussion is still here.',
+      created_at: timestamp,
+    },
+  ]
   const idempotency = new Map<string, RepositoryCommit>()
   let serial = 0
   let loseNextSaveResponse = false
@@ -291,6 +300,71 @@ export async function installRepository(
       }
       documents.push(created)
       return ok(route, { document: created, branch, commit })
+    }
+    const chatPath = `/api/v1/private/projects/${projectId}/ai/chat-sessions`
+    if (path === chatPath) {
+      if (method === 'GET')
+        return ok(route, [
+          {
+            id: 'document-chat',
+            project_id: projectId,
+            document_id: documentId,
+            context_type: 'document',
+            context_id: documentId,
+            title: 'Existing document conversation',
+            created_at: timestamp,
+            updated_at: timestamp,
+          },
+        ])
+      return ok(route, {
+        id: 'new-document-chat',
+        ...body,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+    }
+    if (path.startsWith(`${chatPath}/`)) {
+      const sessionId = path.slice(chatPath.length + 1).split('/')[0]
+      if (path.endsWith('/messages')) {
+        const answer = {
+          id: `chat-answer-${++serial}`,
+          session_id: sessionId,
+          role: 'assistant',
+          content: `The document contains the saved branch versions. Answer ${serial}.`,
+          created_at: timestamp,
+        }
+        chatMessages.push(
+          {
+            id: `chat-user-${serial}`,
+            session_id: sessionId,
+            role: 'user',
+            content: body?.content,
+            created_at: timestamp,
+          },
+          answer
+        )
+        return ok(route, answer)
+      }
+      if (path.endsWith('/title'))
+        return ok(route, {
+          id: sessionId,
+          title: 'Document discussion',
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+      return ok(route, {
+        session: {
+          id: sessionId,
+          project_id: projectId,
+          document_id: documentId,
+          context_type: 'document',
+          context_id: documentId,
+          title: 'Existing document conversation',
+          created_at: timestamp,
+          updated_at: timestamp,
+        },
+        messages: chatMessages,
+      })
     }
     const scoped = path.match(/\/documents\/([^/]+)\/repository(\/.*)$/)
     const currentDocumentId = scoped?.[1]
