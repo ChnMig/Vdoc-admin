@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it } from 'vitest'
+import packageInfo from '../../../package.json'
 import { MCPClientConfig } from './mcp-client-config'
 import { vdocMcpSource } from './page-utils'
 
@@ -106,6 +107,10 @@ it('uses the isolated beta adapter and retains this environment URL and token in
     'absolute command path printed by the installer'
   )
   expect(container.textContent).toContain('~/.local/share/vdoc/mcp/beta')
+  expect(screen.getByRole('link', { name: 'MCP setup guide' })).toHaveAttribute(
+    'href',
+    `https://github.com/ChnMig/Vdoc-site/blob/v${packageInfo.version}/docs/en/mcp-tools.md`
+  )
   await user.click(screen.getByRole('tab', { name: 'Cursor' }))
   expect(JSON.parse(container.querySelector('pre')?.textContent ?? '')).toEqual(
     {

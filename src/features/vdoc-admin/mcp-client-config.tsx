@@ -1,6 +1,7 @@
 import { resolveAdminReleaseChannel } from '@/lib/release-channel'
 import { useLanguage } from '@/context/language-provider'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import packageInfo from '../../../package.json'
 import { CodeSnippet } from './code-snippet'
 import { stringify, vdocMcpSource } from './page-utils'
 
@@ -13,6 +14,10 @@ export function MCPClientConfig({
 }) {
   const { language, t } = useLanguage()
   const beta = resolveAdminReleaseChannel() === 'beta'
+  const guidePath = `${language === 'en' ? 'en/' : ''}mcp-tools`
+  const setupGuide = beta
+    ? `https://github.com/ChnMig/Vdoc-site/blob/v${packageInfo.version}/docs/${guidePath}.md`
+    : `https://chnmig.github.io/Vdoc-site/${guidePath}#release-channels`
   const serverName = beta ? 'vdoc_beta' : 'vdoc'
   const command = beta ? '<ABSOLUTE_BETA_MCP_PATH>' : 'npx'
   const args = beta
@@ -80,7 +85,7 @@ VDOC_MCP_TOKEN = ${JSON.stringify(token)}`
         {t('admin.token.clientVerify')}
       </p>
       <a
-        href={`https://chnmig.github.io/Vdoc-site/${language === 'en' ? 'en/' : ''}mcp-tools#release-channels`}
+        href={setupGuide}
         target='_blank'
         rel='noreferrer'
         className='w-fit rounded-sm text-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
