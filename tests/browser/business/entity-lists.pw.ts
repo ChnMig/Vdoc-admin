@@ -411,12 +411,20 @@ for (const width of [1280, 390]) {
     )
     await page.goto(projectWorkspaceRoute)
     const pane = page.getByRole('tabpanel', { name: 'Documents', exact: true })
-    await pane.getByRole('button', { name: 'guides', exact: true }).click()
-    await expect(
-      pane.getByRole('button', { name: 'Delete folder', exact: true })
-    ).toBeDisabled()
+    const location = page.getByRole('navigation', {
+      name: 'Current location',
+      exact: true,
+    })
+    const initialLocation = page.url()
     await pane
-      .getByRole('button', { name: 'Rename folder', exact: true })
+      .getByRole('button', { name: 'Folder actions: guides', exact: true })
+      .click()
+    await expect(page).toHaveURL(initialLocation)
+    await expect(
+      page.getByRole('menuitem', { name: 'Delete folder', exact: true })
+    ).toBeDisabled()
+    await page
+      .getByRole('menuitem', { name: 'Rename folder', exact: true })
       .click()
     const rename = page.getByRole('dialog', {
       name: 'Rename folder',
@@ -428,33 +436,50 @@ for (const width of [1280, 390]) {
     await rename.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(rename).not.toBeVisible()
     await expect(
-      pane.getByRole('heading', { name: 'Manual', exact: true })
+      pane.getByRole('button', { name: 'Manual', exact: true })
     ).toBeVisible()
     expect(state.lists[documentPath][0].relative_path).toBe(
       'Manual/handbook.md'
     )
-    await pane.getByRole('button', { name: 'Move folder', exact: true }).click()
-    const move = page.getByRole('dialog', { name: 'Move folder', exact: true })
-    await move
-      .getByRole('combobox', { name: 'Destination folder', exact: true })
+    await pane
+      .getByRole('button', { name: 'Folder actions: Manual', exact: true })
       .click()
+    await page
+      .getByRole('menuitem', { name: 'Move folder', exact: true })
+      .click()
+    const move = page.getByRole('dialog', { name: 'Move folder', exact: true })
+    const source = move.getByRole('treeitem', { name: 'Manual', exact: true })
+    await expect(source).toHaveAttribute('aria-disabled', 'true')
+    await source.focus()
+    await page.keyboard.press('Enter')
+    await expect(source).toHaveAttribute('aria-selected', 'false')
     await expect(
-      page.getByRole('option', { name: 'Manual', exact: true })
-    ).toHaveCount(0)
-    await page.getByRole('option', { name: 'Archive', exact: true }).click()
+      move.getByRole('treeitem', { name: 'Project root', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
+    await move.getByRole('treeitem', { name: 'Archive', exact: true }).click()
     await move.getByRole('button', { name: 'Move folder', exact: true }).click()
     await expect(move).not.toBeVisible()
     expect(state.lists[documentPath][0].relative_path).toBe(
       'Archive/Manual/handbook.md'
     )
+    await pane.getByRole('button', { name: 'Archive', exact: true }).click()
+    await pane.getByRole('button', { name: 'Manual', exact: true }).click()
     await expect(
       pane.getByRole('button', { name: 'Published handbook', exact: true })
     ).toBeVisible()
     await noPageOverflow(page)
     await saveScreenshot(page, `folder-actions-${width}.png`)
-    await page.goto(`${projectWorkspaceRoute}&folder_id=list-empty`)
+    await location
+      .getByRole('button', {
+        name: 'Documentation workspace',
+        exact: true,
+      })
+      .click()
     await pane
-      .getByRole('button', { name: 'Delete folder', exact: true })
+      .getByRole('button', { name: 'Folder actions: Empty', exact: true })
+      .click()
+    await page
+      .getByRole('menuitem', { name: 'Delete folder', exact: true })
       .click()
     const confirm = page.getByRole('alertdialog')
     await expect(confirm).toContainText('Only empty folders can be deleted')
