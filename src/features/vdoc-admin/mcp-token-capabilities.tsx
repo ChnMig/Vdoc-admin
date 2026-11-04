@@ -76,6 +76,7 @@ export function TokenCapabilities({ token }: { token: MCPTokenDTO }) {
               {canRead && <p>{copy.readCapabilities}</p>}
               {canWrite && <p>{copy.writeCapabilities}</p>}
               {canPatch && <p>{copy.patchCapabilities}</p>}
+              {canWrite && <p>{copy.managementCapabilities}</p>}
               {!canRead && !canWrite && <p>{copy.noKnownCapabilities}</p>}
             </dd>
           </div>

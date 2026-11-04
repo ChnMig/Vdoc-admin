@@ -84,6 +84,11 @@ const DocumentFormFields = lazy(() =>
     default: module.DocumentFormFields,
   }))
 )
+const DocumentActions = lazy(() =>
+  import('./document-actions').then((module) => ({
+    default: module.DocumentActions,
+  }))
+)
 const TeamsPage = lazy(() =>
   import('./teams-page').then((module) => ({ default: module.TeamsPage }))
 )
@@ -422,6 +427,7 @@ export function WorkspaceHierarchyPage({
   const visibleDocuments = (documentsQuery.data ?? [])
     .filter(
       (item) =>
+        item.status === ACTIVE_STATUS &&
         documentFolderId(item, folders) === folderId &&
         (!normalizedFileFilter ||
           `${item.name} ${item.file_name ?? ''}`
@@ -1067,6 +1073,30 @@ export function WorkspaceHierarchyPage({
                                           item.file_name ?? item.relative_path
                                         }
                                         onClick={() => openDocument(item)}
+                                        actions={
+                                          canCreateDocument && (
+                                            <Suspense
+                                              fallback={
+                                                <span className='size-9' />
+                                              }
+                                            >
+                                              <DocumentActions
+                                                projectId={projectId}
+                                                document={item}
+                                                folders={folders}
+                                                disabled={
+                                                  foldersQuery.isPending ||
+                                                  foldersQuery.isError ||
+                                                  documentsQuery.isError
+                                                }
+                                                submissionScope={scope}
+                                                isCurrent={() =>
+                                                  currentScope.current === scope
+                                                }
+                                              />
+                                            </Suspense>
+                                          )
+                                        }
                                         trailing={
                                           <>
                                             <Badge
@@ -1304,37 +1334,42 @@ function ResourceRow({
   name,
   detail,
   trailing,
+  actions,
   onClick,
 }: {
   icon: React.ReactNode
   name: string
   detail?: string
   trailing?: React.ReactNode
+  actions?: React.ReactNode
   onClick: () => void
 }) {
   return (
-    <button
-      type='button'
-      aria-label={name}
-      onClick={onClick}
-      className='flex min-h-[4.5rem] w-full min-w-0 items-center gap-3 px-2 py-3 text-start transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-3'
-    >
-      <span className='flex size-9 shrink-0 items-center justify-center'>
-        {icon}
-      </span>
-      <span className='min-w-0 flex-1'>
-        <span className='block truncate text-sm font-medium'>{name}</span>
-        {detail && (
-          <span className='mt-1 block truncate text-xs text-muted-foreground'>
-            {detail}
-          </span>
-        )}
-      </span>
-      <span className='flex shrink-0 items-center gap-3'>
-        {trailing}
-        <ChevronRight aria-hidden className='size-4 text-muted-foreground' />
-      </span>
-    </button>
+    <div className='flex min-w-0 items-center'>
+      <button
+        type='button'
+        aria-label={name}
+        onClick={onClick}
+        className='flex min-h-[4.5rem] w-full min-w-0 items-center gap-3 px-2 py-3 text-start transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-3'
+      >
+        <span className='flex size-9 shrink-0 items-center justify-center'>
+          {icon}
+        </span>
+        <span className='min-w-0 flex-1'>
+          <span className='block truncate text-sm font-medium'>{name}</span>
+          {detail && (
+            <span className='mt-1 block truncate text-xs text-muted-foreground'>
+              {detail}
+            </span>
+          )}
+        </span>
+        <span className='flex shrink-0 items-center gap-3'>
+          {trailing}
+          <ChevronRight aria-hidden className='size-4 text-muted-foreground' />
+        </span>
+      </button>
+      {actions && <div className='shrink-0 pe-2'>{actions}</div>}
+    </div>
   )
 }
 

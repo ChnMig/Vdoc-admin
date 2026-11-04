@@ -71,6 +71,11 @@ const DocumentFolderActions = lazy(() =>
     default: module.DocumentFolderActions,
   }))
 )
+const DocumentActions = lazy(() =>
+  import('./document-actions').then((module) => ({
+    default: module.DocumentActions,
+  }))
+)
 
 const DocumentWorkspaceDetail = lazy(() =>
   import('./document-workspace-detail').then((module) => ({
@@ -526,6 +531,39 @@ export function DocumentWorkspacePage({
               documents={visibleDocuments}
               documentId={document?.id}
               folderId={folderId}
+              renderDocumentActions={
+                canMutate && !legacySelection
+                  ? (item) => (
+                      <Suspense fallback={<span className='size-9 shrink-0' />}>
+                        <DocumentActions
+                          projectId={projectId}
+                          document={item}
+                          folders={folders}
+                          disabled={
+                            unavailable ||
+                            foldersQuery.isPending ||
+                            foldersQuery.isError ||
+                            catalogQuery.isError
+                          }
+                          submissionScope={mutationScope}
+                          isCurrent={() =>
+                            currentScope.current === mutationScope
+                          }
+                          onChanged={(updated) => {
+                            if (!updated && item.id === document?.id) {
+                              changeSearch({
+                                ...emptyDocumentSelection,
+                                folder_id: item.folder_id || 'root',
+                                workspace_view: 'content',
+                              })
+                              setMobileFilesOpen(false)
+                            }
+                          }}
+                        />
+                      </Suspense>
+                    )
+                  : undefined
+              }
               onDocumentSelect={(selected) => {
                 if (selected.id === document?.id) {
                   if (

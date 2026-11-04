@@ -28,6 +28,7 @@ export function DocumentFileTree({
   folderId,
   onDocumentSelect,
   onFolderSelect,
+  renderDocumentActions,
 }: {
   folders: readonly DocumentFolderDTO[]
   documents: readonly DocumentDTO[]
@@ -35,6 +36,7 @@ export function DocumentFileTree({
   folderId: string
   onDocumentSelect: (document: DocumentDTO) => void
   onFolderSelect: (folderId: string) => void
+  renderDocumentActions?: (document: DocumentDTO) => React.ReactNode
 }) {
   const { t } = useLanguage()
   const navigationRef = useRef<HTMLElement>(null)
@@ -284,7 +286,7 @@ export function DocumentFileTree({
             ) : (
               <li
                 key={`document:${row.document.id}`}
-                className='workspace-pane-enter min-w-0'
+                className='workspace-pane-enter flex min-w-0 items-center'
               >
                 <button
                   type='button'
@@ -392,6 +394,7 @@ export function DocumentFileTree({
                     </span>
                   </span>
                 </button>
+                {renderDocumentActions?.(row.document)}
               </li>
             )
           )}

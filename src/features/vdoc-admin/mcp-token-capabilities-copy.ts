@@ -9,9 +9,11 @@ const en = {
   permissionNotGranted: 'Not granted',
   allowedActions: 'Allowed operations',
   readCapabilities:
-    'Discover teams and projects; search and read authorized documents, full source, versions and comparisons.',
+    'Discover teams, projects and folders; search and read authorized documents, full source, versions and comparisons.',
   writeCapabilities:
-    'Create authorized document types, branches, saved versions and merge requests. Writing does not grant reading.',
+    'Create authorized document types, branches, saved versions and merge requests; rename and move documents, and manage folders. Writing does not grant reading.',
+  managementCapabilities:
+    'Renaming, moving or deleting documents and managing folders require a project administrator. Only empty folders can be deleted. Document deletion disables its public shares. Folder changes require write permission for every affected document type.',
   patchCapabilities:
     'Apply exact text changes to document types with both read and write permissions.',
   noKnownCapabilities: 'No supported document permissions are granted.',
@@ -32,9 +34,11 @@ const zhCN = {
   permissionNotGranted: '未授权',
   allowedActions: '可执行操作',
   readCapabilities:
-    '查找团队和项目；搜索、读取已授权类型的文档、完整原文、历史版本和差异。',
+    '查找团队、项目和文件夹；搜索、读取已授权类型的文档、完整原文、历史版本和差异。',
   writeCapabilities:
-    '创建已授权类型的文档、分支、新版本和合并请求。写入权限不包含读取权限。',
+    '创建已授权类型的文档、分支、新版本和合并请求；重命名、移动文档和管理文件夹。写入权限不包含读取权限。',
+  managementCapabilities:
+    '重命名、移动、删除文档和管理文件夹需要项目管理员权限；只能删除空文件夹。删除文档也会停用其公开分享。文件夹变更需要具备所有受影响文档类型的写入权限。',
   patchCapabilities: '对同时具备读写权限的文档类型执行精确文本修改。',
   noKnownCapabilities: '未授予受支持的文档权限。',
   accessBoundary: '访问边界',
