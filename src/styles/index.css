@@ -113,6 +113,27 @@
     var(--motion-ease-standard);
 }
 
+.app-route-surface {
+  view-transition-name: workbench-content;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(workbench-content) {
+  animation-duration: var(--motion-duration-route);
+  animation-timing-function: var(--motion-ease-standard);
+}
+::view-transition-old(workbench-content) {
+  animation: ui-fade-out var(--motion-duration-exit) ease-in both;
+  mix-blend-mode: normal;
+}
+::view-transition-new(workbench-content) {
+  animation: ui-fade-in var(--motion-duration-route) var(--motion-ease-standard)
+    both;
+  mix-blend-mode: normal;
+}
+
 .ui-pane-transition[data-state='active'],
 .document-pane-transition[data-pane-active='true'],
 .workspace-pane-enter {
@@ -127,6 +148,101 @@
 
 .workspace-tree-chevron {
   transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.ui-overlay[data-state='open'] {
+  animation: ui-fade-in var(--motion-duration-overlay)
+    var(--motion-ease-standard);
+}
+.ui-overlay[data-state='closed'] {
+  animation: ui-fade-out var(--motion-duration-exit) ease-in;
+}
+.ui-dialog[data-state='open'] {
+  animation: ui-dialog-in var(--motion-duration-panel)
+    var(--motion-ease-standard);
+}
+.ui-dialog[data-state='closed'] {
+  animation: ui-fade-out var(--motion-duration-exit) ease-in;
+}
+.ui-floating {
+  --floating-enter-x: 0px;
+  --floating-enter-y: -4px;
+}
+.ui-floating[data-side='top'] {
+  --floating-enter-y: 4px;
+}
+.ui-floating[data-side='left'] {
+  --floating-enter-x: 4px;
+  --floating-enter-y: 0px;
+}
+.ui-floating[data-side='right'] {
+  --floating-enter-x: -4px;
+  --floating-enter-y: 0px;
+}
+.ui-floating[data-state='open'] {
+  animation: ui-floating-in var(--motion-duration-overlay)
+    var(--motion-ease-standard);
+}
+.ui-floating[data-state='closed'] {
+  animation: ui-fade-out var(--motion-duration-exit) ease-in;
+}
+.ui-sheet[data-state='open'] {
+  animation-duration: var(--motion-duration-panel);
+  animation-timing-function: var(--motion-ease-standard);
+}
+.ui-sheet[data-state='closed'] {
+  animation-duration: var(--motion-duration-fast);
+  animation-timing-function: ease-in;
+}
+[data-slot='sidebar-gap'],
+[data-slot='sidebar-container'] {
+  transition-duration: var(--motion-duration-panel);
+  transition-timing-function: var(--motion-ease-standard);
+}
+
+@layer components {
+  /* Keep multi-column data readable; the containing surface owns horizontal scroll. */
+  [data-slot='table']:has(th:nth-child(4)) {
+    min-width: 40rem;
+  }
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ui-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes ui-dialog-in {
+  from {
+    opacity: 0;
+    box-shadow: var(--shadow-card);
+  }
+  to {
+    opacity: 1;
+    box-shadow: var(--shadow-overlay);
+  }
+}
+@keyframes ui-floating-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--floating-enter-x), var(--floating-enter-y))
+      scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
 }
 
 .document-workspace-layout {
@@ -158,7 +274,7 @@
 }
 
 .document-assistant-panel::backdrop {
-  background: oklch(0.12 0.02 258 / 40%);
+  background: var(--overlay-backdrop);
   opacity: 0;
   transition:
     opacity var(--motion-duration-panel) var(--motion-ease-standard),
@@ -328,6 +444,25 @@
   .document-pane-transition[data-pane-active='true'],
   .workspace-pane-enter {
     animation: workspace-content-in 80ms linear !important;
+  }
+
+  .ui-dialog[data-state='open'],
+  .ui-floating[data-state='open'],
+  .ui-sheet[data-state='open'],
+  .ui-overlay[data-state='open'] {
+    animation: ui-fade-in 80ms linear !important;
+  }
+  .ui-dialog[data-state='closed'],
+  .ui-floating[data-state='closed'],
+  .ui-sheet[data-state='closed'],
+  .ui-overlay[data-state='closed'] {
+    animation: ui-fade-out 80ms linear !important;
+  }
+  [data-slot='button']:active {
+    translate: none;
+  }
+  .app-route-surface {
+    view-transition-name: none;
   }
 }
 

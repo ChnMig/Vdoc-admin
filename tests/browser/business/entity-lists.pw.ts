@@ -484,11 +484,16 @@ test('MCP token details show permissions and the creation form uses current word
   })
   await expect(capabilities).toBeVisible()
   await expect(
-    capabilities.getByRole('row', { name: /OpenAPI/ })
-  ).toContainText('已授权')
+    capabilities.getByText('读取文档', { exact: true })
+  ).toBeVisible()
   await expect(
-    capabilities.getByRole('row', { name: /Markdown/ })
-  ).toContainText('未授权')
+    capabilities.getByText('部分授权 · 旧密钥', { exact: true })
+  ).toBeVisible()
+  await expect(
+    capabilities.getByText('写入文档', { exact: true })
+  ).toBeVisible()
+  await expect(capabilities).not.toContainText('OpenAPI')
+  await expect(capabilities).not.toContainText('Markdown / TXT')
   await saveScreenshot(page, 'mcp-capabilities.png')
   await page.getByRole('button', { name: '创建 MCP 令牌', exact: true }).click()
   const dialog = page.getByRole('dialog', {
@@ -500,6 +505,66 @@ test('MCP token details show permissions and the creation form uses current word
   ).toBeVisible()
   await expect(dialog).not.toContainText('草稿')
 })
+
+for (const width of [1280, 390, 320]) {
+  test(`agent activity contains long identifiers within the table at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 })
+    await fixture(page)
+    const longId = 'a'.repeat(64)
+    await page.route('**/api/v1/private/mcp-usage**', (route) =>
+      envelope(route, [
+        {
+          id: 'long-activity',
+          actor_type: 2,
+          actor_token_id: `token_${longId}`,
+          action: 'mcp.call',
+          resource_type: 'document',
+          resource_id: longId,
+          project_id: `project_${longId}`,
+          document_id: `document_${longId}`,
+          metadata: {
+            tool_name: 'get_document_at_commit',
+            commit_id: longId,
+            result: 'success',
+            adapter: 'stdio',
+            evidence_kind: 'published_content_read',
+          },
+          created_at: timestamp,
+        },
+      ])
+    )
+    await page.goto('/mcp-tokens')
+    await page.getByRole('tab', { name: 'Recent Agent activity' }).click()
+    const table = page.getByRole('table', { name: 'Recent Agent activity' })
+    await expect(table).toBeVisible()
+    await expect(table).toContainText(`commit_id=${longId}`)
+    const targetDisclosure = table.locator('details summary')
+    await targetDisclosure.click()
+    await expect(table.locator('details p')).toBeVisible()
+    await expect(table.locator('details p')).toContainText(
+      `commit_id=${longId}`
+    )
+    await noPageOverflow(page)
+    await targetDisclosure.click()
+    await noPageOverflow(page)
+    const bounds = await table.locator('..').evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        left: rect.left,
+        right: rect.right,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }
+    })
+    expect(bounds.left).toBeGreaterThanOrEqual(0)
+    expect(bounds.right).toBeLessThanOrEqual(width)
+    if (width < 600)
+      expect(bounds.scrollWidth).toBeGreaterThan(bounds.clientWidth)
+    await saveScreenshot(page, `agent-activity-${width}.png`)
+  })
+}
 
 test('entity pages open labeled create/edit dialogs from read-only lists', async ({
   page,

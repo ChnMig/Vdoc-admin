@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Ellipsis, FolderInput, Pencil, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
@@ -29,10 +29,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useDocumentActionsCopy } from './document-actions-copy'
-import { FormCard, NativeSelect, TextField } from './page-shared'
+import { FolderDestinationTree } from './folder-destination-tree'
+import { FormCard, TextField } from './page-shared'
 import { fieldValue } from './page-utils'
 
-type Action = 'rename' | 'move' | 'delete'
+export type DocumentAction = 'rename' | 'move' | 'delete'
 type Props = {
   projectId: string
   document: DocumentDTO
@@ -41,6 +42,10 @@ type Props = {
   submissionScope: string
   isCurrent: () => boolean
   onChanged?: (document: DocumentDTO | null) => void
+  action?: DocumentAction | null
+  onActionChange?: (action: DocumentAction | null) => void
+  hideTrigger?: boolean
+  focusRef?: RefObject<HTMLButtonElement | null>
 }
 
 export function DocumentActions(props: Props) {
@@ -63,14 +68,21 @@ function ScopedDocumentActions({
   isCurrent,
   onChanged,
   session,
+  action: requestedAction,
+  onActionChange,
+  hideTrigger,
+  focusRef,
 }: Props & { session: number }) {
   const { t } = useLanguage()
   const copy = useDocumentActionsCopy()
   const client = useQueryClient()
-  const [action, setAction] = useState<Action | null>(null)
+  const [localAction, setLocalAction] = useState<DocumentAction | null>(null)
+  const action = requestedAction === undefined ? localAction : requestedAction
+  const setAction = onActionChange ?? setLocalAction
   const [deleteError, setDeleteError] = useState<Error | null>(null)
   const lockedRef = useRef(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const openingDialog = useRef(false)
   const current = useRef<Pick<
     Props,
     'submissionScope' | 'isCurrent' | 'onChanged'
@@ -181,52 +193,66 @@ function ScopedDocumentActions({
     })
   }
   const changeOpen = (open: boolean) => {
-    if (!open && !mutation.isPending) setAction(null)
+    if (!open && !mutation.isPending) {
+      setAction(null)
+      setDeleteError(null)
+    }
+  }
+  const openAction = (next: DocumentAction) => {
+    openingDialog.current = true
+    setDeleteError(null)
+    setAction(next)
   }
   const restoreFocus = (event: Event) => {
-    if (triggerRef.current?.isConnected) {
+    const trigger = focusRef?.current ?? triggerRef.current
+    if (trigger?.isConnected) {
       event.preventDefault()
-      triggerRef.current.focus()
+      trigger.focus()
     }
   }
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            ref={triggerRef}
-            type='button'
-            variant='ghost'
-            size='icon'
-            className='size-9 shrink-0'
-            disabled={locked}
-            aria-label={`${copy.actions}: ${document.name}`}
-          >
-            <Ellipsis aria-hidden className='size-4' />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
-          <DropdownMenuItem onSelect={() => setAction('rename')}>
-            <Pencil aria-hidden />
-            {copy.rename}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAction('move')}>
-            <FolderInput aria-hidden />
-            {copy.move}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className='text-destructive focus:text-destructive'
-            onSelect={() => {
-              setDeleteError(null)
-              setAction('delete')
+      {!hideTrigger && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              ref={triggerRef}
+              type='button'
+              variant='ghost'
+              size='icon'
+              className='size-9 shrink-0'
+              disabled={locked}
+              aria-label={`${copy.actions}: ${document.name}`}
+            >
+              <Ellipsis aria-hidden className='size-4' />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align='end'
+            onCloseAutoFocus={(event) => {
+              if (openingDialog.current) event.preventDefault()
+              openingDialog.current = false
             }}
           >
-            <Trash2 aria-hidden />
-            {copy.delete}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem onSelect={() => openAction('rename')}>
+              <Pencil aria-hidden />
+              {copy.rename}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openAction('move')}>
+              <FolderInput aria-hidden />
+              {copy.move}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className='text-destructive focus:text-destructive'
+              onSelect={() => openAction('delete')}
+            >
+              <Trash2 aria-hidden />
+              {copy.delete}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <Dialog
         open={action === 'rename' || action === 'move'}
         onOpenChange={changeOpen}
@@ -277,22 +303,10 @@ function ScopedDocumentActions({
                 />
               </>
             ) : (
-              <NativeSelect
-                name='parent_path'
-                label={t('admin.workspace.destinationFolder')}
-                placeholder={t('admin.workspace.destinationFolder')}
-                defaultValue={parent ? `folder:${parent}` : 'project-root'}
-                options={[
-                  {
-                    value: 'project-root',
-                    label: t('admin.workspace.rootFolder'),
-                  },
-                  ...folders.map((folder) => ({
-                    value: `folder:${folder.path}`,
-                    label: folder.path,
-                  })),
-                ]}
-                required
+              <FolderDestinationTree
+                folders={folders}
+                defaultPath={parent}
+                disabled={locked}
               />
             )}
           </FormCard>

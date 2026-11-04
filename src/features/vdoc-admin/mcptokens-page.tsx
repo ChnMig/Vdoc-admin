@@ -2,11 +2,18 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
+  ChevronDown,
   Copy,
   KeyRound,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
+import {
+  MCP_SCOPE_READ,
+  MCP_SCOPE_WRITE,
+  mcpTokenPermissions,
+} from '@/lib/mcp-token-permissions'
 import {
   apiBaseUrl,
   createMCPToken,
@@ -31,7 +38,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DateTimePickerField } from '@/components/date-time-picker'
 import { MCPClientConfig } from './mcp-client-config'
 import {
   PageChrome,
@@ -46,12 +52,16 @@ import {
 } from './page-shared'
 import {
   fieldValue,
-  SCOPE_API_READ,
-  SCOPE_DOC_READ,
   useInvalidateResources,
   tokenIsActive,
   formatDate,
 } from './page-utils'
+
+const DateTimePickerField = lazy(() =>
+  import('@/components/date-time-picker').then((module) => ({
+    default: module.DateTimePickerField,
+  }))
+)
 
 const TokenCapabilities = lazy(() =>
   import('./mcp-token-capabilities').then((module) => ({
@@ -65,13 +75,21 @@ function optionalFieldValue(formData: FormData, key: string) {
 }
 
 function tokenHasAnyReadScope(token: MCPTokenDTO) {
+  return mcpTokenPermissions(token).canRead
+}
+
+export function MCPTokensPage(props: VdocPageDeepLinkProps = {}) {
+  const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
+  const userId = useAuthStore((state) => state.auth.user?.id)
   return (
-    token.scopes.includes(SCOPE_API_READ) ||
-    token.scopes.includes(SCOPE_DOC_READ)
+    <ScopedMCPTokensPage
+      key={JSON.stringify([sessionVersion, userId])}
+      {...props}
+    />
   )
 }
 
-export function MCPTokensPage({
+function ScopedMCPTokensPage({
   search,
   onSearchChange,
 }: VdocPageDeepLinkProps = {}) {
@@ -466,15 +484,13 @@ export function MCPTokensPage({
                 submitLabel={t('admin.common.create')}
                 pending={createMutation.isPending}
                 onSubmit={(formData) => {
-                  // Keep the wire scopes compatible with existing adapters while
-                  // presenting one permission for every document format.
                   const scopes = formData
                     .getAll('permissions')
                     .flatMap((permission) =>
                       permission === 'read'
-                        ? [1, 3]
+                        ? [MCP_SCOPE_READ]
                         : permission === 'write'
-                          ? [2, 4]
+                          ? [MCP_SCOPE_WRITE]
                           : []
                     )
                     .sort((a, b) => a - b)
@@ -510,11 +526,22 @@ export function MCPTokensPage({
                     name='name'
                     required
                   />
-                  <DateTimePickerField
-                    label={t('admin.fields.expiresAt')}
-                    name='expires_at'
-                    description={t('admin.token.expiryHint')}
-                  />
+                  <Suspense
+                    fallback={
+                      <p
+                        role='status'
+                        className='py-4 text-sm text-muted-foreground'
+                      >
+                        {t('admin.dateTime.loading')}
+                      </p>
+                    }
+                  >
+                    <DateTimePickerField
+                      label={t('admin.fields.expiresAt')}
+                      name='expires_at'
+                      description={t('admin.token.expiryHint')}
+                    />
+                  </Suspense>
                 </div>
                 <fieldset className='grid gap-3 rounded-md border p-4 sm:grid-cols-2'>
                   <legend className='px-2 text-sm font-medium'>
@@ -675,6 +702,9 @@ function mcpUsageTarget(log?: AuditLogDTO) {
   const fields = [
     'project_id',
     'document_id',
+    'commit_id',
+    'source_commit_id',
+    'target_commit_id',
     'branch_id',
     'draft_id',
     'version_id',
@@ -698,7 +728,19 @@ function mcpUsageTarget(log?: AuditLogDTO) {
 function MCPUsageTable({ logs }: { logs: AuditLogDTO[] }) {
   const { t } = useLanguage()
   return (
-    <Table>
+    <Table
+      className='min-w-[56rem] table-fixed [&_[data-slot=badge]]:max-w-full [&_td]:px-2 [&_th]:px-2'
+      aria-label={t('admin.token.activityTitle')}
+    >
+      <colgroup>
+        <col className='w-[16%]' />
+        <col className='w-[12%]' />
+        <col className='w-[20%]' />
+        <col className='w-[21%]' />
+        <col className='w-[8%]' />
+        <col className='w-[13%]' />
+        <col className='w-[10%]' />
+      </colgroup>
       <TableHeader>
         <TableRow>
           <TableHead>{t('admin.audit.time')}</TableHead>
@@ -716,18 +758,44 @@ function MCPUsageTable({ logs }: { logs: AuditLogDTO[] }) {
             <TableCell className='text-xs whitespace-nowrap'>
               {formatDate(log.created_at)}
             </TableCell>
-            <TableCell className='max-w-40 truncate font-mono text-xs'>
-              {log.actor_token_id ?? log.metadata.token_id ?? '-'}
+            <TableCell className='font-mono text-xs [overflow-wrap:anywhere] whitespace-normal'>
+              <span
+                className='block truncate'
+                title={log.actor_token_id ?? log.metadata.token_id}
+              >
+                {log.actor_token_id ?? log.metadata.token_id ?? '-'}
+              </span>
             </TableCell>
-            <TableCell className='font-mono text-xs'>
+            <TableCell className='font-mono text-xs [overflow-wrap:anywhere] whitespace-normal'>
               {log.metadata.tool_name ?? '-'}
             </TableCell>
-            <TableCell className='max-w-96 font-mono text-xs break-all'>
-              {mcpUsageTarget(log)}
+            <TableCell className='font-mono text-xs [overflow-wrap:anywhere] whitespace-normal'>
+              <details className='group/target text-start'>
+                <summary className='flex cursor-pointer items-center gap-2 rounded-sm py-1 text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden'>
+                  <span
+                    className='min-w-0 flex-1 truncate'
+                    title={mcpUsageTarget(log)}
+                  >
+                    {mcpUsageTarget(log)}
+                  </span>
+                  <ChevronDown
+                    className='size-3.5 shrink-0 text-muted-foreground transition-transform group-open/target:rotate-180 motion-reduce:transition-none'
+                    aria-hidden
+                  />
+                </summary>
+                <p className='pt-2 leading-relaxed text-muted-foreground'>
+                  {mcpUsageTarget(log)}
+                </p>
+              </details>
             </TableCell>
             <TableCell>
               <StatusBadge muted={log.metadata.adapter !== 'stdio'}>
-                {log.metadata.adapter ?? 'direct'}
+                <span
+                  className='truncate'
+                  title={log.metadata.adapter ?? 'direct'}
+                >
+                  {log.metadata.adapter ?? 'direct'}
+                </span>
               </StatusBadge>
             </TableCell>
             <TableCell>
@@ -745,7 +813,9 @@ function MCPUsageTable({ logs }: { logs: AuditLogDTO[] }) {
             </TableCell>
             <TableCell>
               <StatusBadge muted={log.metadata.result !== 'success'}>
-                {log.metadata.result ?? t('admin.common.unknown')}
+                <span className='truncate' title={log.metadata.result}>
+                  {log.metadata.result ?? t('admin.common.unknown')}
+                </span>
               </StatusBadge>
             </TableCell>
           </TableRow>

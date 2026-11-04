@@ -281,6 +281,14 @@ const en = {
         'The selected team, project, or folder is unavailable. Choose another location.',
     },
     workspace: {
+      moreActions: 'More actions',
+      refreshFolder: 'Refresh current folder',
+      refreshingFolder: 'Refreshing current folder…',
+      selectedDestination: 'Selected location',
+      invalidFolderDestination:
+        'Choose a destination outside this folder and its subfolders.',
+      folderDestinationHint: 'Arrow keys to browse, Enter to select.',
+      currentFolder: 'Current folder',
       outline: 'On this page',
       outlineEmpty: 'This content has no section headings.',
       documentSidebar: 'Document outline and tools',
@@ -409,6 +417,9 @@ const en = {
     dateTime: {
       placeholder: 'Choose date and time',
       loading: 'Loading calendar…',
+      today: 'Today',
+      localTime: 'Local time',
+      selectedDate: 'Selected date',
       month: 'Month',
       year: 'Year',
       hour: 'Hour',
@@ -1231,7 +1242,7 @@ const en = {
       writeDocumentsDescription:
         'Create documents, branches and saved versions.',
       permissionsHint:
-        'Applies to OpenAPI, Markdown and TXT across your accessible teams and projects. Your project role still limits access; MCP cannot approve or publish.',
+        'Applies across your teams and projects. Project roles apply; MCP cannot approve or publish.',
       secretAvailable: 'Active token secret',
       secretGuidance:
         'Active tokens can be viewed and copied again. Revoked or expired tokens remain redacted.',
@@ -2081,6 +2092,13 @@ const zhCN = {
       unavailable: '所选团队、项目或文件夹不可用，请重新选择。',
     },
     workspace: {
+      moreActions: '更多操作',
+      refreshFolder: '刷新当前目录',
+      refreshingFolder: '正在刷新当前目录…',
+      selectedDestination: '所选位置',
+      invalidFolderDestination: '不能选择此文件夹及其子目录。',
+      folderDestinationHint: '方向键浏览，Enter 选择。',
+      currentFolder: '当前文件夹',
       outline: '文档目录',
       outlineEmpty: '当前内容没有可定位的标题。',
       documentSidebar: '文档目录与工具',
@@ -2201,6 +2219,9 @@ const zhCN = {
     dateTime: {
       placeholder: '选择日期和时间',
       loading: '正在加载日历…',
+      today: '今天',
+      localTime: '本地时间',
+      selectedDate: '已选日期',
       month: '月',
       year: '年',
       hour: '时',
@@ -2970,7 +2991,7 @@ const zhCN = {
       writeDocuments: '写入文档',
       writeDocumentsDescription: '创建文档、分支并保存新版本。',
       permissionsHint:
-        '适用于你有权访问的团队和项目中的 OpenAPI、Markdown 和 TXT。实际操作受项目角色限制，MCP 不能审批或发布。',
+        '跨团队和项目使用，仍受项目角色限制；MCP 不能审批或发布。',
       secretAvailable: '有效令牌明文',
       secretGuidance: '有效令牌可再次查看和复制；已撤销或过期令牌保持脱敏。',
       copy: '复制令牌',

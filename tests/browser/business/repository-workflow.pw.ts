@@ -31,7 +31,7 @@ async function tool(page: Page, name: string) {
     await nav.getByRole('button', { name, exact: true }).click()
   } else {
     await page
-      .getByRole('button', { name: 'Document tools', exact: true })
+      .getByRole('button', { name: 'More actions', exact: true })
       .click()
     await page.getByRole('menuitem', { name, exact: true }).click()
   }
@@ -289,15 +289,12 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByText('Original saved body.', { exact: true })
     ).toBeVisible()
-    const newDocument = page.getByRole('button', {
-      name: 'New document',
-      exact: true,
-    })
-    if (!(await newDocument.isVisible()))
-      await page
-        .getByRole('button', { name: 'Show files', exact: true })
-        .click()
-    await newDocument.click()
+    await page
+      .getByRole('button', { name: 'More actions', exact: true })
+      .click()
+    await page
+      .getByRole('menuitem', { name: 'New document', exact: true })
+      .click()
     const dialog = page.getByRole('dialog', {
       name: 'New document',
       exact: true,
@@ -794,7 +791,7 @@ for (const width of [1440, 390]) {
       ).toBeFocused()
     else
       await expect(
-        page.getByRole('button', { name: 'Document tools', exact: true })
+        page.getByRole('button', { name: 'More actions', exact: true })
       ).toBeFocused()
     await tool(page, 'AI')
     await expect(question).toHaveValue(
@@ -853,7 +850,7 @@ test('sidebar retains its DOM, input and focus across expansion, resize and comp
   await question.press('Escape')
   await expect(assistant).not.toBeVisible()
   await expect(
-    page.getByRole('button', { name: 'Document tools', exact: true })
+    page.getByRole('button', { name: 'More actions', exact: true })
   ).toBeFocused()
   await page.setViewportSize({ width: 1440, height: 960 })
   await tool(page, 'AI')

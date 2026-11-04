@@ -15,7 +15,6 @@ type AuthenticatedLayoutProps = {
 }
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
-  const defaultOpen = getCookie('sidebar_state') !== 'false'
   const pathname = useLocation({ select: (location) => location.pathname })
   const documentDetail = isDocumentDetailPath(pathname)
   const workspace = [
@@ -29,28 +28,19 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
     '/diffs',
     '/diffs/',
   ].includes(pathname)
-  const [sidebarPreference, setSidebarPreference] = useState<{
-    workspace: boolean
-    open: boolean
-  }>()
-  const sidebarOpen =
-    sidebarPreference?.workspace === workspace
-      ? sidebarPreference.open
-      : workspace
-        ? false
-        : defaultOpen
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const saved = getCookie('sidebar_state')
+    return saved === undefined ? !workspace : saved !== 'false'
+  })
   const authUser = useAuthStore((state) => state.auth.user)
   const hasAuditAccess = authUser?.can_access_audit === true
   return (
     <SearchProvider auditAccess={hasAuditAccess}>
       <LayoutProvider>
-        <SidebarProvider
-          open={sidebarOpen}
-          onOpenChange={(open) => setSidebarPreference({ workspace, open })}
-        >
+        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SkipToMain />
           {documentDetail ? (
-            <div className='@container/content h-svh min-h-0 w-full min-w-0 overflow-hidden bg-background text-foreground'>
+            <div className='app-route-surface @container/content h-svh min-h-0 w-full min-w-0 overflow-hidden bg-background text-foreground'>
               {children ?? <Outlet />}
             </div>
           ) : (
@@ -62,7 +52,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               <SidebarInset
                 className={cn(
                   // Set content container, so we can use container queries
-                  '@container/content',
+                  'app-route-surface @container/content',
                   'min-w-0 bg-transparent',
 
                   // If layout is fixed, set the height

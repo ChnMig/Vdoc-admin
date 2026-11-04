@@ -15,6 +15,7 @@ import { applyAdminBranding } from '@/lib/branding'
 import { handleServerError } from '@/lib/handle-server-error'
 import { getStoredLanguage, translate } from '@/lib/i18n'
 import { shouldRetryQuery } from '@/lib/query-retry'
+import { routeViewTransition } from '@/components/layout/route-transition'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
 import { LanguageProvider } from './context/language-provider'
@@ -80,6 +81,7 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  defaultViewTransition: routeViewTransition,
 })
 
 // Register the router instance for type safety

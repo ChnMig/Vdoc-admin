@@ -43,17 +43,14 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { DocumentFileTree } from './document-file-tree'
-import {
-  DocumentFormFields,
-  documentPayloadFromFormData,
-} from './document-form-fields'
+import type { DocumentHeaderMenuOptions } from './document-reader-actions'
 import {
   documentSelection,
   emptyDocumentSelection,
   type WorkspaceView,
 } from './document-workspace-model'
 import { DraftEditorSessionProvider } from './draft-editor-session-provider'
-import { FormDialog, LoadingErrorState, TextField } from './page-shared'
+import { LoadingErrorState } from './page-shared'
 import {
   ACTIVE_STATUS,
   ROLE_ADMIN,
@@ -77,6 +74,12 @@ const DocumentActions = lazy(() =>
   }))
 )
 
+const DocumentReaderActions = lazy(() =>
+  import('./document-reader-actions').then((module) => ({
+    default: module.DocumentReaderActions,
+  }))
+)
+
 const DocumentWorkspaceDetail = lazy(() =>
   import('./document-workspace-detail').then((module) => ({
     default: module.DocumentWorkspaceDetail,
@@ -97,7 +100,7 @@ export function DocumentWorkspacePage({
   onSearchChange,
   defaultView = 'content',
 }: DocumentWorkspacePageProps) {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.auth.user)
   const sessionVersion = useAuthStore((state) => state.auth.sessionVersion)
@@ -246,6 +249,9 @@ export function DocumentWorkspacePage({
         useAuthStore.getState().auth.sessionVersion === request.sessionVersion
       if (!ownsRequest()) return
       try {
+        const { documentPayloadFromFormData } =
+          await import('./document-form-fields')
+        if (!ownsRequest()) return
         const payload = await documentPayloadFromFormData(request.formData, t)
         // FileReader may finish after sign-out, reauthentication, or navigation.
         // The API captures the current token when dispatched, so check again.
@@ -383,6 +389,81 @@ export function DocumentWorkspacePage({
       )}
     </Button>
   )
+  const managementDisabled =
+    unavailable ||
+    foldersQuery.isPending ||
+    foldersQuery.isError ||
+    (legacySelection ? documentsQuery.isError : catalogQuery.isError)
+  const folderNonempty = (item: (typeof folders)[number]) => {
+    const prefix = `${item.path.toLocaleLowerCase()}/`
+    return (
+      folders.some((candidate) =>
+        candidate.path.toLocaleLowerCase().startsWith(prefix)
+      ) ||
+      visibleDocuments.some((candidate) =>
+        candidate.relative_path?.toLocaleLowerCase().startsWith(prefix)
+      )
+    )
+  }
+  const documentChanged = (
+    updated: (typeof visibleDocuments)[number] | null
+  ) => {
+    if (!updated && document) {
+      changeSearch({
+        ...emptyDocumentSelection,
+        folder_id: document.folder_id || 'root',
+        workspace_view: 'content',
+      })
+      setMobileFilesOpen(false)
+    }
+  }
+  const folderChanged = (updated: (typeof folders)[number] | null) => {
+    changeSearch({
+      folder_id: updated
+        ? legacySelection
+          ? updated.id
+          : `repository-folder:${updated.path}`
+        : folder?.parent_id || 'root',
+    })
+  }
+  const renderHeaderMenu = (options: DocumentHeaderMenuOptions) => (
+    <Suspense fallback={<span className='size-9 shrink-0' />}>
+      <DocumentReaderActions
+        key={mutationScope}
+        {...options}
+        projectId={projectId}
+        document={legacySelection ? undefined : document}
+        folder={folder}
+        folders={folders}
+        nonempty={folder ? folderNonempty(folder) : false}
+        canManage={canMutate}
+        disabled={managementDisabled}
+        submissionScope={mutationScope}
+        isCurrent={() => currentScope.current === mutationScope}
+        onDocumentChanged={documentChanged}
+        onFolderChanged={folderChanged}
+        documentPending={createMutation.isPending}
+        folderPending={folderMutation.isPending}
+        onCreateDocument={(formData) =>
+          createMutation.mutateAsync({
+            projectId,
+            owner: mutationScope,
+            sessionVersion,
+            formData,
+          })
+        }
+        onCreateFolder={(formData) =>
+          folderMutation.mutateAsync({
+            projectId,
+            parentPath: folder?.path ?? '',
+            name: fieldValue(formData, 'name'),
+            owner: mutationScope,
+            sessionVersion,
+          })
+        }
+      />
+    </Suspense>
+  )
   const fileNavigation = (
     <div
       id='workspace-files'
@@ -414,109 +495,6 @@ export function DocumentWorkspacePage({
         </div>
       </div>
       <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3'>
-        {canMutate && (
-          <div className='flex flex-wrap gap-2 px-3'>
-            <FormDialog
-              title={t('admin.workspace.newDocument')}
-              submitLabel={t('admin.common.create')}
-              triggerSize='sm'
-              pending={createMutation.isPending}
-              disabled={unavailable}
-              submissionScope={`${effectiveScope}:${folderId}`}
-              onSubmit={(formData) =>
-                createMutation.mutateAsync({
-                  projectId,
-                  owner: mutationScope,
-                  sessionVersion,
-                  formData,
-                })
-              }
-            >
-              <DocumentFormFields
-                projectId={projectId}
-                repositoryDirectory={folder?.path ?? ''}
-              />
-              <TextField
-                name='new_branch_name'
-                defaultValue='main'
-                label={language === 'zh-CN' ? '初始分支' : 'Initial branch'}
-                description={
-                  language === 'zh-CN'
-                    ? '仅属于这篇文档。版本号将按分支名自动递增，例如 main.1、main.2。'
-                    : 'Belongs to this document only. Versions increase automatically, for example main.1, main.2.'
-                }
-              />
-            </FormDialog>
-            <FormDialog
-              title={t('admin.workspace.newFolder')}
-              submitLabel={t('admin.workspace.createFolder')}
-              triggerVariant='outline'
-              triggerSize='sm'
-              pending={folderMutation.isPending}
-              disabled={unavailable}
-              submissionScope={`${effectiveScope}:${folderId}`}
-              onSubmit={(formData) =>
-                folderMutation.mutateAsync({
-                  projectId,
-                  parentPath: folder?.path ?? '',
-                  name: fieldValue(formData, 'name'),
-                  owner: mutationScope,
-                  sessionVersion,
-                })
-              }
-            >
-              <p className='text-sm text-muted-foreground'>
-                {folder?.path ?? t('admin.workspace.rootFolder')}
-              </p>
-              <TextField
-                label={t('admin.workspace.folderName')}
-                name='name'
-                required
-              />
-            </FormDialog>
-            {folder && (
-              <Suspense
-                fallback={
-                  <p role='status' className='text-sm text-muted-foreground'>
-                    {t('admin.common.loading')}
-                  </p>
-                }
-              >
-                <DocumentFolderActions
-                  key={`${effectiveScope}:${folder.path}`}
-                  projectId={projectId}
-                  folder={folder}
-                  folders={folders}
-                  nonempty={
-                    folders.some((item) => item.parent_id === folder.id) ||
-                    visibleDocuments.some((item) =>
-                      item.relative_path
-                        ?.toLocaleLowerCase()
-                        .startsWith(`${folder.path.toLocaleLowerCase()}/`)
-                    )
-                  }
-                  disabled={
-                    unavailable ||
-                    foldersQuery.isPending ||
-                    foldersQuery.isError ||
-                    catalogQuery.isError
-                  }
-                  submissionScope={mutationScope}
-                  isCurrent={() => currentScope.current === mutationScope}
-                  onChanged={(updated) =>
-                    changeSearch({
-                      folder_id: updated
-                        ? legacySelection
-                          ? updated.id
-                          : `repository-folder:${updated.path}`
-                        : folder.parent_id || 'root',
-                    })
-                  }
-                />
-              </Suspense>
-            )}
-          </div>
-        )}
         <LoadingErrorState
           state={legacySelection ? documentsQuery : catalogQuery}
         />
@@ -531,6 +509,28 @@ export function DocumentWorkspacePage({
               documents={visibleDocuments}
               documentId={document?.id}
               folderId={folderId}
+              renderFolderActions={
+                canMutate
+                  ? (item) => (
+                      <Suspense fallback={<span className='size-9 shrink-0' />}>
+                        <DocumentFolderActions
+                          projectId={projectId}
+                          folder={item}
+                          folders={folders}
+                          nonempty={folderNonempty(item)}
+                          disabled={managementDisabled}
+                          submissionScope={mutationScope}
+                          isCurrent={() =>
+                            currentScope.current === mutationScope
+                          }
+                          onChanged={
+                            item.id === folderId ? folderChanged : undefined
+                          }
+                        />
+                      </Suspense>
+                    )
+                  : undefined
+              }
               renderDocumentActions={
                 canMutate && !legacySelection
                   ? (item) => (
@@ -646,6 +646,7 @@ export function DocumentWorkspacePage({
                 canWrite={canWrite}
                 interactive={project?.status === ACTIVE_STATUS}
                 navigationActions={navigationActions}
+                renderHeaderMenu={renderHeaderMenu}
                 onSearchChange={changeSearch}
               />
             </Suspense>
@@ -671,6 +672,7 @@ export function DocumentWorkspacePage({
                   document.status === ACTIVE_STATUS
                 )}
                 navigationActions={navigationActions}
+                renderHeaderMenu={renderHeaderMenu}
                 onSearchChange={changeSearch}
               />
             </Suspense>
@@ -681,6 +683,7 @@ export function DocumentWorkspacePage({
                 <p className='truncate text-sm font-medium'>
                   {project?.name ?? t('admin.workspace.title')}
                 </p>
+                <div className='ms-auto'>{renderHeaderMenu({})}</div>
               </header>
               <div
                 id='content'

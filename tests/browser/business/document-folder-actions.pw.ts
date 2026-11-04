@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
 import type { DocumentFolderDTO } from '../../../src/lib/vdoc-api'
-import { selectOption } from '../helpers/select-option'
 import { installRepository, projectId } from '../support/repository-workflow'
 
 for (const width of [1280, 390]) {
@@ -56,22 +55,61 @@ for (const width of [1280, 390]) {
       })
     })
     await repository.open()
-    await expect(page.locator('[data-document-page]')).toContainText(
-      'Original saved body.'
-    )
-    if (width === 390)
-      await page
-        .getByRole('button', { name: 'Show files', exact: true })
-        .click()
+    const reader = page.locator('[data-document-page]')
+    await expect(reader).toContainText('Original saved body.')
     const files = page.locator('#workspace-files')
+    const showFiles = async () => {
+      if (width === 390)
+        await page
+          .getByRole('button', { name: 'Show files', exact: true })
+          .click()
+    }
+    const closeFiles = async () => {
+      if (width === 390)
+        await page
+          .getByRole('dialog', { name: 'Files', exact: true })
+          .getByRole('button', { name: 'Close', exact: true })
+          .click()
+    }
+    const folderMenu = async (action: string) => {
+      await page
+        .getByRole('button', { name: 'More actions', exact: true })
+        .click()
+      await page
+        .getByRole('menuitem', { name: 'Folder actions', exact: true })
+        .click()
+      await page.getByRole('menuitem', { name: action, exact: true }).click()
+    }
+    await showFiles()
+    // Management controls are separate from folder navigation, including on touch screens.
+    await expect(
+      files.getByRole('button', { name: 'New folder', exact: true })
+    ).toHaveCount(0)
+    await expect(
+      files.getByRole('button', { name: 'New document', exact: true })
+    ).toHaveCount(0)
     await files
-      .getByRole('button', { name: /^(Expand|Collapse) guides$/ })
+      .getByRole('button', { name: 'Folder actions: guides', exact: true })
       .click()
     await expect(
-      files.getByRole('button', { name: 'Delete folder', exact: true })
+      page.getByRole('menuitem', { name: 'Delete folder', exact: true })
     ).toBeDisabled()
-    await files.getByRole('button', { name: 'New folder', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await closeFiles()
+    await page
+      .getByRole('button', { name: 'More actions', exact: true })
+      .click()
+    await page.screenshot({
+      animations: 'disabled',
+      path: `.artifacts/workspace-quality/reader-actions-${width}.png`,
+    })
+    await page
+      .getByRole('menuitem', { name: 'New folder', exact: true })
+      .click()
     const create = page.getByRole('dialog', { name: 'New folder', exact: true })
+    await expect(
+      create.getByRole('textbox', { name: 'Folder name', exact: true })
+    ).toBeFocused()
     await create
       .getByRole('textbox', { name: 'Folder name', exact: true })
       .fill('Empty')
@@ -83,13 +121,14 @@ for (const width of [1280, 390]) {
       method: 'POST',
       body: { parent_path: 'guides', name: 'Empty' },
     })
-    await files
-      .getByRole('button', { name: 'Rename folder', exact: true })
-      .click()
+    await folderMenu('Rename folder')
     const rename = page.getByRole('dialog', {
       name: 'Rename folder',
       exact: true,
     })
+    await expect(
+      rename.getByRole('textbox', { name: 'Folder name', exact: true })
+    ).toBeFocused()
     await rename
       .getByRole('textbox', { name: 'Folder name', exact: true })
       .fill('Notes')
@@ -99,20 +138,23 @@ for (const width of [1280, 390]) {
       method: 'PATCH',
       body: { path: 'guides/Empty', name: 'Notes' },
     })
-    await files
-      .getByRole('button', { name: 'Move folder', exact: true })
-      .click()
+    await folderMenu('Move folder')
     const move = page.getByRole('dialog', { name: 'Move folder', exact: true })
-    await selectOption(
-      move.getByRole('combobox', { name: 'Destination folder' }),
-      'folder:Archive'
-    )
+    await expect(
+      move.getByRole('treeitem', { name: 'guides/Notes', exact: true })
+    ).toHaveAttribute('aria-disabled', 'true')
+    await move.getByRole('treeitem', { name: 'Archive', exact: true }).click()
+    await expect(
+      move.getByRole('treeitem', { name: 'Archive', exact: true })
+    ).toHaveAttribute('aria-selected', 'true')
     await move.getByRole('button', { name: 'Move folder', exact: true }).click()
     await expect(move).not.toBeVisible()
     expect(writes[2]).toEqual({
       method: 'PATCH',
       body: { path: 'guides/Notes', parent_path: 'Archive' },
     })
+    await expect(reader).toContainText('Original saved body.')
+    await showFiles()
     await files
       .getByRole('button', { name: /^(Expand|Collapse) Archive$/ })
       .click()
@@ -120,16 +162,17 @@ for (const width of [1280, 390]) {
       files.getByRole('button', { name: /^(Expand|Collapse) Notes$/ })
     ).toBeVisible()
     await files
-      .getByRole('button', { name: /^(Expand|Collapse) Notes$/ })
+      .getByRole('button', { name: 'Folder actions: Notes', exact: true })
       .click()
-    await files
-      .getByRole('group', { name: 'Folder actions', exact: true })
-      .scrollIntoViewIfNeeded()
+    await expect(
+      page.getByRole('menuitem', { name: 'Delete folder', exact: true })
+    ).toBeEnabled()
     await page.screenshot({
-      path: `.artifacts/entity-lists/reader-folders-${width}.png`,
+      animations: 'disabled',
+      path: `.artifacts/workspace-quality/reader-folder-menu-${width}.png`,
     })
-    await files
-      .getByRole('button', { name: 'Delete folder', exact: true })
+    await page
+      .getByRole('menuitem', { name: 'Delete folder', exact: true })
       .click()
     await page
       .getByRole('alertdialog')
@@ -143,15 +186,14 @@ for (const width of [1280, 390]) {
     await expect(
       files.getByRole('button', { name: /^(Expand|Collapse) Notes$/ })
     ).toHaveCount(0)
-    if (width === 390)
-      await page
-        .getByRole('dialog', { name: 'Files', exact: true })
-        .getByRole('button', { name: 'Close', exact: true })
-        .click()
-    await expect(page.locator('[data-document-page]')).toContainText(
-      'Original saved body.'
-    )
+    await closeFiles()
+    await expect(reader).toContainText('Original saved body.')
     await expect(page).toHaveURL(/\/documents\/commit-document\?/)
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      )
+    ).toBe(true)
     expect(repository.unexpected).toEqual([])
   })
 }

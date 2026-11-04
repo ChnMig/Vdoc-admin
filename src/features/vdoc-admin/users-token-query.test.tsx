@@ -87,7 +87,13 @@ describe('user token query state', () => {
   it('requests no tokens until a user is selected', async () => {
     const view = await page()
     expect(view.queryByText('Selected user MCP tokens')).not.toBeInTheDocument()
-    expect(view.getAllByRole('button', { name: 'View tokens' })).toHaveLength(2)
+    expect(view.getAllByRole('button', { name: 'View tokens' })).toHaveLength(1)
+    expect(
+      within(view.getByText(otherUser.email).closest('tr')!).queryByRole(
+        'button',
+        { name: 'View tokens' }
+      )
+    ).not.toBeInTheDocument()
     expect(api.listUserMCPTokens).not.toHaveBeenCalled()
   })
 
@@ -155,7 +161,7 @@ describe('user token query state', () => {
     expect(view.getByRole('button', { name: 'Try again' })).toBeEnabled()
   })
 
-  it('keeps a late token list out of another selected user', async () => {
+  it('keeps a late private token list out of the next account', async () => {
     const pending = deferred<unknown>()
     api.listUserMCPTokens.mockImplementation((id: string) =>
       id === 'admin'
@@ -170,6 +176,17 @@ describe('user token query state', () => {
         expect.anything()
       )
     )
+    act(() =>
+      useAuthStore
+        .getState()
+        .auth.setSession(otherUser, 'other-synthetic-session')
+    )
+    expect(view.queryByText('Selected user MCP tokens')).not.toBeInTheDocument()
+    expect(
+      within(view.getByText(user.email).closest('tr')!).queryByRole('button', {
+        name: 'View tokens',
+      })
+    ).not.toBeInTheDocument()
     fireEvent.click(viewTokens(view, otherUser.email))
     expect(
       await view.findByText(

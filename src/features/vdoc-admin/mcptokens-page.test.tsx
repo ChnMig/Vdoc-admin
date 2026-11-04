@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '@/stores/auth-store'
+import { bindQueryCacheToAuth } from '@/lib/auth-query-cache'
 import type { MCPTokenDTO } from '@/lib/vdoc-api'
 import { MCPTokensPage } from './mcptokens-page'
 
@@ -100,14 +102,56 @@ beforeEach(() => {
   api.revokeMCPToken.mockResolvedValue({ ...token, status: 2 })
 })
 
+it('clears a revealed private token when the authenticated account changes', async () => {
+  const { user, client, screen } = setup()
+  const unbind = bindQueryCacheToAuth(client)
+  try {
+    await user.click(await screen.findByRole('button', { name: 'View' }))
+    await waitFor(() => expect(screen.container.textContent).toContain(secret))
+    api.listMCPTokens.mockResolvedValue({ items: [], total: 0 })
+    act(() =>
+      useAuthStore.getState().auth.setSession(
+        {
+          id: 'another-user',
+          email: 'another@example.test',
+          name: 'Another user',
+          is_super_admin: true,
+          can_access_audit: true,
+          status: 1,
+        },
+        'synthetic-next-session'
+      )
+    )
+    expect(screen.container.textContent).not.toContain(secret)
+    await waitFor(() =>
+      expect(screen.queryByText(token.name)).not.toBeInTheDocument()
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Copy token' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Token capabilities' })
+    ).not.toBeInTheDocument()
+  } finally {
+    unbind()
+    act(() => useAuthStore.getState().auth.reset())
+    client.clear()
+  }
+})
+
 it.each([
-  [[1], ['Granted', 'Not granted'], ['Not granted', 'Not granted'], false],
-  [[2, 4], ['Not granted', 'Granted'], ['Not granted', 'Granted'], false],
-  [[1, 4], ['Granted', 'Not granted'], ['Not granted', 'Granted'], false],
-  [[3, 4], ['Not granted', 'Not granted'], ['Granted', 'Granted'], true],
+  [[5], 'Granted', 'Not granted', false, false],
+  [[6], 'Not granted', 'Granted', false, false],
+  [[5, 6], 'Granted', 'Granted', true, false],
+  [[1], 'Limited · legacy', 'Not granted', false, true],
+  [[2, 4], 'Not granted', 'Granted', false, true],
+  [[1, 4], 'Limited · legacy', 'Limited · legacy', false, true],
+  [[3, 4], 'Limited · legacy', 'Limited · legacy', true, true],
+  [[1, 2, 3, 4], 'Granted', 'Granted', true, true],
+  [[5, 2], 'Granted', 'Limited · legacy', true, true],
 ] as const)(
-  'shows actual format-specific capabilities for scopes %j',
-  async (scopes, openapi, text, patch) => {
+  'shows capability permissions without overstating legacy scopes %j',
+  async (scopes, read, write, patch, legacy) => {
     api.listMCPTokens.mockResolvedValue({
       items: [{ ...token, scopes: [...scopes] }],
       total: 1,
@@ -122,29 +166,37 @@ it.each([
     const region = await screen.findByRole('region', {
       name: 'Token capabilities',
     })
-    const cells = (name: string) =>
-      within(within(region).getByRole('row', { name }))
-        .getAllByRole('cell')
-        .slice(1)
-        .map((cell) => cell.textContent)
-    expect(cells(`OpenAPI ${openapi.join(' ')}`)).toEqual(openapi)
-    expect(cells(`Markdown / TXT ${text.join(' ')}`)).toEqual(text)
+    for (const [label, expected] of [
+      ['Read documents', read],
+      ['Write documents', write],
+    ]) {
+      const row = within(region).getByText(label, { selector: 'dt' })
+        .parentElement!.parentElement!
+      expect(within(row).getByText(expected)).toBeInTheDocument()
+    }
     expect(
       within(region).queryByText(
-        'Apply exact text changes to document types with both read and write permissions.'
+        'Apply exact text changes when both read and write permissions are granted.'
       ) !== null
     ).toBe(patch)
+    expect(
+      within(region).queryByText(
+        /This token keeps its original authorization/
+      ) !== null
+    ).toBe(legacy)
     expect(region.textContent).toContain(
       'One client configuration works across this account’s teams and projects.'
     )
+    expect(region.textContent).not.toContain('OpenAPI')
+    expect(region.textContent).not.toContain('Markdown / TXT')
     expect(region.textContent).not.toContain('draft')
   }
 )
 
 it.each([
-  ['read', [1, 3]],
-  ['write', [2, 4]],
-  ['both', [1, 2, 3, 4]],
+  ['read', [5]],
+  ['write', [6]],
+  ['both', [5, 6]],
 ] as const)(
   'creates format-independent %s permissions',
   async (mode, scopes) => {

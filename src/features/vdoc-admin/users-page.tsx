@@ -42,6 +42,7 @@ import {
 
 export function UsersPage() {
   const { t } = useLanguage()
+  const currentUserId = useAuthStore((state) => state.auth.user?.id)
   const isSuperAdmin = Boolean(
     useAuthStore((state) => state.auth.user?.is_super_admin)
   )
@@ -56,12 +57,15 @@ export function UsersPage() {
   const [selectedUserId, setSelectedUserId] = useState('')
   const tokenButtonsRef = useRef(new Map<string, HTMLButtonElement>())
   const selectedUser = usersQuery.data?.items.find(
-    (user) => user.id === selectedUserId
+    (user) => user.id === selectedUserId && user.id === currentUserId
   )
   const userTokenQuery = useQuery({
     queryKey: ['user-mcp-tokens', selectedUserId],
     queryFn: ({ signal }) => listUserMCPTokens(selectedUserId, { signal }),
-    enabled: isSuperAdmin && selectedUserId.length > 0,
+    enabled:
+      isSuperAdmin &&
+      selectedUserId === currentUserId &&
+      selectedUserId.length > 0,
   })
   const createMutation = useMutation({
     mutationFn: createUser,
@@ -173,21 +177,23 @@ export function UsersPage() {
                     <div className='font-medium'>{user.email}</div>
                     <div className='mt-1 flex items-center justify-center gap-3 text-xs'>
                       <span className='text-muted-foreground'>{user.name}</span>
-                      <Button
-                        ref={(button) => {
-                          if (button)
-                            tokenButtonsRef.current.set(user.id, button)
-                          else tokenButtonsRef.current.delete(user.id)
-                        }}
-                        type='button'
-                        variant='link'
-                        size='sm'
-                        className='h-auto min-h-6 p-0 text-xs'
-                        aria-pressed={selectedUserId === user.id}
-                        onClick={() => setSelectedUserId(user.id)}
-                      >
-                        {t('admin.actions.viewUserTokens')}
-                      </Button>
+                      {user.id === currentUserId && (
+                        <Button
+                          ref={(button) => {
+                            if (button)
+                              tokenButtonsRef.current.set(user.id, button)
+                            else tokenButtonsRef.current.delete(user.id)
+                          }}
+                          type='button'
+                          variant='link'
+                          size='sm'
+                          className='h-auto min-h-6 p-0 text-xs'
+                          aria-pressed={selectedUserId === user.id}
+                          onClick={() => setSelectedUserId(user.id)}
+                        >
+                          {t('admin.actions.viewUserTokens')}
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>

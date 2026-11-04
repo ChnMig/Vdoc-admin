@@ -90,6 +90,7 @@ export function DateTimePickerField({
         <PopoverContent
           ref={contentRef}
           align='start'
+          collisionPadding={16}
           aria-label={label}
           onOpenAutoFocus={(event) => {
             event.preventDefault()
@@ -99,7 +100,7 @@ export function DateTimePickerField({
               )
               ?.focus()
           }}
-          className='max-h-(--radix-popover-content-available-height) w-[min(20rem,calc(100vw-2rem))] overflow-y-auto p-0'
+          className='max-h-(--radix-popover-content-available-height) w-[min(22rem,calc(100vw-2rem))] overflow-hidden p-0'
         >
           {open && !disabled && (
             <Suspense

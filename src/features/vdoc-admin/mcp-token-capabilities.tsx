@@ -1,31 +1,15 @@
+import { mcpTokenPermissions } from '@/lib/mcp-token-permissions'
 import type { MCPTokenDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { tokenCapabilityCopy } from './mcp-token-capabilities-copy'
-import {
-  SCOPE_API_READ,
-  SCOPE_DOC_READ,
-  tokenIsActive,
-  stringify,
-} from './page-utils'
+import { StatusBadge } from './page-shared'
+import { tokenIsActive, stringify } from './page-utils'
 
 export function TokenCapabilities({ token }: { token: MCPTokenDTO }) {
   const { t, language } = useLanguage()
   const copy = tokenCapabilityCopy[language]
-  const canRead =
-    token.scopes.includes(SCOPE_API_READ) ||
-    token.scopes.includes(SCOPE_DOC_READ)
-  const canWrite = token.scopes.includes(2) || token.scopes.includes(4)
-  const canPatch =
-    (token.scopes.includes(1) && token.scopes.includes(2)) ||
-    (token.scopes.includes(3) && token.scopes.includes(4))
+  const permissions = mcpTokenPermissions(token)
+  const { canRead, canWrite, canPatch } = permissions
   return (
     <section
       aria-label={copy.capabilitiesTitle}
@@ -41,34 +25,38 @@ export function TokenCapabilities({ token }: { token: MCPTokenDTO }) {
             {copy.inactiveCapabilities}
           </p>
         )}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('admin.fields.type')}</TableHead>
-              <TableHead>{t('admin.token.readDocuments')}</TableHead>
-              <TableHead>{t('admin.token.writeDocuments')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(
-              [
-                ['OpenAPI', 1, 2],
-                ['Markdown / TXT', 3, 4],
-              ] as const
-            ).map(([label, read, write]) => (
-              <TableRow key={label}>
-                <TableCell>{label}</TableCell>
-                {[read, write].map((scope) => (
-                  <TableCell key={scope}>
-                    {token.scopes.includes(scope)
-                      ? copy.permissionGranted
-                      : copy.permissionNotGranted}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <dl className='divide-y rounded-md bg-muted/40 px-4'>
+          {(
+            [
+              ['read', t('admin.token.readDocuments'), copy.readSummary],
+              ['write', t('admin.token.writeDocuments'), copy.writeSummary],
+            ] as const
+          ).map(([capability, label, description]) => (
+            <div
+              key={capability}
+              className='flex items-start justify-between gap-4 py-4'
+            >
+              <div className='min-w-0'>
+                <dt className='text-sm font-medium'>{label}</dt>
+                <dd className='mt-1 text-sm leading-relaxed text-muted-foreground'>
+                  {description}
+                </dd>
+              </div>
+              <StatusBadge muted={permissions[capability] === 'none'}>
+                {permissions[capability] === 'full'
+                  ? copy.permissionGranted
+                  : permissions[capability] === 'partial'
+                    ? copy.permissionPartial
+                    : copy.permissionNotGranted}
+              </StatusBadge>
+            </div>
+          ))}
+        </dl>
+        {permissions.legacy && (
+          <p className='text-sm leading-relaxed text-muted-foreground'>
+            {copy.legacyPermissions}
+          </p>
+        )}
         <dl className='grid gap-4 text-sm leading-6'>
           <div>
             <dt className='font-medium'>{copy.allowedActions}</dt>
@@ -109,6 +97,8 @@ function tokenDetails(token: MCPTokenDTO) {
     name: token.name,
     token: token.token,
     scopes: token.scopes,
+    scope_names: token.scope_names,
+    scope_model: token.scope_model,
     status: token.status,
     created_at: token.created_at,
     updated_at: token.updated_at,

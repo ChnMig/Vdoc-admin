@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { AuthenticatedLayout } from './authenticated-layout'
@@ -36,11 +36,14 @@ vi.mock('@/components/ui/sidebar', () => ({
   SidebarProvider: ({
     children,
     open,
+    onOpenChange,
   }: {
     children: React.ReactNode
     open: boolean
+    onOpenChange: (open: boolean) => void
   }) => (
     <div data-testid='sidebar-provider' data-open={open}>
+      <button onClick={() => onOpenChange(!open)}>Toggle sidebar</button>
       {children}
     </div>
   ),
@@ -73,7 +76,7 @@ describe('AuthenticatedLayout audit capability', () => {
   beforeEach(() => {
     useAuthStore.getState().auth.reset()
     routeState.pathname = '/'
-    document.cookie = 'sidebar_state=true; path=/'
+    document.cookie = 'sidebar_state=; path=/; max-age=0'
   })
 
   it.each(['/', '/documents', '/drafts', '/versions', '/diffs'])(
@@ -98,6 +101,7 @@ describe('AuthenticatedLayout audit capability', () => {
 
   it('keeps the saved sidebar preference for management pages', () => {
     routeState.pathname = '/projects'
+    document.cookie = 'sidebar_state=true; path=/'
     const screen = render(
       <AuthenticatedLayout>
         <div>Content</div>
@@ -109,6 +113,43 @@ describe('AuthenticatedLayout audit capability', () => {
     )
     expect(screen.getByTestId('app-sidebar')).toHaveAttribute(
       'data-workspace',
+      'false'
+    )
+  })
+
+  it.each([true, false])(
+    'honors the saved sidebar preference %s on the workspace',
+    (open) => {
+      routeState.pathname = '/documents'
+      document.cookie = `sidebar_state=${open}; path=/`
+      const screen = render(<AuthenticatedLayout />)
+      expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+        'data-open',
+        String(open)
+      )
+    }
+  )
+
+  it('keeps an explicit expansion when switching between workspace and management', () => {
+    const screen = render(<AuthenticatedLayout />)
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }))
+    expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+      'data-open',
+      'true'
+    )
+    for (const pathname of ['/settings', '/mcp-tokens', '/documents']) {
+      routeState.pathname = pathname
+      screen.rerender(<AuthenticatedLayout />)
+      expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+        'data-open',
+        'true'
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle sidebar' }))
+    routeState.pathname = '/settings'
+    screen.rerender(<AuthenticatedLayout />)
+    expect(screen.getByTestId('sidebar-provider')).toHaveAttribute(
+      'data-open',
       'false'
     )
   })

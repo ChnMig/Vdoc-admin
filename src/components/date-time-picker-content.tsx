@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { Clock3 } from 'lucide-react'
 import { type DropdownProps } from 'react-day-picker'
 import { enUS } from 'react-day-picker/locale/en-US'
 import { zhCN } from 'react-day-picker/locale/zh-CN'
@@ -35,10 +36,14 @@ function CalendarDropdown({
         } as ChangeEvent<HTMLSelectElement>)
       }
     >
-      <SelectTrigger aria-label={ariaLabel} size='sm' className='gap-1 px-2'>
+      <SelectTrigger
+        aria-label={ariaLabel}
+        size='sm'
+        className='gap-1 border-transparent bg-transparent px-2 shadow-none hover:bg-muted'
+      >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className='min-w-24'>
         {options?.map((option) => (
           <SelectItem
             key={option.value}
@@ -72,6 +77,13 @@ export default function DateTimePickerContent({
     : undefined
   const hour = localValue.slice(11, 13) || '00'
   const minute = localValue.slice(14, 16) || '00'
+  const [month, setMonth] = useState(selected ?? new Date())
+  function selectDate(date: Date) {
+    setMonth(date)
+    changeValue(
+      `${date.getFullYear()}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}T${hour}:${minute}`
+    )
+  }
 
   useEffect(() => {
     contentRef.current
@@ -82,18 +94,43 @@ export default function DateTimePickerContent({
   }, [])
 
   return (
-    <div ref={contentRef}>
+    <div
+      ref={contentRef}
+      className='flex max-h-(--radix-popover-content-available-height) flex-col'
+    >
+      <div className='flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3'>
+        <div className='min-w-0'>
+          <p className='text-xs text-muted-foreground'>
+            {t('admin.dateTime.selectedDate')}
+          </p>
+          <p className='mt-1 truncate text-sm font-medium'>
+            {selected
+              ? selected.toLocaleDateString(language, {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short',
+                })
+              : t('admin.dateTime.placeholder')}
+          </p>
+        </div>
+        <Button
+          type='button'
+          variant='secondary'
+          size='sm'
+          onClick={() => selectDate(new Date())}
+        >
+          {t('admin.dateTime.today')}
+        </Button>
+      </div>
       <Calendar
         mode='single'
         required
         selected={selected}
-        defaultMonth={selected}
-        onSelect={(date) => {
-          if (!date) return
-          changeValue(
-            `${date.getFullYear()}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}T${hour}:${minute}`
-          )
-        }}
+        month={month}
+        onMonthChange={setMonth}
+        onSelect={(date) => date && selectDate(date)}
+        fixedWeeks
         captionLayout='dropdown'
         startMonth={new Date(1900, 0)}
         endMonth={new Date(new Date().getFullYear() + 100, 11)}
@@ -108,9 +145,14 @@ export default function DateTimePickerContent({
         }}
         autoFocus
         components={{ Dropdown: CalendarDropdown }}
-        className='w-full [--cell-size:--spacing(9)] [&_.rdp-nav]:pointer-events-none [&_.rdp-nav>button]:pointer-events-auto'
+        className='min-h-0 w-full overflow-y-auto p-4 [--cell-size:clamp(2rem,9vw,2.5rem)] [&_.rdp-nav]:pointer-events-none [&_.rdp-nav>button]:pointer-events-auto'
+        classNames={{ dropdown_root: 'relative' }}
       />
-      <div className='grid gap-3 border-t p-3'>
+      <div className='grid shrink-0 gap-3 border-t bg-muted/25 p-4'>
+        <div className='flex items-center gap-2 text-xs font-medium text-muted-foreground'>
+          <Clock3 className='size-3.5' aria-hidden />
+          {t('admin.dateTime.localTime')}
+        </div>
         <div className='grid grid-cols-2 gap-3'>
           {[
             { key: 'hour', selected: hour, options: hours },
@@ -133,7 +175,7 @@ export default function DateTimePickerContent({
               >
                 <SelectTrigger
                   id={`${controlId}-${part.key}`}
-                  className='w-full tabular-nums'
+                  className='h-10 w-full bg-background text-base tabular-nums'
                 >
                   <SelectValue />
                 </SelectTrigger>

@@ -5,6 +5,10 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { useVdocContextStore } from '@/stores/vdoc-context-store'
+import {
+  deleteRepositoryDocument,
+  updateRepositoryDocumentMetadata,
+} from '@/lib/document-management-api'
 import { translate } from '@/lib/i18n'
 import { listRepositoryBranches } from '@/lib/repository-api'
 import { createRepositoryFile } from '@/lib/repository-new-file'
@@ -42,6 +46,10 @@ const api = vi.hoisted(() => ({
 vi.mock('@/lib/vdoc-api', async (load) => ({
   ...(await load<typeof import('@/lib/vdoc-api')>()),
   ...api,
+}))
+vi.mock('@/lib/document-management-api', () => ({
+  deleteRepositoryDocument: vi.fn(),
+  updateRepositoryDocumentMetadata: vi.fn(),
 }))
 vi.mock('@/lib/repository-new-file', () => ({ createRepositoryFile: vi.fn() }))
 vi.mock('@/lib/repository-api', async (load) => ({
@@ -257,6 +265,129 @@ afterEach(() => {
 })
 
 describe('workspace hierarchy', () => {
+  it.each(['delete', 'move'] as const)(
+    'keeps an inferred folder selected when the last document is %s and the folder becomes persistent',
+    async (operation) => {
+      useAuthStore.getState().auth.setUser({ ...user, is_super_admin: true })
+      const source = {
+        ...documents[0],
+        id: 'last-file',
+        name: 'Last file',
+        folder_id: null,
+        relative_path: 'alpha/beta/a.md',
+        file_name: 'a.md',
+        default_branch_id: 'main',
+        default_branch_name: 'main',
+      }
+      let currentDocuments = [source]
+      let persistedFolders: DocumentFolderDTO[] = []
+      api.listDocuments.mockImplementation(async () => ({
+        items: currentDocuments,
+        total: currentDocuments.length,
+      }))
+      api.listDocumentFolders.mockImplementation(async () => ({
+        items: persistedFolders,
+        total: persistedFolders.length,
+      }))
+      const persist = () => {
+        persistedFolders = [
+          folder('stored-alpha', 'alpha', 'alpha'),
+          folder('stored-beta', 'beta', 'alpha/beta', 'stored-alpha'),
+        ]
+      }
+      vi.mocked(deleteRepositoryDocument).mockImplementation(async () => {
+        persist()
+        currentDocuments = []
+        return { deleted: true }
+      })
+      vi.mocked(updateRepositoryDocumentMetadata).mockImplementation(
+        async (_project, _document, update) => {
+          persist()
+          currentDocuments = [
+            {
+              ...source,
+              relative_path: update.relative_path ?? source.relative_path,
+            },
+          ]
+          return currentDocuments[0]
+        }
+      )
+      const onSearchChange = vi.fn()
+      const view = setup({
+        search: {
+          team_id: 'team-a',
+          project_id: 'project-a',
+          folder_id: 'repository-folder:alpha/beta',
+        },
+        onSearchChange,
+      })
+      await view.screen.findByRole('button', { name: 'Last file' })
+      await view.user.click(
+        await view.screen.findByRole('button', {
+          name: 'Document actions: Last file',
+        })
+      )
+      await view.user.click(
+        view.screen.getByRole('menuitem', {
+          name: operation === 'delete' ? 'Delete document' : 'Move document',
+        })
+      )
+      if (operation === 'move') {
+        const dialog = within(
+          view.screen.getByRole('dialog', { name: 'Move document' })
+        )
+        await view.user.click(
+          dialog.getByRole('treeitem', { name: 'Project root' })
+        )
+        await view.user.click(
+          dialog.getByRole('button', { name: 'Move document' })
+        )
+      } else {
+        await view.user.click(
+          within(view.screen.getByRole('alertdialog')).getByRole('button', {
+            name: 'Delete document',
+          })
+        )
+      }
+      await waitFor(() =>
+        expect(
+          view.client
+            .getQueryCache()
+            .findAll({ queryKey: ['document-folders', 'project-a'] })[0]?.state
+            .data
+        ).toEqual({ items: persistedFolders, total: 2 })
+      )
+      const breadcrumb = within(
+        view.screen.getByRole('navigation', { name: 'Current location' })
+      )
+      expect(breadcrumb.getByRole('button', { name: 'alpha' })).toBeVisible()
+      expect(breadcrumb.getByRole('button', { name: 'beta' })).toHaveAttribute(
+        'aria-current',
+        'location'
+      )
+      expect(view.screen.getByRole('heading', { name: 'beta' })).toBeVisible()
+      expect(
+        view.screen.queryByText(translate('en', 'admin.hierarchy.unavailable'))
+      ).not.toBeInTheDocument()
+      expect(
+        view.screen.queryByRole('button', { name: 'Last file' })
+      ).not.toBeInTheDocument()
+      await view.user.click(
+        view.screen.getByRole('button', { name: 'Refresh current folder' })
+      )
+      await waitFor(() =>
+        expect(
+          view.screen.getByRole('button', { name: 'Refresh current folder' })
+        ).toBeEnabled()
+      )
+      expect(breadcrumb.getByRole('button', { name: 'beta' })).toHaveAttribute(
+        'aria-current',
+        'location'
+      )
+      expect(onSearchChange).not.toHaveBeenCalled()
+    }
+  )
+
   it('derives ordinary-user teams from projects and starts without project content', async () => {
     const view = setup()
 

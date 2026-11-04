@@ -51,6 +51,7 @@ import {
   DocumentReadingPreferences,
 } from '@/features/document-reader/document-reader'
 import { useWideDocumentLayout } from './document-layout-hooks'
+import type { DocumentHeaderMenuOptions } from './document-reader-actions'
 import { DocumentToolSidebar } from './document-tool-sidebar'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceOutline } from './document-workspace-outline'
@@ -79,6 +80,7 @@ export function RepositoryWorkspace({
   canWrite,
   interactive,
   navigationActions,
+  renderHeaderMenu,
   onSearchChange,
 }: {
   projectId: string
@@ -90,6 +92,7 @@ export function RepositoryWorkspace({
   canWrite: boolean
   interactive: boolean
   navigationActions?: ReactNode
+  renderHeaderMenu?: (options: DocumentHeaderMenuOptions) => ReactNode
   onSearchChange: (patch: Partial<VdocRouteSearch>, replace?: boolean) => void
 }) {
   const { t, language } = useLanguage()
@@ -136,6 +139,13 @@ export function RepositoryWorkspace({
   const sidebarVisible = sidebarOpen ?? wideLayout
   const sidebarOverlay = expanded || !wideLayout
   const toolTriggerRef = useRef<HTMLButtonElement>(null)
+  const headerMenuRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    // The persistent menu owns its trigger; resolve it after React commits.
+    if (!wideLayout && renderHeaderMenu)
+      toolTriggerRef.current =
+        headerMenuRef.current?.querySelector('button') ?? null
+  })
   const contentRootRef = useRef<HTMLDivElement>(null)
   const scrollRootRef = useRef<HTMLDivElement>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -269,6 +279,34 @@ export function RepositoryWorkspace({
     if (next !== 'outline') setView(next)
     else onSearchChange({ repository_view: view }, true)
   }
+  const closeMobileToolMenu = (event: Event) => {
+    if (!wideLayout && sidebarVisible) {
+      event.preventDefault()
+      requestAnimationFrame(() =>
+        globalThis.document
+          .querySelector<HTMLElement>('.document-tool-sidebar')
+          ?.focus({ preventScroll: true })
+      )
+    }
+  }
+  const mobileToolItems = (
+    <>
+      <DropdownMenuItem
+        onSelect={() => {
+          activateTool('outline')
+        }}
+      >
+        <ListTree aria-hidden />
+        {t('admin.workspace.outline')}
+      </DropdownMenuItem>
+      {toolItems.map(({ id, label, icon: Icon }) => (
+        <DropdownMenuItem key={id} onSelect={() => activateTool(id)}>
+          <Icon aria-hidden />
+          {label}
+        </DropdownMenuItem>
+      ))}
+    </>
+  )
   return (
     <section
       className='flex h-full min-h-0 min-w-0 flex-col bg-card'
@@ -299,47 +337,34 @@ export function RepositoryWorkspace({
           </div>
         </div>
         <div className='ms-auto flex shrink-0 items-center gap-1.5'>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant='ghost'
-                size='icon'
-                className='xl:hidden'
-                aria-label={t('admin.workspace.tools')}
-                ref={!wideLayout ? toolTriggerRef : undefined}
+          {renderHeaderMenu ? (
+            <div ref={headerMenuRef} className='contents'>
+              {renderHeaderMenu({
+                tools: !wideLayout ? <>{mobileToolItems}</> : undefined,
+                onCloseAutoFocus: closeMobileToolMenu,
+              })}
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='icon'
+                  className='xl:hidden'
+                  aria-label={t('admin.workspace.tools')}
+                  ref={!wideLayout ? toolTriggerRef : undefined}
+                >
+                  <MoreHorizontal aria-hidden />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align='end'
+                onCloseAutoFocus={closeMobileToolMenu}
               >
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align='end'
-              onCloseAutoFocus={(event) => {
-                if (!wideLayout && sidebarVisible) {
-                  event.preventDefault()
-                  requestAnimationFrame(() =>
-                    globalThis.document
-                      .querySelector<HTMLElement>('.document-tool-sidebar')
-                      ?.focus({ preventScroll: true })
-                  )
-                }
-              }}
-            >
-              <DropdownMenuItem
-                onSelect={() => {
-                  activateTool('outline')
-                }}
-              >
-                <ListTree aria-hidden />
-                {t('admin.workspace.outline')}
-              </DropdownMenuItem>
-              {toolItems.map(({ id, label, icon: Icon }) => (
-                <DropdownMenuItem key={id} onSelect={() => activateTool(id)}>
-                  <Icon aria-hidden />
-                  {label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                {mobileToolItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {canManage && document && (
             <RepositoryDocumentShareDialog
               key={`${sessionVersion}:${repositoryScopeKey(repositoryScope)}:${commitId}`}

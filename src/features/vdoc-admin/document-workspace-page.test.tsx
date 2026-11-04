@@ -940,7 +940,8 @@ describe('document workspace', () => {
     expect(
       screen.getByRole('heading', { name: 'Published guide' })
     ).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'New folder' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'New folder' }))
     const dialog = within(
       await screen.findByRole('dialog', { name: 'New folder' })
     )

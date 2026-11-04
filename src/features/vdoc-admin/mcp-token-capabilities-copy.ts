@@ -7,15 +7,20 @@ const en = {
     'This token is revoked or expired and cannot call tools. Its original permissions are shown below.',
   permissionGranted: 'Granted',
   permissionNotGranted: 'Not granted',
+  permissionPartial: 'Limited · legacy',
+  readSummary: 'Discover, search and read content and history.',
+  writeSummary: 'Create, update, move and delete authorized resources.',
+  legacyPermissions:
+    'This token keeps its original authorization. Limited permissions do not cover every document. Create a new token to use unified capabilities.',
   allowedActions: 'Allowed operations',
   readCapabilities:
     'Discover teams, projects and folders; search and read authorized documents, full source, versions and comparisons.',
   writeCapabilities:
-    'Create authorized document types, branches, saved versions and merge requests; rename and move documents, and manage folders. Writing does not grant reading.',
+    'Create documents, branches, saved versions and merge requests; rename and move documents, and manage folders. Writing does not grant reading.',
   managementCapabilities:
-    'Renaming, moving or deleting documents and managing folders require a project administrator. Only empty folders can be deleted. Document deletion disables its public shares. Folder changes require write permission for every affected document type.',
+    'Renaming, moving or deleting documents and managing folders require a project administrator. Only empty folders can be deleted. Document deletion disables its public shares.',
   patchCapabilities:
-    'Apply exact text changes to document types with both read and write permissions.',
+    'Apply exact text changes when both read and write permissions are granted.',
   noKnownCapabilities: 'No supported document permissions are granted.',
   accessBoundary: 'Access boundary',
   crossProjectAccess:
@@ -32,14 +37,19 @@ const zhCN = {
     '此密钥已撤销或过期，无法调用工具。下方展示其原有授权。',
   permissionGranted: '已授权',
   permissionNotGranted: '未授权',
+  permissionPartial: '部分授权 · 旧密钥',
+  readSummary: '查找资源，搜索和读取内容与历史。',
+  writeSummary: '创建、修改、移动和删除已授权资源。',
+  legacyPermissions:
+    '此密钥保留原有授权，部分授权不代表可以操作所有文档。新建密钥即可使用统一的能力权限。',
   allowedActions: '可执行操作',
   readCapabilities:
-    '查找团队、项目和文件夹；搜索、读取已授权类型的文档、完整原文、历史版本和差异。',
+    '查找团队、项目和文件夹；搜索、读取已授权文档、完整原文、历史版本和差异。',
   writeCapabilities:
-    '创建已授权类型的文档、分支、新版本和合并请求；重命名、移动文档和管理文件夹。写入权限不包含读取权限。',
+    '创建文档、分支、新版本和合并请求；重命名、移动文档和管理文件夹。写入权限不包含读取权限。',
   managementCapabilities:
-    '重命名、移动、删除文档和管理文件夹需要项目管理员权限；只能删除空文件夹。删除文档也会停用其公开分享。文件夹变更需要具备所有受影响文档类型的写入权限。',
-  patchCapabilities: '对同时具备读写权限的文档类型执行精确文本修改。',
+    '重命名、移动、删除文档和管理文件夹需要项目管理员权限；只能删除空文件夹。删除文档也会停用其公开分享。',
+  patchCapabilities: '同时具备读写权限时，可执行精确文本修改。',
   noKnownCapabilities: '未授予受支持的文档权限。',
   accessBoundary: '访问边界',
   crossProjectAccess:

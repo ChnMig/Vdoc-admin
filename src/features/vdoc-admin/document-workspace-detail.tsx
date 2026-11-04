@@ -35,6 +35,7 @@ import { RepositoryLink } from '@/components/repository-link'
 import { DocumentReadingPreferences } from '@/features/document-reader/document-reader'
 import { DocumentAssistantPanel } from './document-assistant-panel'
 import { useWideDocumentLayout } from './document-layout-hooks'
+import type { DocumentHeaderMenuOptions } from './document-reader-actions'
 import { DocumentTypeIcon } from './document-type-icon'
 import { DocumentWorkspaceContent } from './document-workspace-content'
 import { emptyDocumentSelection } from './document-workspace-model'
@@ -95,6 +96,7 @@ export function DocumentWorkspaceDetail({
   interactive,
   onSearchChange,
   navigationActions,
+  renderHeaderMenu,
   projectName,
 }: {
   projectId: string
@@ -106,6 +108,7 @@ export function DocumentWorkspaceDetail({
   interactive: boolean
   onSearchChange: (patch: Partial<VdocRouteSearch>, replace?: boolean) => void
   navigationActions?: ReactNode
+  renderHeaderMenu?: (options: DocumentHeaderMenuOptions) => ReactNode
   projectName?: string
 }) {
   const { t, language } = useLanguage()
@@ -309,6 +312,7 @@ export function DocumentWorkspaceDetail({
           </div>
         </div>
         <div className='ms-auto flex shrink-0 items-center gap-1.5'>
+          {renderHeaderMenu?.({})}
           <Button
             variant='ghost'
             size='icon'

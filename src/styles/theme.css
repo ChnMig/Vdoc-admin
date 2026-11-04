@@ -2,8 +2,11 @@
   --radius: 0.5rem;
   --motion-duration-fast: 150ms;
   --motion-duration-panel: 220ms;
+  --motion-duration-overlay: 180ms;
+  --motion-duration-exit: 120ms;
   --motion-duration-route: 160ms;
   --motion-ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --overlay-backdrop: oklch(0.12 0.02 258 / 40%);
   --background: oklch(0.973 0.004 255.8);
   --foreground: oklch(0.155 0.035 258.6);
   --card: oklch(0.995 0.002 255.8);
@@ -46,6 +49,9 @@
     0 1px 2px oklch(0.18 0.036 258.6 / 7%),
     0 4px 8px oklch(0.18 0.036 258.6 / 4%);
   --shadow-panel: inset 0 1px 0 oklch(1 0 0 / 82%);
+  --shadow-overlay:
+    0 8px 20px oklch(0.18 0.036 258.6 / 9%),
+    0 24px 64px oklch(0.18 0.036 258.6 / 12%);
   --z-sticky: 40;
   --z-skip-link: 60;
 
@@ -60,6 +66,7 @@
 }
 
 .dark {
+  --overlay-backdrop: oklch(0.08 0.02 258 / 64%);
   --background: oklch(0.142 0.034 258.6);
   --foreground: oklch(0.968 0.004 255.8);
   --card: oklch(0.18 0.035 258.6);
@@ -99,6 +106,8 @@
   --status-danger-surface: oklch(0.3 0.06 24.6);
   --shadow-card: 0 1px 2px oklch(0 0 0 / 22%), 0 4px 8px oklch(0 0 0 / 14%);
   --shadow-panel: inset 0 1px 0 oklch(1 0 0 / 7%);
+  --shadow-overlay:
+    0 8px 20px oklch(0 0 0 / 24%), 0 24px 64px oklch(0 0 0 / 32%);
   --sidebar: oklch(0.16 0.034 258.6);
 }
 

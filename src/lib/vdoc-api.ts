@@ -372,6 +372,8 @@ export type MCPTokenDTO = {
   name: string
   token?: string
   scopes: number[]
+  scope_names?: string[]
+  scope_model?: 'capability' | 'legacy' | 'mixed'
   status: number
   created_at: string
   updated_at: string

@@ -174,10 +174,11 @@ describe('initial document upload session ownership', () => {
       try {
         const user = userEvent.setup()
         const newButton = await view.findByRole('button', {
-          name: 'New document',
+          name: 'More actions',
         })
         await waitFor(() => expect(newButton).toBeEnabled())
         await user.click(newButton)
+        await user.click(view.getByRole('menuitem', { name: 'New document' }))
         const dialog = within(
           view.getByRole('dialog', { name: 'New document' })
         )

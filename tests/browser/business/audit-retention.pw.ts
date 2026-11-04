@@ -159,7 +159,7 @@ for (const width of [1440, 390]) {
     await dialog.getByRole('button', { name: '创建', exact: true }).click()
     await expect(dialog).toHaveCount(0)
     expect(created).toEqual([
-      { name: '测试文档助手', scopes: [1, 2, 3, 4], expires_at: null },
+      { name: '测试文档助手', scopes: [5, 6], expires_at: null },
     ])
   })
 }

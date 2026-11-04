@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
 import type { RepositoryDocument } from '../../../src/lib/repository-api'
-import { selectOption } from '../helpers/select-option'
 import {
   documentId,
   installRepository,
@@ -149,13 +148,10 @@ for (const width of [1280, 390]) {
       name: 'Move document',
       exact: true,
     })
-    await selectOption(
-      move.getByRole('combobox', { name: 'Destination folder' }),
-      'folder:Archive'
-    )
+    await move.getByRole('treeitem', { name: 'Archive', exact: true }).click()
     await expect(page.getByRole('listbox')).toHaveCount(0)
     await page.screenshot({
-      path: `.artifacts/document-crud/list-move-${width}.png`,
+      path: `.artifacts/workspace-quality/list-move-${width}.png`,
     })
     await move
       .getByRole('button', { name: 'Move document', exact: true })
@@ -177,10 +173,9 @@ for (const width of [1280, 390]) {
     await page
       .getByRole('menuitem', { name: 'Move document', exact: true })
       .click()
-    await selectOption(
-      move.getByRole('combobox', { name: 'Destination folder' }),
-      'project-root'
-    )
+    await move
+      .getByRole('treeitem', { name: 'Project root', exact: true })
+      .click()
     await move
       .getByRole('button', { name: 'Move document', exact: true })
       .click()
@@ -189,7 +184,7 @@ for (const width of [1280, 390]) {
     await openMenu()
     await expect(page.getByRole('menu')).toHaveCSS('opacity', '1')
     await page.screenshot({
-      path: `.artifacts/document-crud/reader-menu-${width}.png`,
+      path: `.artifacts/workspace-quality/reader-menu-${width}.png`,
     })
     await page
       .getByRole('menuitem', { name: 'Delete document', exact: true })
@@ -211,7 +206,7 @@ for (const width of [1280, 390]) {
       'Please retry this operation.'
     )
     await page.screenshot({
-      path: `.artifacts/document-crud/delete-retry-${width}.png`,
+      path: `.artifacts/workspace-quality/delete-retry-${width}.png`,
     })
     await deletion
       .getByRole('button', { name: 'Delete document', exact: true })

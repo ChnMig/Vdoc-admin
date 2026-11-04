@@ -16,6 +16,7 @@ import {
   FolderGit2,
   FolderOpen,
   FolderTree,
+  RefreshCw,
   Search as SearchIcon,
   Settings2,
   Users,
@@ -53,7 +54,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
-import { DocumentFolderActions } from './document-folder-actions'
 import { DocumentTypeIcon } from './document-type-icon'
 import {
   documentSelection,
@@ -82,6 +82,11 @@ const ProjectsPage = lazy(() =>
 const DocumentFormFields = lazy(() =>
   import('./document-form-fields').then((module) => ({
     default: module.DocumentFormFields,
+  }))
+)
+const DocumentFolderActions = lazy(() =>
+  import('./document-folder-actions').then((module) => ({
+    default: module.DocumentFolderActions,
   }))
 )
 const DocumentActions = lazy(() =>
@@ -231,7 +236,15 @@ export function WorkspaceHierarchyPage({
         (parent) => parent.path === item.path.split('/').slice(0, -1).join('/')
       )?.id ?? null,
   }))
-  const folder = folders.find((item) => item.id === folderId)
+  const inferredFolderPath = folderId.startsWith('repository-folder:')
+    ? folderId.slice('repository-folder:'.length)
+    : undefined
+  const folder = folders.find(
+    (item) => item.id === folderId || item.path === inferredFolderPath
+  )
+  // Older URLs identify inferred directories by path. Persistence may replace
+  // those IDs after their last document is deleted or moved.
+  const activeFolderId = folder?.id ?? folderId
   const canManageProject = Boolean(
     isSuperAdmin ||
     activeProjectRole(membersQuery.data?.items, user?.id) === ROLE_ADMIN
@@ -419,7 +432,7 @@ export function WorkspaceHierarchyPage({
   const visibleFolders = folders
     .filter(
       (item) =>
-        (item.parent_id ?? '') === folderId &&
+        (item.parent_id ?? '') === activeFolderId &&
         (!normalizedFileFilter ||
           item.name.toLocaleLowerCase().includes(normalizedFileFilter))
     )
@@ -428,19 +441,52 @@ export function WorkspaceHierarchyPage({
     .filter(
       (item) =>
         item.status === ACTIVE_STATUS &&
-        documentFolderId(item, folders) === folderId &&
+        documentFolderId(item, folders) === activeFolderId &&
         (!normalizedFileFilter ||
           `${item.name} ${item.file_name ?? ''}`
             .toLocaleLowerCase()
             .includes(normalizedFileFilter))
     )
     .sort((left, right) => left.name.localeCompare(right.name, language))
-  const breadcrumbFolders = folderAncestors(folderId, folders)
+  const breadcrumbFolders = folderAncestors(activeFolderId, folders)
   const management = panel !== 'browse' && isSuperAdmin
   const listLoading =
     projectsQuery.isLoading || (isSuperAdmin && teamsQuery.isLoading)
   const listError =
     projectsQuery.error ?? (isSuperAdmin ? teamsQuery.error : null)
+  const folderNonempty = (item: DocumentFolderDTO) => {
+    const prefix = `${item.path.toLocaleLowerCase()}/`
+    return (
+      folders.some((candidate) =>
+        candidate.path.toLocaleLowerCase().startsWith(prefix)
+      ) ||
+      (documentsQuery.data ?? []).some((candidate) =>
+        candidate.relative_path?.toLocaleLowerCase().startsWith(prefix)
+      )
+    )
+  }
+  const currentFolderChanged = (updated: DocumentFolderDTO | null) =>
+    selectFolder(updated?.id ?? folder?.parent_id ?? '')
+  const renderFolderActions = (item: DocumentFolderDTO, selected = false) =>
+    canCreateDocument && (
+      <Suspense fallback={<span className='size-9 shrink-0' />}>
+        <DocumentFolderActions
+          projectId={projectId}
+          folder={item}
+          folders={folders}
+          nonempty={folderNonempty(item)}
+          disabled={
+            foldersQuery.isPending ||
+            foldersQuery.isError ||
+            documentsQuery.isError
+          }
+          submissionScope={scope}
+          isCurrent={() => currentScope.current === scope}
+          onChanged={selected ? currentFolderChanged : undefined}
+        />
+      </Suspense>
+    )
+  const refreshingFolder = documentsQuery.isFetching || foldersQuery.isFetching
   const createTeamAction = isSuperAdmin && (
     <FormDialog
       title={t('admin.sections.createTeam')}
@@ -690,15 +736,15 @@ export function WorkspaceHierarchyPage({
             )}
           </aside>
           <section className='min-w-0'>
-            <div className='border-b px-5 py-3'>
+            <div className='flex min-w-0 items-start justify-between gap-2 border-b px-4 py-2.5 sm:px-5'>
               <nav
                 aria-label={t('admin.hierarchy.breadcrumb')}
-                className='flex min-h-6 flex-wrap items-center gap-1 text-xs text-muted-foreground'
+                className='flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-1 text-sm text-muted-foreground'
               >
                 <button
                   type='button'
                   onClick={() => selectScope()}
-                  className='rounded px-1 py-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                  className='min-h-9 rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
                 >
                   {t('admin.hierarchy.allTeams')}
                 </button>
@@ -708,7 +754,8 @@ export function WorkspaceHierarchyPage({
                     <button
                       type='button'
                       onClick={() => selectScope(team.id)}
-                      className='max-w-48 truncate rounded px-1 py-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                      title={team.name}
+                      className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
                     >
                       {team.name}
                     </button>
@@ -720,7 +767,9 @@ export function WorkspaceHierarchyPage({
                     <button
                       type='button'
                       onClick={() => selectFolder('')}
-                      className='max-w-48 truncate rounded px-1 py-1 font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                      title={project.name}
+                      aria-current={!folderId ? 'location' : undefined}
+                      className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md bg-muted/40 px-2 font-medium text-foreground underline decoration-border underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring'
                     >
                       {project.name}
                     </button>
@@ -734,7 +783,11 @@ export function WorkspaceHierarchyPage({
                       <button
                         type='button'
                         onClick={() => selectFolder(item.id)}
-                        className='max-w-40 truncate rounded px-1 py-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                        title={item.path}
+                        aria-current={
+                          item.id === activeFolderId ? 'location' : undefined
+                        }
+                        className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=location]:bg-muted/60 aria-[current=location]:font-medium aria-[current=location]:text-foreground'
                       >
                         {item.name}
                       </button>
@@ -753,6 +806,39 @@ export function WorkspaceHierarchyPage({
                   </>
                 )}
               </nav>
+              {project && !management && (
+                <div className='flex shrink-0 items-center gap-1'>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    className='size-9'
+                    disabled={refreshingFolder}
+                    aria-label={t(
+                      refreshingFolder
+                        ? 'admin.workspace.refreshingFolder'
+                        : 'admin.workspace.refreshFolder'
+                    )}
+                    title={t('admin.workspace.refreshFolder')}
+                    onClick={() => {
+                      void Promise.all([
+                        documentsQuery.refetch(),
+                        foldersQuery.refetch(),
+                      ])
+                    }}
+                  >
+                    <RefreshCw
+                      aria-hidden
+                      className={cn(
+                        'size-4',
+                        refreshingFolder &&
+                          'animate-spin motion-reduce:animate-none'
+                      )}
+                    />
+                  </Button>
+                  {folder && renderFolderActions(folder, true)}
+                </div>
+              )}
             </div>
             <div className='min-w-0 p-4 sm:p-6'>
               <LoadingErrorState
@@ -985,42 +1071,6 @@ export function WorkspaceHierarchyPage({
                                   )}
                                 </div>
                               </div>
-                              {canCreateDocument && folder && (
-                                <div className='mb-4'>
-                                  <DocumentFolderActions
-                                    key={`${projectId}:${folder.path}`}
-                                    projectId={projectId}
-                                    folder={folder}
-                                    folders={folders}
-                                    nonempty={
-                                      folders.some(
-                                        (item) => item.parent_id === folder.id
-                                      ) ||
-                                      (documentsQuery.data ?? []).some((item) =>
-                                        item.relative_path
-                                          ?.toLocaleLowerCase()
-                                          .startsWith(
-                                            `${folder.path.toLocaleLowerCase()}/`
-                                          )
-                                      )
-                                    }
-                                    disabled={
-                                      foldersQuery.isPending ||
-                                      foldersQuery.isError ||
-                                      documentsQuery.isError
-                                    }
-                                    submissionScope={scope}
-                                    isCurrent={() =>
-                                      currentScope.current === scope
-                                    }
-                                    onChanged={(updated) =>
-                                      selectFolder(
-                                        updated?.id ?? folder.parent_id ?? ''
-                                      )
-                                    }
-                                  />
-                                </div>
-                              )}
                               <LoadingErrorState
                                 state={{
                                   isLoading: false,
@@ -1054,6 +1104,7 @@ export function WorkspaceHierarchyPage({
                                         name={item.name}
                                         onClick={() => selectFolder(item.id)}
                                         detail={item.path}
+                                        actions={renderFolderActions(item)}
                                       />
                                     ))}
                                     {visibleDocuments.map((item) => (
@@ -1389,9 +1440,17 @@ function ManagementFallback({ children }: { children: React.ReactNode }) {
 }
 
 function documentFolderId(document: DocumentDTO, folders: DocumentFolderDTO[]) {
-  if (document.folder_id) return document.folder_id
+  if (
+    document.folder_id &&
+    folders.some((folder) => folder.id === document.folder_id)
+  )
+    return document.folder_id
   const path = document.relative_path?.split('/').slice(0, -1).join('/')
-  return path ? (folders.find((folder) => folder.path === path)?.id ?? '') : ''
+  return path
+    ? (folders.find((folder) => folder.path === path)?.id ??
+        document.folder_id ??
+        '')
+    : (document.folder_id ?? '')
 }
 
 function folderAncestors(folderId: string, folders: DocumentFolderDTO[]) {

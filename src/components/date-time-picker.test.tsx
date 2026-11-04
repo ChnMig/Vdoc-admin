@@ -63,4 +63,39 @@ describe('DateTimePickerField form behavior', () => {
       new FormData(view.container.querySelector('form')!).has('expires_at')
     ).toBe(false)
   })
+
+  it('returns to the current month with Today and preserves the chosen local time', async () => {
+    const user = userEvent.setup()
+    const view = render(
+      <form>
+        <DateTimePickerField
+          label='Expiry'
+          name='expires_at'
+          defaultValue='2099-01-15T18:30'
+        />
+      </form>
+    )
+    await user.click(screen.getByRole('button', { name: 'Expiry' }))
+    const picker = screen.getByRole('dialog', { name: 'Expiry' })
+    await user.click(
+      await within(picker).findByRole('button', { name: 'Today' })
+    )
+    const today = new Date()
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const form = view.container.querySelector('form')!
+    expect(new FormData(form).get('expires_at')).toBe(`${date}T18:30`)
+    expect(
+      within(picker).getByRole('combobox', { name: 'Year' })
+    ).toHaveTextContent(String(today.getFullYear()))
+    await user.click(within(picker).getByRole('combobox', { name: 'Hour' }))
+    await user.click(screen.getByRole('option', { name: '22' }))
+    await user.click(within(picker).getByRole('combobox', { name: 'Minute' }))
+    await user.click(screen.getByRole('option', { name: '45' }))
+    expect(new FormData(form).get('expires_at')).toBe(`${date}T22:45`)
+    await user.click(within(picker).getByRole('button', { name: 'Done' }))
+    expect(
+      screen.queryByRole('dialog', { name: 'Expiry' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expiry' })).toHaveFocus()
+  })
 })

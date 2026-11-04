@@ -197,10 +197,7 @@ describe('document management', () => {
       const dialog = within(
         screen.getByRole('dialog', { name: 'Move document' })
       )
-      await user.click(
-        dialog.getByRole('combobox', { name: 'Destination folder' })
-      )
-      await user.click(screen.getByRole('option', { name: option }))
+      await user.click(dialog.getByRole('treeitem', { name: option }))
       await user.click(dialog.getByRole('button', { name: 'Move document' }))
       await waitFor(() =>
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
