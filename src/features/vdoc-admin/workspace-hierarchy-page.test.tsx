@@ -734,7 +734,7 @@ describe('workspace hierarchy', () => {
     await view.user.click(dialog.getByRole('button', { name: 'Create' }))
     await waitFor(() =>
       expect(api.createDocumentFolder).toHaveBeenCalledWith('project-a', {
-        parent_id: null,
+        parent_path: '',
         name: 'New folder',
       })
     )

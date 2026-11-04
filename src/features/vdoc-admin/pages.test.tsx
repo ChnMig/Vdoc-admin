@@ -1580,7 +1580,9 @@ describe('MCPTokensPage secret lifecycle', () => {
     }
     const user = userEvent.setup()
     const screen = renderPage(<TokenRouteHarness />)
-    const firstTokenRow = (await screen.findByText(token.name)).closest('tr')
+    const firstTokenRow = (await screen.findAllByText(token.name))
+      .map((element) => element.closest('tr'))
+      .find((row) => row !== null)
     if (!(firstTokenRow instanceof HTMLElement)) {
       throw new Error('missing first token row')
     }
