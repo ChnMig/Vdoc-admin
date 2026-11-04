@@ -53,6 +53,7 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { DocumentFolderActions } from './document-folder-actions'
 import { DocumentTypeIcon } from './document-type-icon'
 import {
   documentSelection,
@@ -379,12 +380,12 @@ export function WorkspaceHierarchyPage({
     mutationFn: (
       request: MutationScope & {
         projectId: string
-        parentId: string
+        parentPath: string
         name: string
       }
     ) =>
       createDocumentFolder(request.projectId, {
-        parent_id: request.parentId || null,
+        parent_path: request.parentPath,
         name: request.name,
       }),
     onSuccess: async (result, request) => {
@@ -909,7 +910,7 @@ export function WorkspaceHierarchyPage({
                                         onSubmit={(formData) =>
                                           folderMutation.mutateAsync({
                                             projectId,
-                                            parentId: folderId,
+                                            parentPath: folder?.path ?? '',
                                             name: fieldValue(formData, 'name'),
                                             owner: scope,
                                             sessionVersion,
@@ -978,6 +979,42 @@ export function WorkspaceHierarchyPage({
                                   )}
                                 </div>
                               </div>
+                              {canCreateDocument && folder && (
+                                <div className='mb-4'>
+                                  <DocumentFolderActions
+                                    key={`${projectId}:${folder.path}`}
+                                    projectId={projectId}
+                                    folder={folder}
+                                    folders={folders}
+                                    nonempty={
+                                      folders.some(
+                                        (item) => item.parent_id === folder.id
+                                      ) ||
+                                      (documentsQuery.data ?? []).some((item) =>
+                                        item.relative_path
+                                          ?.toLocaleLowerCase()
+                                          .startsWith(
+                                            `${folder.path.toLocaleLowerCase()}/`
+                                          )
+                                      )
+                                    }
+                                    disabled={
+                                      foldersQuery.isPending ||
+                                      foldersQuery.isError ||
+                                      documentsQuery.isError
+                                    }
+                                    submissionScope={scope}
+                                    isCurrent={() =>
+                                      currentScope.current === scope
+                                    }
+                                    onChanged={(updated) =>
+                                      selectFolder(
+                                        updated?.id ?? folder.parent_id ?? ''
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )}
                               <LoadingErrorState
                                 state={{
                                   isLoading: false,

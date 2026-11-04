@@ -104,6 +104,66 @@ async function fixture(page: Page) {
 }
 
 for (const width of [1280, 390]) {
+  test(`output tokens support no limit and restore custom values at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await fixture(page)
+    await page.goto('/settings')
+    await page.getByRole('tab', { name: 'AI', exact: true }).click()
+    const input = page.getByRole('spinbutton', {
+      name: 'Max output tokens',
+      exact: true,
+    })
+    const unlimited = page.getByRole('switch', {
+      name: 'Max output tokens · No limit',
+    })
+    await expect(input).toHaveValue('1000')
+    await input.fill('8192')
+    await unlimited.click()
+    await expect(input).toBeDisabled()
+    await unlimited.click()
+    await expect(input).toHaveValue('8192')
+    await unlimited.focus()
+    await unlimited.press('Space')
+    await expect(unlimited).toBeChecked()
+    await page
+      .getByRole('button', { name: 'Save system provider', exact: true })
+      .click()
+    await expect.poll(() => state.saves.at(-1)?.body.max_output_tokens).toBe(0)
+    await page.reload()
+    await page.getByRole('tab', { name: 'AI', exact: true }).click()
+    await expect(unlimited).toBeChecked()
+    await expect(input).toBeDisabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      )
+    ).toBe(true)
+    await input.scrollIntoViewIfNeeded()
+    await page.screenshot({
+      path: `.artifacts/entity-lists/ai-output-unlimited-${width}.png`,
+      fullPage: width === 1280,
+    })
+    await page
+      .getByRole('tab', { name: 'Project override', exact: true })
+      .click()
+    const projectInput = page.getByRole('spinbutton', {
+      name: 'Max output tokens',
+      exact: true,
+    })
+    const projectUnlimited = page.getByRole('switch', {
+      name: 'Max output tokens · No limit',
+    })
+    await expect(projectInput).toHaveValue('1000')
+    await projectUnlimited.click()
+    await page
+      .getByRole('button', { name: 'Save project provider', exact: true })
+      .click()
+    await expect.poll(() => state.saves.at(-1)?.path).toBe(projectPath)
+    expect(state.saves.at(-1)?.body.max_output_tokens).toBe(0)
+  })
+
   test(`remote model selection and custom fallback at ${width}px`, async ({
     page,
     context,

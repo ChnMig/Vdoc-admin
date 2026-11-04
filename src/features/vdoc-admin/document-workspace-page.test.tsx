@@ -949,7 +949,7 @@ describe('document workspace', () => {
     await userEvent.click(dialog.getByRole('button', { name: 'Create folder' }))
     await waitFor(() =>
       expect(api.createDocumentFolder).toHaveBeenCalledWith('project-1', {
-        parent_id: null,
+        parent_path: '',
         name: 'Release notes',
       })
     )

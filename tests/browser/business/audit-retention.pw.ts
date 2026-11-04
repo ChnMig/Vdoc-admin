@@ -145,7 +145,7 @@ for (const width of [1440, 390]) {
     await expect(
       dialog.getByRole('checkbox', { name: '读取文档' })
     ).toBeChecked()
-    await dialog.getByRole('checkbox', { name: '创建和更新草稿' }).check()
+    await dialog.getByRole('checkbox', { name: '写入文档' }).check()
     await dialog.getByLabel('名称', { exact: true }).fill('测试文档助手')
     await page.screenshot({
       path: resolve(directory, `${size}-mcp.png`),

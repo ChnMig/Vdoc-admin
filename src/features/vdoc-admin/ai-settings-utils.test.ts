@@ -9,6 +9,12 @@ import {
 } from './ai-settings-utils'
 
 describe('providerPayload', () => {
+  it('preserves the zero output-token sentinel', () => {
+    expect(
+      providerPayload(providerFormData({ max_output_tokens: '0' }))
+        .max_output_tokens
+    ).toBe(0)
+  })
   it('parses tuning fields and preserves zero temperature', () => {
     const formData = providerFormData({
       api_key: '   ',

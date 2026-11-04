@@ -34,7 +34,7 @@ async function envelope(route: Route, detail: unknown) {
     headers: {
       'access-control-allow-origin': '*',
       'access-control-allow-headers': 'Authorization, Content-Type',
-      'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     },
     contentType: 'application/json',
     body: JSON.stringify({
@@ -172,6 +172,12 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
     if (method === 'GET') {
       reads[path] = (reads[path] ?? 0) + 1
       if (lists[path]) return envelope(route, lists[path])
+      if (path.startsWith(`${rootPath}/mcp-tokens/`)) {
+        const token = lists[`${rootPath}/mcp-tokens`].find((item) =>
+          path.endsWith(`/${item.id}`)
+        )
+        return envelope(route, { ...token, token: syntheticSecret })
+      }
       if (path.endsWith('/overview'))
         return envelope(route, {
           version_count: 0,
@@ -231,9 +237,13 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
       }
       if (path === `${rootPath}/projects/${projectId}/folders`) {
         const parent = lists[path].find(
-          (folder) => folder.id === body.parent_id
+          (folder) =>
+            folder.id === body.parent_id || folder.path === body.parent_path
         )
-        next.path = [parent?.path, body.name].filter(Boolean).join('/')
+        next.path = [parent?.path ?? body.parent_path, body.name]
+          .filter(Boolean)
+          .join('/')
+        next.parent_id = parent?.id ?? null
       }
       lists[path].push(next)
       return envelope(
@@ -242,6 +252,35 @@ async function fixture(page: Page, options: FixtureOptions = {}) {
           ? { ...next, token: syntheticSecret }
           : next
       )
+    }
+    if (
+      path === `${rootPath}/projects/${projectId}/folders` &&
+      (method === 'PATCH' || method === 'DELETE')
+    ) {
+      const folders = lists[path]
+      const item = folders.find((folder) => folder.path === body.path)!
+      if (method === 'DELETE') {
+        lists[path] = folders.filter((folder) => folder.id !== item.id)
+        return envelope(route, { deleted: true })
+      }
+      const oldPath = String(item.path)
+      const parentPath =
+        body.parent_path === undefined
+          ? oldPath.split('/').slice(0, -1).join('/')
+          : String(body.parent_path)
+      const newPath = [parentPath, body.name ?? item.name]
+        .filter(Boolean)
+        .join('/')
+      item.name = String(body.name ?? item.name)
+      item.parent_id =
+        folders.find((folder) => folder.path === parentPath)?.id ?? null
+      for (const resource of [...folders, ...lists[documentPath]]) {
+        const field = resource.path === undefined ? 'relative_path' : 'path'
+        const old = String(resource[field])
+        if (old === oldPath || old.startsWith(`${oldPath}/`))
+          resource[field] = newPath + old.slice(oldPath.length)
+      }
+      return envelope(route, item)
     }
     if (method === 'PATCH') {
       const listPath = path.slice(0, path.lastIndexOf('/'))
@@ -297,6 +336,170 @@ const cases = [
     label: 'Documentation agent',
   },
 ]
+
+test('collapsed sidebar links have unobstructed clickable edges and keyboard access', async ({
+  page,
+}) => {
+  await fixture(page)
+  await page.goto('/teams')
+  await page.locator('[data-sidebar="trigger"]').click()
+  for (const name of ['Workspace', 'MCP Tokens']) {
+    const link = page.getByRole('link', { name, exact: true })
+    await expect(link).toBeVisible()
+    await expect
+      .poll(async () => (await link.boundingBox())?.width)
+      .toBeGreaterThanOrEqual(40)
+    const box = (await link.boundingBox())!
+    expect(box.height).toBeGreaterThanOrEqual(40)
+    await expect
+      .poll(async () =>
+        link.evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return [
+            [2, 2],
+            [box.width - 2, 2],
+            [2, box.height - 2],
+            [box.width - 2, box.height - 2],
+          ].map(([x, y]) => {
+            const rect = element.getBoundingClientRect()
+            const target = document.elementFromPoint(rect.x + x, rect.y + y)
+            return element.contains(target)
+              ? 'link'
+              : target?.outerHTML.slice(0, 700)
+          })
+        })
+      )
+      .toEqual(['link', 'link', 'link', 'link'])
+    await link.click({ position: { x: 3, y: box.height - 3 } })
+    await expect(page).toHaveURL(
+      name === 'Workspace' ? /\/documents(?:\?|$)/ : /\/mcp-tokens(?:\?|$)/
+    )
+  }
+  const workspace = page.getByRole('link', { name: 'Workspace', exact: true })
+  await workspace.hover()
+  await expect(
+    page.getByRole('tooltip', { name: 'Workspace', exact: true })
+  ).toBeVisible()
+  await workspace.focus()
+  await workspace.press('Enter')
+  await expect(page).toHaveURL(/\/documents(?:\?|$)/)
+  await saveScreenshot(page, 'collapsed-sidebar.png')
+})
+
+for (const width of [1280, 390]) {
+  test(`folders rename move and delete empty directories at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const state = await fixture(page)
+    const foldersPath = `${rootPath}/projects/${projectId}/folders`
+    state.lists[foldersPath].push(
+      {
+        id: 'list-archive',
+        project_id: projectId,
+        name: 'Archive',
+        path: 'Archive',
+        parent_id: null,
+      },
+      {
+        id: 'list-empty',
+        project_id: projectId,
+        name: 'Empty',
+        path: 'Empty',
+        parent_id: null,
+      }
+    )
+    await page.goto(projectWorkspaceRoute)
+    const pane = page.getByRole('tabpanel', { name: 'Documents', exact: true })
+    await pane.getByRole('button', { name: 'guides', exact: true }).click()
+    await expect(
+      pane.getByRole('button', { name: 'Delete folder', exact: true })
+    ).toBeDisabled()
+    await pane
+      .getByRole('button', { name: 'Rename folder', exact: true })
+      .click()
+    const rename = page.getByRole('dialog', {
+      name: 'Rename folder',
+      exact: true,
+    })
+    await rename
+      .getByRole('textbox', { name: 'Folder name', exact: true })
+      .fill('Manual')
+    await rename.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(rename).not.toBeVisible()
+    await expect(
+      pane.getByRole('heading', { name: 'Manual', exact: true })
+    ).toBeVisible()
+    expect(state.lists[documentPath][0].relative_path).toBe(
+      'Manual/handbook.md'
+    )
+    await pane.getByRole('button', { name: 'Move folder', exact: true }).click()
+    const move = page.getByRole('dialog', { name: 'Move folder', exact: true })
+    await move
+      .getByRole('combobox', { name: 'Destination folder', exact: true })
+      .click()
+    await expect(
+      page.getByRole('option', { name: 'Manual', exact: true })
+    ).toHaveCount(0)
+    await page.getByRole('option', { name: 'Archive', exact: true }).click()
+    await move.getByRole('button', { name: 'Move folder', exact: true }).click()
+    await expect(move).not.toBeVisible()
+    expect(state.lists[documentPath][0].relative_path).toBe(
+      'Archive/Manual/handbook.md'
+    )
+    await expect(
+      pane.getByRole('button', { name: 'Published handbook', exact: true })
+    ).toBeVisible()
+    await noPageOverflow(page)
+    await saveScreenshot(page, `folder-actions-${width}.png`)
+    await page.goto(`${projectWorkspaceRoute}&folder_id=list-empty`)
+    await pane
+      .getByRole('button', { name: 'Delete folder', exact: true })
+      .click()
+    const confirm = page.getByRole('alertdialog')
+    await expect(confirm).toContainText('Only empty folders can be deleted')
+    await confirm
+      .getByRole('button', { name: 'Delete folder', exact: true })
+      .click()
+    await expect(confirm).not.toBeVisible()
+    expect(
+      state.lists[foldersPath].some((folder) => folder.id === 'list-empty')
+    ).toBe(false)
+    await page.reload()
+    await expect(
+      pane.getByRole('button', { name: 'Empty', exact: true })
+    ).toHaveCount(0)
+  })
+}
+
+test('MCP token details show permissions and the creation form uses current wording', async ({
+  page,
+}) => {
+  await fixture(page, { language: 'zh-CN' })
+  await page.goto('/mcp-tokens')
+  await page.getByRole('button', { name: '查看', exact: true }).click()
+  const capabilities = page.getByRole('region', {
+    name: '密钥能力范围',
+    exact: true,
+  })
+  await expect(capabilities).toBeVisible()
+  await expect(
+    capabilities.getByRole('row', { name: /OpenAPI/ })
+  ).toContainText('已授权')
+  await expect(
+    capabilities.getByRole('row', { name: /Markdown/ })
+  ).toContainText('未授权')
+  await saveScreenshot(page, 'mcp-capabilities.png')
+  await page.getByRole('button', { name: '创建 MCP 令牌', exact: true }).click()
+  const dialog = page.getByRole('dialog', {
+    name: '创建 MCP 令牌',
+    exact: true,
+  })
+  await expect(
+    dialog.getByRole('checkbox', { name: '写入文档', exact: true })
+  ).toBeVisible()
+  await expect(dialog).not.toContainText('草稿')
+})
 
 test('entity pages open labeled create/edit dialogs from read-only lists', async ({
   page,

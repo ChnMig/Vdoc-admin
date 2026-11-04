@@ -1014,10 +1014,27 @@ export function listDocumentFolders(
 
 export function createDocumentFolder(
   projectId: string,
-  payload: { name: string; parent_id?: string | null }
+  payload: { name: string; parent_id?: string | null; parent_path?: string }
 ) {
   return unwrapEnvelope<DocumentFolderDTO>(
     vdocApi.post(`/api/v1/private/projects/${projectId}/folders`, payload)
+  )
+}
+
+export function updateDocumentFolderLocation(
+  projectId: string,
+  payload: { path: string; name?: string; parent_path?: string }
+) {
+  return unwrapEnvelope<DocumentFolderDTO>(
+    vdocApi.patch(`/api/v1/private/projects/${projectId}/folders`, payload)
+  )
+}
+
+export function deleteDocumentFolder(projectId: string, path: string) {
+  return unwrapEnvelope<{ deleted: boolean }>(
+    vdocApi.delete(`/api/v1/private/projects/${projectId}/folders`, {
+      data: { path },
+    })
   )
 }
 

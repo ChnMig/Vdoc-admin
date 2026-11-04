@@ -48,9 +48,9 @@ export function NavGroup({ title, titleKey, items }: NavGroupProps) {
   const groupLabel = titleKey ? t(titleKey) : title
 
   return (
-    <SidebarGroup>
+    <SidebarGroup className='group-data-[collapsible=icon]:p-1'>
       <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
-      <SidebarMenu>
+      <SidebarMenu className='group-data-[collapsible=icon]:items-center'>
         {items.map((item) => {
           const key = `${item.title}-${item.url}`
 
@@ -98,10 +98,11 @@ function SidebarMenuLink({
         asChild
         isActive={checkIsActive(href, item)}
         tooltip={label}
+        className='group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center'
       >
         <NavigationLink to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
-          <span>{label}</span>
+          <span className='group-data-[collapsible=icon]:sr-only'>{label}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
         </NavigationLink>
       </SidebarMenuButton>
@@ -184,6 +185,7 @@ function SidebarMenuCollapsedDropdown({
           <SidebarMenuButton
             tooltip={label}
             isActive={checkIsActive(href, item)}
+            className='group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center'
           >
             {item.icon && <item.icon />}
             <span>{label}</span>

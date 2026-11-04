@@ -101,8 +101,49 @@ beforeEach(() => {
 })
 
 it.each([
+  [[1], ['Granted', 'Not granted'], ['Not granted', 'Not granted'], false],
+  [[2, 4], ['Not granted', 'Granted'], ['Not granted', 'Granted'], false],
+  [[1, 4], ['Granted', 'Not granted'], ['Not granted', 'Granted'], false],
+  [[3, 4], ['Not granted', 'Not granted'], ['Granted', 'Granted'], true],
+] as const)(
+  'shows actual format-specific capabilities for scopes %j',
+  async (scopes, openapi, text, patch) => {
+    api.listMCPTokens.mockResolvedValue({
+      items: [{ ...token, scopes: [...scopes] }],
+      total: 1,
+    })
+    api.getMCPToken.mockResolvedValue({
+      ...token,
+      scopes: [...scopes],
+      token: secret,
+    })
+    const { user, screen } = setup()
+    await user.click(await screen.findByRole('button', { name: 'View' }))
+    const region = await screen.findByRole('region', {
+      name: 'Token capabilities',
+    })
+    const cells = (name: string) =>
+      within(within(region).getByRole('row', { name }))
+        .getAllByRole('cell')
+        .slice(1)
+        .map((cell) => cell.textContent)
+    expect(cells(`OpenAPI ${openapi.join(' ')}`)).toEqual(openapi)
+    expect(cells(`Markdown / TXT ${text.join(' ')}`)).toEqual(text)
+    expect(
+      within(region).queryByText(
+        'Apply exact text changes to document types with both read and write permissions.'
+      ) !== null
+    ).toBe(patch)
+    expect(region.textContent).toContain(
+      'One client configuration works across this account’s teams and projects.'
+    )
+    expect(region.textContent).not.toContain('draft')
+  }
+)
+
+it.each([
   ['read', [1, 3]],
-  ['draft', [2, 4]],
+  ['write', [2, 4]],
   ['both', [1, 2, 3, 4]],
 ] as const)(
   'creates format-independent %s permissions',
@@ -117,13 +158,13 @@ it.each([
     const read = within(dialog).getByRole('checkbox', {
       name: 'Read documents',
     })
-    const draft = within(dialog).getByRole('checkbox', {
-      name: 'Create and update drafts',
+    const write = within(dialog).getByRole('checkbox', {
+      name: 'Write documents',
     })
     expect(read).toBeChecked()
-    expect(draft).not.toBeChecked()
-    if (mode === 'draft') await user.click(read)
-    if (mode !== 'read') await user.click(draft)
+    expect(write).not.toBeChecked()
+    if (mode === 'write') await user.click(read)
+    if (mode !== 'read') await user.click(write)
     await user.type(
       within(dialog).getByLabelText('Name'),
       'Unified permissions'

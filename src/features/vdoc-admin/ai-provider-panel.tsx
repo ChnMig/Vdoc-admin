@@ -4,11 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AIAPIKeyField } from './ai-api-key-field'
 import { AIModelField } from './ai-model-field'
-import {
-  AINumberField,
-  AITextField,
-  AINativeSelect,
-} from './ai-settings-fields'
+import { AIOutputTokensField } from './ai-output-tokens-field'
+import { AITextField, AINativeSelect } from './ai-settings-fields'
 import {
   AI_PROVIDER_DEFAULT_TUNING,
   type ProviderPanelProps,
@@ -190,15 +187,12 @@ export function AIProviderPanel({
             disabled={disabled}
             onChange={onTestPayloadChange}
           />
-          <AINumberField
+          <AIOutputTokensField
+            key={`${formKey}:max-output-tokens`}
             id={`${scope}-ai-provider-max-output-tokens`}
-            label={t('admin.ai.maxOutputTokens')}
-            name='max_output_tokens'
             defaultValue={tuning.maxOutputTokens}
             disabled={disabled}
-            min={1}
-            max={32000}
-            step={1}
+            onChange={onTestPayloadChange}
           />
         </fieldset>
         <fieldset className='grid min-w-0 gap-4 border-t pt-4 @xl/provider-panel:grid-cols-3'>

@@ -113,7 +113,8 @@ export function projectRepositoryTree(
 // The navigation catalog is independent of the currently selected document revision.
 export function repositoryDocumentTree(
   projectId: string,
-  catalog: readonly RepositoryDocument[]
+  catalog: readonly RepositoryDocument[],
+  storedFolders: readonly DocumentFolderDTO[] = []
 ) {
   const tree = projectRepositoryTree(
     {
@@ -137,12 +138,50 @@ export function repositoryDocumentTree(
     },
     catalog
   )
+  const folders = new Map<string, DocumentFolderDTO>()
+  const ensureFolder = (
+    path: string,
+    metadata?: DocumentFolderDTO
+  ): DocumentFolderDTO => {
+    const key = path.toLocaleLowerCase()
+    const existing = folders.get(key)
+    if (existing) return existing
+    const parts = path.split('/')
+    const name = parts.pop()!
+    const parent = parts.length ? ensureFolder(parts.join('/')) : undefined
+    const canonicalPath = parent ? `${parent.path}/${name}` : name
+    const folder = {
+      ...metadata,
+      id: `repository-folder:${canonicalPath}`,
+      project_id: projectId,
+      parent_id: parent?.id ?? null,
+      name,
+      path: canonicalPath,
+      created_by: metadata?.created_by ?? '',
+      created_at: metadata?.created_at ?? '',
+      updated_at: metadata?.updated_at ?? '',
+    }
+    folders.set(key, folder)
+    return folder
+  }
+  for (const folder of [...storedFolders].sort(
+    (a, b) => a.path.split('/').length - b.path.split('/').length
+  ))
+    ensureFolder(folder.path, folder)
+  for (const folder of tree.folders) ensureFolder(folder.path, folder)
   return {
-    ...tree,
+    folders: [...folders.values()],
     documents: tree.documents.map((d) => ({
       ...d,
       ...catalog.find((item) => item.id === d.id),
-      folder_id: d.folder_id,
+      folder_id:
+        folders.get(
+          (d.relative_path ?? '')
+            .split('/')
+            .slice(0, -1)
+            .join('/')
+            .toLocaleLowerCase()
+        )?.id ?? null,
     })),
   }
 }

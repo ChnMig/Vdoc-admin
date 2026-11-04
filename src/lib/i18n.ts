@@ -325,6 +325,19 @@ const en = {
       searchFiles: 'Search files',
       newDocument: 'New document',
       newFolder: 'New folder',
+      renameFolder: 'Rename folder',
+      folderActions: 'Folder actions',
+      moveFolder: 'Move folder',
+      moveFolderDescription:
+        'Move this folder and its contents within this project. Historical versions keep their original paths.',
+      destinationFolder: 'Destination folder',
+      deleteFolder: 'Delete folder',
+      deleteFolderTitle: 'Delete “{name}”?',
+      deleteFolderDescription:
+        'Only empty folders can be deleted. Move any documents and subfolders first.',
+      emptyFoldersOnly: 'Only empty folders can be deleted.',
+      renameFolderDescription:
+        'Updates this folder, its subfolders and current document paths. Historical versions keep their original paths.',
       rootFolder: 'Project root',
       noProjects: 'No accessible projects in this team.',
       noFiles: 'No files yet. Create a document to get started.',
@@ -978,7 +991,7 @@ const en = {
         'Ask about this document, compare branches and revisions, or attach a file for context. Specify a branch or revision when it matters.',
       suggestSummary: 'Summarize the key points of this document.',
       suggestChanges:
-        'What changed between the latest published version and the saved draft?',
+        'What changed between the latest saved version and the latest published release?',
       summaryReadOnlyDescription:
         'This revision summary is read-only and cannot be regenerated.',
       readOnlyTitle: 'Archived context is read-only',
@@ -1080,6 +1093,9 @@ const en = {
       idleTimeoutHint:
         'Maximum gap between response data. Streaming data and heartbeats restart this timer. Default: 2 minutes.',
       maxOutputTokens: 'Max output tokens',
+      unlimitedOutputTokens: 'No limit',
+      maxOutputTokensHint:
+        'No limit leaves the output length to the provider and model. A custom limit can be 1–32,000 tokens.',
       saveSystemProvider: 'Save system provider',
       saveProjectProvider: 'Save project provider',
       testSystemProvider: 'Test system provider',
@@ -1211,10 +1227,11 @@ const en = {
         'Expiry must be a valid date and time in the future.',
       readDocuments: 'Read documents',
       readDocumentsDescription: 'View documents, versions and changes.',
-      editDrafts: 'Create and update drafts',
-      editDraftsDescription: 'Create drafts and edit their content.',
+      writeDocuments: 'Write documents',
+      writeDocumentsDescription:
+        'Create documents, branches and saved versions.',
       permissionsHint:
-        'Applies to all documents. Access is still limited by your project role.',
+        'Applies to OpenAPI, Markdown and TXT across your accessible teams and projects. Your project role still limits access; MCP cannot approve or publish.',
       secretAvailable: 'Active token secret',
       secretGuidance:
         'Active tokens can be viewed and copied again. Revoked or expired tokens remain redacted.',
@@ -2105,6 +2122,19 @@ const zhCN = {
       searchFiles: '搜索文件',
       newDocument: '新建文档',
       newFolder: '新建文件夹',
+      renameFolder: '重命名文件夹',
+      folderActions: '文件夹操作',
+      moveFolder: '移动文件夹',
+      moveFolderDescription:
+        '将文件夹及其内容移动到本项目中的其他目录，历史版本保留原始路径。',
+      destinationFolder: '目标文件夹',
+      deleteFolder: '删除文件夹',
+      deleteFolderTitle: '删除“{name}”？',
+      deleteFolderDescription:
+        '仅可删除空文件夹，请先移动其中的文档和子文件夹。',
+      emptyFoldersOnly: '仅可删除空文件夹。',
+      renameFolderDescription:
+        '同步更新此文件夹、子文件夹和当前文档路径，历史版本保留原始路径。',
       rootFolder: '项目根目录',
       noProjects: '此团队暂无可访问的项目。',
       noFiles: '还没有文件，先创建一份文档。',
@@ -2721,7 +2751,7 @@ const zhCN = {
       emptyChatDescription:
         '可以提问、对比分支与版本，或添加文件作为参考。需要精确定位时，请注明分支或版本。',
       suggestSummary: '总结这份文档的重点。',
-      suggestChanges: '最新正式版本和已保存草稿之间有哪些变化？',
+      suggestChanges: '最新保存版本与最近发布版本之间有哪些变化？',
       summaryReadOnlyDescription: '此版本摘要为只读，无法重新生成。',
       readOnlyTitle: '归档上下文为只读',
       readOnlyDescription:
@@ -2816,6 +2846,9 @@ const zhCN = {
       idleTimeoutHint:
         '收到数据后，连续无新数据的等待上限；流式数据和心跳会续期，默认 2 分钟。',
       maxOutputTokens: '最大输出 token 数',
+      unlimitedOutputTokens: '不限制',
+      maxOutputTokensHint:
+        '不限制时由提供商和模型决定输出上限；自定义范围为 1–32,000 token。',
       saveSystemProvider: '保存系统提供商',
       saveProjectProvider: '保存项目提供商',
       testSystemProvider: '测试系统提供商',
@@ -2934,9 +2967,10 @@ const zhCN = {
       futureExpiryRequired: '过期时间必须是有效的未来日期和时间。',
       readDocuments: '读取文档',
       readDocumentsDescription: '查看文档、版本和差异。',
-      editDrafts: '创建和更新草稿',
-      editDraftsDescription: '创建草稿并修改草稿内容。',
-      permissionsHint: '适用于所有文档，实际访问范围仍受你的项目角色限制。',
+      writeDocuments: '写入文档',
+      writeDocumentsDescription: '创建文档、分支并保存新版本。',
+      permissionsHint:
+        '适用于你有权访问的团队和项目中的 OpenAPI、Markdown 和 TXT。实际操作受项目角色限制，MCP 不能审批或发布。',
       secretAvailable: '有效令牌明文',
       secretGuidance: '有效令牌可再次查看和复制；已撤销或过期令牌保持脱敏。',
       copy: '复制令牌',

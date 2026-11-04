@@ -66,6 +66,12 @@ import {
   repositoryDocumentTree,
 } from './use-repository-snapshot'
 
+const DocumentFolderActions = lazy(() =>
+  import('./document-folder-actions').then((module) => ({
+    default: module.DocumentFolderActions,
+  }))
+)
+
 const DocumentWorkspaceDetail = lazy(() =>
   import('./document-workspace-detail').then((module) => ({
     default: module.DocumentWorkspaceDetail,
@@ -154,19 +160,20 @@ export function DocumentWorkspacePage({
     queryFn: ({ signal }) => listRepositoryDocuments(projectId, signal),
     enabled: Boolean(projectId && !legacySelection),
   })
-  const legacyDocuments = documentsQuery.data?.items ?? []
-  const repositoryTree = repositoryDocumentTree(
-    projectId,
-    catalogQuery.data ?? []
-  )
-  const visibleDocuments = legacySelection
-    ? legacyDocuments
-    : repositoryTree.documents
   const foldersQuery = useQuery({
     queryKey: ['document-folders', projectId, sessionVersion],
     queryFn: ({ signal }) => listDocumentFolders(projectId, { signal }),
     enabled: Boolean(projectId),
   })
+  const legacyDocuments = documentsQuery.data?.items ?? []
+  const repositoryTree = repositoryDocumentTree(
+    projectId,
+    catalogQuery.data ?? [],
+    foldersQuery.data?.items ?? []
+  )
+  const visibleDocuments = legacySelection
+    ? legacyDocuments
+    : repositoryTree.documents
   const membersQuery = useQuery({
     queryKey: ['project-members', projectId],
     queryFn: ({ signal }) => listProjectMembers(projectId, { signal }),
@@ -190,7 +197,13 @@ export function DocumentWorkspacePage({
     routeSearch.folder_id === 'root'
       ? ''
       : (routeSearch.folder_id ?? document?.folder_id ?? '')
-  const folder = folders.find((item) => item.id === folderId)
+  const folder =
+    folders.find((item) => item.id === folderId) ??
+    folders.find(
+      (item) =>
+        item.path ===
+        foldersQuery.data?.items.find((stored) => stored.id === folderId)?.path
+    )
   const mutationScope = `${effectiveScope}:${folderId}:${document?.id ?? ''}`
   useLayoutEffect(() => {
     currentScope.current = mutationScope
@@ -302,20 +315,36 @@ export function DocumentWorkspacePage({
   const folderMutation = useMutation({
     mutationFn: (request: {
       projectId: string
-      parentId: string
+      parentPath: string
       name: string
       owner: string
-    }) =>
-      createDocumentFolder(request.projectId, {
-        parent_id: request.parentId || null,
+      sessionVersion: number
+    }) => {
+      if (
+        currentScope.current !== request.owner ||
+        useAuthStore.getState().auth.sessionVersion !== request.sessionVersion
+      )
+        return Promise.resolve(undefined)
+      return createDocumentFolder(request.projectId, {
+        parent_path: request.parentPath,
         name: request.name,
-      }),
+      })
+    },
     onSuccess: async (result, request) => {
+      if (
+        !result ||
+        useAuthStore.getState().auth.sessionVersion !== request.sessionVersion
+      )
+        return
+      if (currentScope.current === request.owner)
+        changeSearch({
+          folder_id: legacySelection
+            ? result.id
+            : `repository-folder:${result.path}`,
+        })
       await queryClient.invalidateQueries({
         queryKey: ['document-folders', request.projectId],
       })
-      if (currentScope.current === request.owner)
-        changeSearch({ folder_id: result.id })
     },
   })
   const backToWorkspace = () =>
@@ -413,33 +442,73 @@ export function DocumentWorkspacePage({
                 }
               />
             </FormDialog>
-            {legacySelection && (
-              <FormDialog
-                title={t('admin.workspace.newFolder')}
-                submitLabel={t('admin.workspace.createFolder')}
-                triggerVariant='outline'
-                triggerSize='sm'
-                pending={folderMutation.isPending}
-                disabled={unavailable}
-                submissionScope={`${effectiveScope}:${folderId}`}
-                onSubmit={(formData) =>
-                  folderMutation.mutateAsync({
-                    projectId,
-                    parentId: folderId,
-                    name: fieldValue(formData, 'name'),
-                    owner: mutationScope,
-                  })
+            <FormDialog
+              title={t('admin.workspace.newFolder')}
+              submitLabel={t('admin.workspace.createFolder')}
+              triggerVariant='outline'
+              triggerSize='sm'
+              pending={folderMutation.isPending}
+              disabled={unavailable}
+              submissionScope={`${effectiveScope}:${folderId}`}
+              onSubmit={(formData) =>
+                folderMutation.mutateAsync({
+                  projectId,
+                  parentPath: folder?.path ?? '',
+                  name: fieldValue(formData, 'name'),
+                  owner: mutationScope,
+                  sessionVersion,
+                })
+              }
+            >
+              <p className='text-sm text-muted-foreground'>
+                {folder?.path ?? t('admin.workspace.rootFolder')}
+              </p>
+              <TextField
+                label={t('admin.workspace.folderName')}
+                name='name'
+                required
+              />
+            </FormDialog>
+            {folder && (
+              <Suspense
+                fallback={
+                  <p role='status' className='text-sm text-muted-foreground'>
+                    {t('admin.common.loading')}
+                  </p>
                 }
               >
-                <p className='text-sm text-muted-foreground'>
-                  {folder?.path ?? t('admin.workspace.rootFolder')}
-                </p>
-                <TextField
-                  label={t('admin.workspace.folderName')}
-                  name='name'
-                  required
+                <DocumentFolderActions
+                  key={`${effectiveScope}:${folder.path}`}
+                  projectId={projectId}
+                  folder={folder}
+                  folders={folders}
+                  nonempty={
+                    folders.some((item) => item.parent_id === folder.id) ||
+                    visibleDocuments.some((item) =>
+                      item.relative_path
+                        ?.toLocaleLowerCase()
+                        .startsWith(`${folder.path.toLocaleLowerCase()}/`)
+                    )
+                  }
+                  disabled={
+                    unavailable ||
+                    foldersQuery.isPending ||
+                    foldersQuery.isError ||
+                    catalogQuery.isError
+                  }
+                  submissionScope={mutationScope}
+                  isCurrent={() => currentScope.current === mutationScope}
+                  onChanged={(updated) =>
+                    changeSearch({
+                      folder_id: updated
+                        ? legacySelection
+                          ? updated.id
+                          : `repository-folder:${updated.path}`
+                        : folder.parent_id || 'root',
+                    })
+                  }
                 />
-              </FormDialog>
+              </Suspense>
             )}
           </div>
         )}

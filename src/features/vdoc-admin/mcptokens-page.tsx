@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
@@ -51,8 +51,13 @@ import {
   useInvalidateResources,
   tokenIsActive,
   formatDate,
-  stringify,
 } from './page-utils'
+
+const TokenCapabilities = lazy(() =>
+  import('./mcp-token-capabilities').then((module) => ({
+    default: module.TokenCapabilities,
+  }))
+)
 
 function optionalFieldValue(formData: FormData, key: string) {
   const value = fieldValue(formData, key)
@@ -468,7 +473,7 @@ export function MCPTokensPage({
                     .flatMap((permission) =>
                       permission === 'read'
                         ? [1, 3]
-                        : permission === 'draft'
+                        : permission === 'write'
                           ? [2, 4]
                           : []
                     )
@@ -522,9 +527,9 @@ export function MCPTokensPage({
                       t('admin.token.readDocumentsDescription'),
                     ],
                     [
-                      'draft',
-                      t('admin.token.editDrafts'),
-                      t('admin.token.editDraftsDescription'),
+                      'write',
+                      t('admin.token.writeDocuments'),
+                      t('admin.token.writeDocumentsDescription'),
                     ],
                   ].map(([permission, label, description]) => (
                     <label
@@ -585,14 +590,11 @@ export function MCPTokensPage({
             }}
           />
           {selectedToken && (
-            <details className='min-w-0 rounded-lg border bg-card'>
-              <summary className='cursor-pointer rounded-lg px-5 py-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
-                {t('admin.sections.tokenDetails')}
-              </summary>
-              <pre className='max-h-[32rem] overflow-auto border-t p-5 text-xs leading-relaxed'>
-                {stringify(tokenDetails(selectedToken))}
-              </pre>
-            </details>
+            <Suspense
+              fallback={<p role='status'>{t('admin.common.loading')}</p>}
+            >
+              <TokenCapabilities token={selectedToken} />
+            </Suspense>
           )}
         </TabsContent>
         <TabsContent value='activity' className='grid min-w-0 gap-5'>
@@ -666,23 +668,6 @@ export function MCPTokensPage({
       </Tabs>
     </PageChrome>
   )
-}
-
-function tokenDetails(token: MCPTokenDTO) {
-  return {
-    id: token.id,
-    user_id: token.user_id,
-    name: token.name,
-    token: token.token,
-    scopes: token.scopes,
-    status: token.status,
-    created_at: token.created_at,
-    updated_at: token.updated_at,
-    expires_at: token.expires_at,
-    revoked_at: token.revoked_at,
-    revoked_by: token.revoked_by,
-    last_used_at: token.last_used_at,
-  }
 }
 
 function mcpUsageTarget(log?: AuditLogDTO) {
