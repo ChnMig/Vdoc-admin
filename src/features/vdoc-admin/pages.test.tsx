@@ -1301,7 +1301,7 @@ describe('MCPTokensPage secret lifecycle', () => {
     await waitFor(() =>
       expect(apiMocks.createMCPToken).toHaveBeenCalledWith({
         name: 'Scoped token',
-        scopes: [1, 3],
+        scopes: [5],
         expires_at: expiry ? new Date(2099, 0, 15, 18, 30).toISOString() : null,
       })
     )
