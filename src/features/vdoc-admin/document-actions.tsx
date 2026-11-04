@@ -9,6 +9,7 @@ import {
 } from '@/lib/document-management-api'
 import { repositoryKeys, type RepositoryDocument } from '@/lib/repository-api'
 import type { DocumentDTO, DocumentFolderDTO } from '@/lib/vdoc-api'
+import { queryAffectedByChange } from '@/lib/vdoc-query-invalidation'
 import { useLanguage } from '@/context/language-provider'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -122,8 +123,24 @@ function ScopedDocumentActions({
       )
       if (!updated) {
         const documentQueries = {
-          predicate: ({ queryKey }: { queryKey: readonly unknown[] }) =>
-            queryKey.includes(projectId) && queryKey.includes(document.id),
+          predicate: ({ queryKey }: { queryKey: readonly unknown[] }) => {
+            if (queryKey[0] === 'repository')
+              return (
+                queryKey[1] === projectId &&
+                queryKey[2] === 'document' &&
+                queryKey[3] === document.id
+              )
+            // Catalogs and audit logs span documents; remove only owned data.
+            return (
+              queryKey[0] !== 'documents' &&
+              queryKey[0] !== 'audit-logs' &&
+              queryAffectedByChange(queryKey, {
+                kind: 'document',
+                projectId,
+                documentId: document.id,
+              })
+            )
+          },
         }
         await client.cancelQueries(documentQueries)
         client.removeQueries(documentQueries)

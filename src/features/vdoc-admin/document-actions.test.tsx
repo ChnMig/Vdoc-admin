@@ -1,5 +1,10 @@
 import type { ComponentProps } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  isCancelledError,
+  QueryClient,
+  QueryClientProvider,
+  type QueryKey,
+} from '@tanstack/react-query'
 import { act, cleanup, render, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -255,6 +260,110 @@ describe('document management', () => {
       total: 0,
     })
     expect(onChanged).toHaveBeenCalledWith(null)
+  })
+
+  it('clears cached and in-flight AI data only for the deleted document', async () => {
+    const { screen, user, client, open } = setup()
+    const aiKeys = (
+      projectId: string,
+      documentId: string,
+      ownerId: string
+    ): QueryKey[] => {
+      const target = { projectId, documentId, ownerType: 'version', ownerId }
+      const identity = JSON.stringify([
+        projectId,
+        documentId,
+        target.ownerType,
+        ownerId,
+      ])
+      return [
+        ['ai-summary', target],
+        ['ai-chat-sessions', identity, target],
+        ['ai-chat-session', identity, projectId, `session-${ownerId}`],
+      ]
+    }
+    const cachedKeys = aiKeys('project', 'guide', 'cached-version')
+    const retainedKeys = [
+      ...aiKeys('project', 'other-guide', 'cached-version'),
+      ...aiKeys('other-project', 'guide', 'cached-version'),
+      repositoryKeys.branches({
+        projectId: 'project',
+        documentId: 'other-guide',
+      }),
+      repositoryKeys.branches('project'),
+      ['audit-logs', 'project'],
+      ['ai-provider', 'project', 'project'],
+    ]
+    for (const key of [...cachedKeys, ...retainedKeys])
+      client.setQueryData(key, { cached: true })
+    const startRequest = (queryKey: QueryKey) => {
+      let signal!: AbortSignal
+      let finish!: (value: string) => void
+      const request = client
+        .fetchQuery({
+          queryKey,
+          queryFn: ({ signal: requestSignal }) => {
+            signal = requestSignal
+            return new Promise<string>((resolve) => {
+              finish = resolve
+            })
+          },
+        })
+        .then(
+          (value) => ({ value, error: undefined }),
+          (error: unknown) => ({ value: undefined, error })
+        )
+      return { queryKey, signal, finish, request }
+    }
+    const affected = aiKeys('project', 'guide', 'pending-version').map(
+      startRequest
+    )
+    const unaffected = [
+      ...aiKeys('project', 'other-guide', 'pending-version'),
+      ...aiKeys('other-project', 'guide', 'pending-version'),
+    ].map(startRequest)
+    await open('Delete document')
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Delete document',
+      })
+    )
+    await waitFor(() => {
+      for (const queryKey of [
+        ...cachedKeys,
+        ...affected.map((request) => request.queryKey),
+      ])
+        expect(
+          client.getQueryState(queryKey),
+          JSON.stringify(queryKey)
+        ).toBeUndefined()
+    })
+    for (const request of affected) {
+      expect(request.signal.aborted).toBe(true)
+      expect(isCancelledError((await request.request).error)).toBe(true)
+      request.finish('late deleted-document result')
+    }
+    for (const queryKey of retainedKeys)
+      expect(client.getQueryData(queryKey), JSON.stringify(queryKey)).toEqual({
+        cached: true,
+      })
+    for (const request of unaffected) {
+      expect(request.signal.aborted).toBe(false)
+      expect(client.getQueryState(request.queryKey)?.fetchStatus).toBe(
+        'fetching'
+      )
+      request.finish('other document result')
+      expect(await request.request).toEqual({
+        value: 'other document result',
+        error: undefined,
+      })
+      expect(client.getQueryData(request.queryKey)).toBe(
+        'other document result'
+      )
+    }
+    expect(client.getQueryData(repositoryKeys.documents('project'))).toEqual([])
+    for (const request of affected)
+      expect(client.getQueryState(request.queryKey)).toBeUndefined()
   })
 
   it.each(['project', 'account'] as const)(
