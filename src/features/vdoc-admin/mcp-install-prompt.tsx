@@ -18,18 +18,18 @@ const copy = {
     uninstall: 'Uninstall',
     description: {
       install:
-        'Send this sentence to your AI for installation in your project.',
+        'Install once for this user, with one global MCP configuration shared by all projects.',
       update:
-        'Keep the existing channel, installation location, and MCP configuration. Other projects sharing this installation update too.',
+        'Update the shared global installation, preserving its channel, location, and user-wide MCP configuration.',
       uninstall:
-        'Remove only this project’s identifiable MCP integration; keep shared installations and other tool settings.',
+        'Remove the selected user-wide connection for all projects; preserve other connections and shared installations.',
     },
     prompt: (channel: MCPChannel, action: MCPAction) =>
       action === 'install'
-        ? `Read ${guideUrl} and install the Vdoc MCP in the current project using the ${channel} channel.`
+        ? `Read ${guideUrl} and globally install Vdoc MCP using the ${channel} channel and register it in this user's global MCP configuration for all projects.`
         : action === 'update'
-          ? `Read ${guideUrl} and update this project's Vdoc MCP to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
-          : `Read ${guideUrl} and uninstall the current project's Vdoc MCP integration, preserving installations shared with other projects and other tool configurations.`,
+          ? `Read ${guideUrl} and update this user's global Vdoc MCP to the latest version in its existing channel, preserving its installation location and user-wide MCP configuration.`
+          : `Read ${guideUrl} and uninstall this user's global Vdoc MCP connection, preserving other MCP configurations and installations still used by other connections.`,
     copy: {
       install: 'Copy install prompt',
       update: 'Copy update prompt',
@@ -46,18 +46,17 @@ const copy = {
     update: '更新',
     uninstall: '卸载',
     description: {
-      install: '把这句话发给 AI，完成项目内安装。',
-      update:
-        '保留原渠道、安装位置及 MCP 配置；共享此安装位置的项目会一起更新。',
+      install: '为当前用户全局安装一次，所有项目共用同一份 MCP 配置。',
+      update: '更新共用的全局安装，保留原渠道、安装位置及用户级全局 MCP 配置。',
       uninstall:
-        '仅清理当前项目中可确认归属的 MCP 接入，保留共享安装与其他工具配置。',
+        '移除所有项目共用的对应全局连接，保留其他连接及仍在使用的共享安装。',
     },
     prompt: (channel: MCPChannel, action: MCPAction) =>
       action === 'install'
-        ? `请阅读 ${guideUrl}，帮我把 Vdoc MCP 安装到当前项目，使用 ${channel} 渠道。`
+        ? `请阅读 ${guideUrl}，使用 ${channel} 渠道全局安装 Vdoc MCP，并写入本机用户级全局 MCP 配置，供所有项目共用。`
         : action === 'update'
-          ? `请阅读 ${guideUrl}，将当前项目的 Vdoc MCP 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
-          : `请阅读 ${guideUrl}，卸载当前项目的 Vdoc MCP 接入，保留其他项目共用的安装以及其他工具配置。`,
+          ? `请阅读 ${guideUrl}，将本机全局 Vdoc MCP 更新到原渠道最新版本，保留现有安装位置和用户级全局 MCP 配置。`
+          : `请阅读 ${guideUrl}，卸载本机用户级全局 Vdoc MCP 接入，保留其他 MCP 配置和仍被其他连接使用的安装。`,
     copy: {
       install: '复制安装提示词',
       update: '复制更新提示词',

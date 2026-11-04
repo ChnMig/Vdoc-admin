@@ -36,7 +36,7 @@ it.each(['release', 'beta'] as const)(
 
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith(
-        `Read ${expectedGuide} and install the Vdoc MCP in the current project using the ${channel} channel.`
+        `Read ${expectedGuide} and globally install Vdoc MCP using the ${channel} channel and register it in this user's global MCP configuration for all projects.`
       )
     )
     await waitFor(() =>
@@ -58,7 +58,7 @@ it('copies the Chinese install request in the Chinese interface', async () => {
 
   await waitFor(() =>
     expect(writeText).toHaveBeenCalledWith(
-      `请阅读 ${guideUrl}，帮我把 Vdoc MCP 安装到当前项目，使用 beta 渠道。`
+      `请阅读 ${guideUrl}，使用 beta 渠道全局安装 Vdoc MCP，并写入本机用户级全局 MCP 配置，供所有项目共用。`
     )
   )
   await waitFor(() =>
@@ -86,8 +86,8 @@ it.each([
     const expectedGuide = guideUrl
     const sentence =
       language === 'en'
-        ? `Read ${expectedGuide} and update this project's Vdoc MCP to the latest version in its existing channel, preserving the existing installation location and MCP configuration.`
-        : `请阅读 ${expectedGuide}，将当前项目的 Vdoc MCP 更新到原渠道最新版本，保留现有安装位置和 MCP 配置。`
+        ? `Read ${expectedGuide} and update this user's global Vdoc MCP to the latest version in its existing channel, preserving its installation location and user-wide MCP configuration.`
+        : `请阅读 ${expectedGuide}，将本机全局 Vdoc MCP 更新到原渠道最新版本，保留现有安装位置和用户级全局 MCP 配置。`
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -124,8 +124,8 @@ it.each([
     expect(uninstall).toHaveAttribute('aria-pressed', 'true')
     const sentence =
       language === 'en'
-        ? `Read ${guideUrl} and uninstall the current project's Vdoc MCP integration, preserving installations shared with other projects and other tool configurations.`
-        : `请阅读 ${guideUrl}，卸载当前项目的 Vdoc MCP 接入，保留其他项目共用的安装以及其他工具配置。`
+        ? `Read ${guideUrl} and uninstall this user's global Vdoc MCP connection, preserving other MCP configurations and installations still used by other connections.`
+        : `请阅读 ${guideUrl}，卸载本机用户级全局 Vdoc MCP 接入，保留其他 MCP 配置和仍被其他连接使用的安装。`
     fireEvent.click(
       screen.getByRole('button', {
         name: language === 'en' ? 'Copy uninstall prompt' : '复制卸载提示词',
@@ -173,7 +173,7 @@ it('prevents overlapping clipboard writes when switching among all three actions
   fireEvent.click(copyUninstall)
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
   expect(writeText).toHaveBeenLastCalledWith(
-    `Read ${guideUrl} and uninstall the current project's Vdoc MCP integration, preserving installations shared with other projects and other tool configurations.`
+    `Read ${guideUrl} and uninstall this user's global Vdoc MCP connection, preserving other MCP configurations and installations still used by other connections.`
   )
   await waitFor(() =>
     expect(screen.getByRole('status')).toHaveTextContent('Copied')
@@ -194,7 +194,7 @@ it('keeps the install request selectable when clipboard access fails', async () 
   )
   expect(
     screen.getByText(
-      `Read ${guideUrl} and install the Vdoc MCP in the current project using the release channel.`
+      `Read ${guideUrl} and globally install Vdoc MCP using the release channel and register it in this user's global MCP configuration for all projects.`
     )
   ).toBeVisible()
   expect(
@@ -223,7 +223,7 @@ it('does not show feedback for another channel when an old copy finishes', async
   ).toBeEnabled()
   expect(
     screen.getByText(
-      `Read ${guideUrl} and install the Vdoc MCP in the current project using the release channel.`
+      `Read ${guideUrl} and globally install Vdoc MCP using the release channel and register it in this user's global MCP configuration for all projects.`
     )
   ).toBeVisible()
 })
