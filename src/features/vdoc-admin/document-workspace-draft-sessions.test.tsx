@@ -180,7 +180,9 @@ async function content() {
 }
 async function openDocument(id: string) {
   const tree = await screen.findByRole('navigation', { name: 'Files' })
-  fireEvent.click(within(tree).getByRole('button', { name: new RegExp(id) }))
+  fireEvent.click(
+    within(tree).getByRole('button', { name: new RegExp(`^TXT ${id} `) })
+  )
   const edit = await screen.findByRole('button', { name: 'Edit draft' })
   await waitFor(() => expect(edit).toBeEnabled())
   fireEvent.click(edit)

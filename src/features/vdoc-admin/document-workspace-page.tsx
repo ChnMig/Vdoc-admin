@@ -434,7 +434,7 @@ export function DocumentWorkspacePage({
     })
   }
   const resourcePath =
-    unavailable || (routeSearch.document_id && !document)
+    !projectId || unavailable || (routeSearch.document_id && !document)
       ? undefined
       : document
         ? (document.relative_path ?? document.file_name)

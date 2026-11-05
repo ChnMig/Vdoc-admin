@@ -178,7 +178,13 @@ describe('initial document upload session ownership', () => {
         })
         await waitFor(() => expect(newButton).toBeEnabled())
         await user.click(newButton)
-        await user.click(view.getByRole('menuitem', { name: 'New document' }))
+        const newDocument = await view.findByRole('menuitem', {
+          name: 'New document',
+        })
+        await waitFor(() =>
+          expect(newDocument).not.toHaveAttribute('aria-disabled', 'true')
+        )
+        await user.click(newDocument)
         const dialog = within(
           view.getByRole('dialog', { name: 'New document' })
         )
