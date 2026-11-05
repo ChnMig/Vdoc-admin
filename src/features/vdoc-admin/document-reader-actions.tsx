@@ -7,6 +7,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react'
+import type { ResourcePathScope } from '@/lib/resource-location'
 import type { DocumentDTO, DocumentFolderDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { CopyPathMenuItem } from './copy-path-action'
 import { DocumentActions, type DocumentAction } from './document-actions'
 import { useDocumentActionsCopy } from './document-actions-copy'
 import {
@@ -43,6 +45,9 @@ export type DocumentHeaderMenuOptions = {
 
 type Props = DocumentHeaderMenuOptions & {
   projectId: string
+  resourcePath?: string
+  resourceDocumentId?: string
+  pathScope?: ResourcePathScope
   document?: DocumentDTO
   folder?: DocumentFolderDTO
   folders: readonly DocumentFolderDTO[]
@@ -61,6 +66,9 @@ type Props = DocumentHeaderMenuOptions & {
 
 export function DocumentReaderActions({
   projectId,
+  resourcePath,
+  resourceDocumentId,
+  pathScope,
   document,
   folder,
   folders,
@@ -101,7 +109,7 @@ export function DocumentReaderActions({
     openingDialog.current = true
     callback()
   }
-  if (!canManage && !tools) return null
+  if (!canManage && !tools && resourcePath === undefined) return null
   return (
     <>
       <DropdownMenu>
@@ -127,6 +135,16 @@ export function DocumentReaderActions({
             openingDialog.current = false
           }}
         >
+          {resourcePath !== undefined && (
+            <>
+              <CopyPathMenuItem
+                path={resourcePath}
+                scope={{ ...pathScope, projectId }}
+                documentId={resourceDocumentId ?? document?.id}
+              />
+              {(canManage || tools) && <DropdownMenuSeparator />}
+            </>
+          )}
           {canManage && (
             <>
               <DropdownMenuLabel

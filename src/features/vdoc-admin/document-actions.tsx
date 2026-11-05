@@ -8,6 +8,7 @@ import {
   type DocumentMetadataUpdate,
 } from '@/lib/document-management-api'
 import { repositoryKeys, type RepositoryDocument } from '@/lib/repository-api'
+import type { ResourcePathScope } from '@/lib/resource-location'
 import type { DocumentDTO, DocumentFolderDTO } from '@/lib/vdoc-api'
 import { queryAffectedByChange } from '@/lib/vdoc-query-invalidation'
 import { useLanguage } from '@/context/language-provider'
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CopyPathMenuItem } from './copy-path-action'
 import { useDocumentActionsCopy } from './document-actions-copy'
 import { FolderDestinationTree } from './folder-destination-tree'
 import { FormCard, TextField } from './page-shared'
@@ -36,6 +38,7 @@ import { fieldValue } from './page-utils'
 export type DocumentAction = 'rename' | 'move' | 'delete'
 type Props = {
   projectId: string
+  pathScope?: ResourcePathScope
   document: DocumentDTO
   folders: readonly DocumentFolderDTO[]
   disabled?: boolean
@@ -61,6 +64,7 @@ export function DocumentActions(props: Props) {
 
 function ScopedDocumentActions({
   projectId,
+  pathScope,
   document,
   folders,
   disabled,
@@ -234,6 +238,12 @@ function ScopedDocumentActions({
               openingDialog.current = false
             }}
           >
+            <CopyPathMenuItem
+              path={path || undefined}
+              scope={{ ...pathScope, projectId }}
+              documentId={document.id}
+            />
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => openAction('rename')}>
               <Pencil aria-hidden />
               {copy.rename}

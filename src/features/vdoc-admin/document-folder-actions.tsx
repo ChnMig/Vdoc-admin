@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Ellipsis, FolderInput, Pencil, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { repositoryKeys } from '@/lib/repository-api'
+import type { ResourcePathScope } from '@/lib/resource-location'
 import {
   deleteDocumentFolder,
   updateDocumentFolderLocation,
@@ -27,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CopyPathMenuItem } from './copy-path-action'
 import { FolderDestinationTree } from './folder-destination-tree'
 import { FormCard, TextField } from './page-shared'
 import { fieldValue } from './page-utils'
@@ -36,6 +38,7 @@ type FolderChange =
 export type DocumentFolderAction = 'rename' | 'move' | 'delete'
 type Props = {
   projectId: string
+  pathScope?: ResourcePathScope
   folder: DocumentFolderDTO
   folders: readonly DocumentFolderDTO[]
   nonempty: boolean
@@ -62,6 +65,7 @@ export function DocumentFolderActions(props: Props) {
 
 function ScopedDocumentFolderActions({
   projectId,
+  pathScope,
   folder,
   folders,
   nonempty,
@@ -171,6 +175,11 @@ function ScopedDocumentFolderActions({
               openingDialog.current = false
             }}
           >
+            <CopyPathMenuItem
+              path={folder.path}
+              scope={{ ...pathScope, projectId }}
+            />
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => openAction('rename')}>
               <Pencil aria-hidden />
               {t('admin.workspace.renameFolder')}

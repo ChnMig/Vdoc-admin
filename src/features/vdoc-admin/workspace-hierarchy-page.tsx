@@ -54,6 +54,7 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { CopyPathButton, CopyPathMenu } from './copy-path-action'
 import { DocumentTypeIcon } from './document-type-icon'
 import {
   documentSelection,
@@ -115,6 +116,9 @@ type ProjectPanelNavigation = { browse: () => void }
 type TeamSummary = { id: string; name: string; description?: string }
 type MutationScope = { owner: string; sessionVersion: number }
 
+const breadcrumbLinkClass =
+  'inline-flex min-h-9 min-w-0 max-w-[min(12rem,60vw)] items-center gap-1.5 rounded-md px-2 text-muted-foreground hover:text-foreground hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring aria-[current=location]:font-medium aria-[current=location]:text-foreground'
+
 export function WorkspaceHierarchyPage({
   search = {},
   onSearchChange,
@@ -166,6 +170,12 @@ export function WorkspaceHierarchyPage({
   const project =
     team && requestedProject?.team_id === team.id ? requestedProject : undefined
   const projectId = project?.id ?? ''
+  const pathScope = {
+    projectId,
+    projectName: project?.name,
+    teamId: project?.team_id,
+    teamName: team?.name,
+  }
   const folderId =
     routeSearch.folder_id === 'root' ? '' : (routeSearch.folder_id ?? '')
   const folderHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -468,10 +478,11 @@ export function WorkspaceHierarchyPage({
   const currentFolderChanged = (updated: DocumentFolderDTO | null) =>
     selectFolder(updated?.id ?? folder?.parent_id ?? '')
   const renderFolderActions = (item: DocumentFolderDTO, selected = false) =>
-    canCreateDocument && (
+    canCreateDocument ? (
       <Suspense fallback={<span className='size-9 shrink-0' />}>
         <DocumentFolderActions
           projectId={projectId}
+          pathScope={pathScope}
           folder={item}
           folders={folders}
           nonempty={folderNonempty(item)}
@@ -485,6 +496,12 @@ export function WorkspaceHierarchyPage({
           onChanged={selected ? currentFolderChanged : undefined}
         />
       </Suspense>
+    ) : (
+      <CopyPathMenu
+        path={item.path}
+        scope={pathScope}
+        label={`${t('admin.workspace.folderActions')}: ${item.name}`}
+      />
     )
   const refreshingFolder = documentsQuery.isFetching || foldersQuery.isFetching
   const createTeamAction = isSuperAdmin && (
@@ -744,42 +761,52 @@ export function WorkspaceHierarchyPage({
                 <button
                   type='button'
                   onClick={() => selectScope()}
-                  className='min-h-9 rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                  aria-current={!team && !management ? 'location' : undefined}
+                  className={breadcrumbLinkClass}
                 >
-                  {t('admin.hierarchy.allTeams')}
+                  <Users aria-hidden className='size-4 shrink-0' />
+                  <span className='truncate'>
+                    {t('admin.hierarchy.allTeams')}
+                  </span>
                 </button>
                 {team && !management && (
-                  <>
-                    <ChevronRight aria-hidden className='size-3' />
+                  <span className='inline-flex min-w-0 items-center gap-1'>
+                    <ChevronRight aria-hidden className='size-3 shrink-0' />
                     <button
                       type='button'
                       onClick={() => selectScope(team.id)}
                       title={team.name}
-                      className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+                      aria-current={!project ? 'location' : undefined}
+                      className={breadcrumbLinkClass}
                     >
-                      {team.name}
+                      <Building2 aria-hidden className='size-4 shrink-0' />
+                      <span className='truncate'>{team.name}</span>
                     </button>
-                  </>
+                  </span>
                 )}
                 {project && !management && (
-                  <>
-                    <ChevronRight aria-hidden className='size-3' />
+                  <span className='inline-flex min-w-0 items-center gap-1'>
+                    <ChevronRight aria-hidden className='size-3 shrink-0' />
                     <button
                       type='button'
                       onClick={() => selectFolder('')}
                       title={project.name}
                       aria-current={!folderId ? 'location' : undefined}
-                      className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md bg-muted/40 px-2 font-medium text-foreground underline decoration-border underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring'
+                      className={breadcrumbLinkClass}
                     >
-                      {project.name}
+                      <FolderGit2 aria-hidden className='size-4 shrink-0' />
+                      <span className='truncate'>{project.name}</span>
                     </button>
-                  </>
+                  </span>
                 )}
                 {project &&
                   !management &&
                   breadcrumbFolders.map((item) => (
-                    <span key={item.id} className='contents'>
-                      <ChevronRight aria-hidden className='size-3' />
+                    <span
+                      key={item.id}
+                      className='inline-flex min-w-0 items-center gap-1'
+                    >
+                      <ChevronRight aria-hidden className='size-3 shrink-0' />
                       <button
                         type='button'
                         onClick={() => selectFolder(item.id)}
@@ -787,9 +814,14 @@ export function WorkspaceHierarchyPage({
                         aria-current={
                           item.id === activeFolderId ? 'location' : undefined
                         }
-                        className='min-h-9 max-w-[min(12rem,65vw)] truncate rounded-md px-2 underline decoration-border underline-offset-4 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=location]:bg-muted/60 aria-[current=location]:font-medium aria-[current=location]:text-foreground'
+                        className={breadcrumbLinkClass}
                       >
-                        {item.name}
+                        {item.id === activeFolderId ? (
+                          <FolderOpen aria-hidden className='size-4 shrink-0' />
+                        ) : (
+                          <Folder aria-hidden className='size-4 shrink-0' />
+                        )}
+                        <span className='truncate'>{item.name}</span>
                       </button>
                     </span>
                   ))}
@@ -808,6 +840,10 @@ export function WorkspaceHierarchyPage({
               </nav>
               {project && !management && (
                 <div className='flex shrink-0 items-center gap-1'>
+                  <CopyPathButton
+                    path={folderId ? folder?.path : ''}
+                    scope={pathScope}
+                  />
                   <Button
                     type='button'
                     variant='ghost'
@@ -1125,7 +1161,7 @@ export function WorkspaceHierarchyPage({
                                         }
                                         onClick={() => openDocument(item)}
                                         actions={
-                                          canCreateDocument && (
+                                          canCreateDocument ? (
                                             <Suspense
                                               fallback={
                                                 <span className='size-9' />
@@ -1133,6 +1169,7 @@ export function WorkspaceHierarchyPage({
                                             >
                                               <DocumentActions
                                                 projectId={projectId}
+                                                pathScope={pathScope}
                                                 document={item}
                                                 folders={folders}
                                                 disabled={
@@ -1146,6 +1183,16 @@ export function WorkspaceHierarchyPage({
                                                 }
                                               />
                                             </Suspense>
+                                          ) : (
+                                            <CopyPathMenu
+                                              path={
+                                                item.relative_path ??
+                                                item.file_name
+                                              }
+                                              scope={pathScope}
+                                              documentId={item.id}
+                                              label={`${t('admin.workspace.moreActions')}: ${item.name}`}
+                                            />
                                           )
                                         }
                                         trailing={

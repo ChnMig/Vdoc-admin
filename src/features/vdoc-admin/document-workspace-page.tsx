@@ -42,6 +42,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { CopyPathMenu } from './copy-path-action'
 import { DocumentFileTree } from './document-file-tree'
 import type { DocumentHeaderMenuOptions } from './document-reader-actions'
 import {
@@ -143,6 +144,12 @@ export function DocumentWorkspacePage({
       : (teamProjects.find((candidate) => candidate.status === ACTIVE_STATUS) ??
         teamProjects[0])
   const projectId = project?.id ?? ''
+  const pathScope = {
+    projectId,
+    projectName: project?.name,
+    teamId: project?.team_id,
+    teamName: project?.team_name,
+  }
   const effectiveScope = `${sessionVersion}:${teamId}:${projectId}`
   const currentScope = useRef<string | null>(effectiveScope)
   const normalizeSearchRef = useRef(changeSearch)
@@ -426,6 +433,14 @@ export function DocumentWorkspacePage({
         : folder?.parent_id || 'root',
     })
   }
+  const resourcePath =
+    unavailable || (routeSearch.document_id && !document)
+      ? undefined
+      : document
+        ? (document.relative_path ?? document.file_name)
+        : folderId
+          ? folder?.path
+          : ''
   const renderHeaderMenu = (options: DocumentHeaderMenuOptions) => (
     <Suspense fallback={<span className='size-9 shrink-0' />}>
       <DocumentReaderActions
@@ -433,6 +448,9 @@ export function DocumentWorkspacePage({
         {...options}
         projectId={projectId}
         document={legacySelection ? undefined : document}
+        pathScope={pathScope}
+        resourceDocumentId={document?.id}
+        resourcePath={resourcePath}
         folder={folder}
         folders={folders}
         nonempty={folder ? folderNonempty(folder) : false}
@@ -515,6 +533,7 @@ export function DocumentWorkspacePage({
                       <Suspense fallback={<span className='size-9 shrink-0' />}>
                         <DocumentFolderActions
                           projectId={projectId}
+                          pathScope={pathScope}
                           folder={item}
                           folders={folders}
                           nonempty={folderNonempty(item)}
@@ -529,7 +548,13 @@ export function DocumentWorkspacePage({
                         />
                       </Suspense>
                     )
-                  : undefined
+                  : (item) => (
+                      <CopyPathMenu
+                        path={item.path}
+                        scope={pathScope}
+                        label={`${t('admin.workspace.folderActions')}: ${item.name}`}
+                      />
+                    )
               }
               renderDocumentActions={
                 canMutate && !legacySelection
@@ -537,6 +562,7 @@ export function DocumentWorkspacePage({
                       <Suspense fallback={<span className='size-9 shrink-0' />}>
                         <DocumentActions
                           projectId={projectId}
+                          pathScope={pathScope}
                           document={item}
                           folders={folders}
                           disabled={
@@ -562,7 +588,14 @@ export function DocumentWorkspacePage({
                         />
                       </Suspense>
                     )
-                  : undefined
+                  : (item) => (
+                      <CopyPathMenu
+                        path={item.relative_path ?? item.file_name}
+                        scope={pathScope}
+                        documentId={item.id}
+                        label={`${t('admin.workspace.moreActions')}: ${item.name}`}
+                      />
+                    )
               }
               onDocumentSelect={(selected) => {
                 if (selected.id === document?.id) {

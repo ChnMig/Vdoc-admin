@@ -602,7 +602,9 @@ describe('workspace hierarchy', () => {
       await view.screen.findByRole('button', { name: 'Advanced' })
     )
     await view.user.click(
-      await view.screen.findByRole('button', { name: /Advanced usage/ })
+      await view.screen.findByRole('button', {
+        name: 'Advanced usage',
+      })
     )
 
     expect(onDocumentOpen).toHaveBeenCalledOnce()
@@ -618,7 +620,9 @@ describe('workspace hierarchy', () => {
       onSearchChange: vi.fn(),
     })
     expect(
-      await view.screen.findByRole('button', { name: /API reference/ })
+      await view.screen.findByRole('button', {
+        name: 'API reference',
+      })
     ).toBeVisible()
     api.listDocuments.mockImplementationOnce(
       () =>
@@ -665,7 +669,9 @@ describe('workspace hierarchy', () => {
     )
 
     expect(
-      await view.screen.findByRole('button', { name: /Research API/ })
+      await view.screen.findByRole('button', {
+        name: 'Research API',
+      })
     ).toBeVisible()
     expect(
       view.screen.queryByRole('button', { name: /API reference/ })
@@ -706,7 +712,7 @@ describe('workspace hierarchy', () => {
     await view.user.click(view.screen.getByRole('button', { name: 'Advanced' }))
     expect(view.screen.getByRole('heading', { name: 'Advanced' })).toHaveFocus()
     expect(
-      view.screen.getByRole('button', { name: /Advanced usage/ })
+      view.screen.getByRole('button', { name: 'Advanced usage' })
     ).toBeVisible()
     expect(api.listDocuments).toHaveBeenCalledOnce()
     expect(api.listDocumentFolders).toHaveBeenCalledOnce()
@@ -805,7 +811,9 @@ describe('workspace hierarchy', () => {
       })
     ).toHaveAttribute('aria-selected', 'true')
     expect(
-      await view.screen.findByRole('button', { name: /Research API/ })
+      await view.screen.findByRole('button', {
+        name: 'Research API',
+      })
     ).toBeVisible()
   })
 
@@ -991,10 +999,14 @@ describe('workspace hierarchy', () => {
       search: { team_id: 'team-a', project_id: 'project-a' },
     })
     const apiRow = await view.screen.findByRole('button', {
-      name: /API reference/,
+      name: 'API reference',
     })
-    const markdownRow = view.screen.getByRole('button', { name: /Overview/ })
-    const textRow = view.screen.getByRole('button', { name: /Release notes/ })
+    const markdownRow = view.screen.getByRole('button', {
+      name: 'Overview',
+    })
+    const textRow = view.screen.getByRole('button', {
+      name: 'Release notes',
+    })
 
     const icons = [
       view

@@ -446,6 +446,10 @@ const en = {
     common: {
       copy: 'Copy',
       copied: 'Copied',
+      copyPath: 'Copy path',
+      copyCurrentFolderPath: 'Copy current folder path',
+      copyPathWithProject: 'Copy path with team and project details for MCP',
+      pathCopied: 'Path and project copied',
       copyFailed: 'Copy failed. Select the text and copy it manually.',
       resetFilters: 'Reset filters',
       loading: 'Loading backend data...',
@@ -2248,6 +2252,10 @@ const zhCN = {
     common: {
       copy: '复制',
       copied: '已复制',
+      copyPath: '复制路径',
+      copyCurrentFolderPath: '复制当前目录路径',
+      copyPathWithProject: '复制路径及团队、项目信息，方便交给 MCP',
+      pathCopied: '路径与所属项目已复制',
       copyFailed: '复制失败，请手动选择并复制。',
       resetFilters: '重置筛选',
       loading: '正在加载后端数据...',
