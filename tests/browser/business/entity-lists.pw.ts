@@ -349,8 +349,9 @@ test('collapsed sidebar links have unobstructed clickable edges and keyboard acc
     await expect
       .poll(async () => (await link.boundingBox())?.width)
       .toBeGreaterThanOrEqual(40)
-    const box = (await link.boundingBox())!
-    expect(box.height).toBeGreaterThanOrEqual(40)
+    await expect
+      .poll(async () => (await link.boundingBox())?.height ?? 0)
+      .toBeGreaterThanOrEqual(40)
     await expect
       .poll(async () =>
         link.evaluate((element) => {
@@ -370,7 +371,10 @@ test('collapsed sidebar links have unobstructed clickable edges and keyboard acc
         })
       )
       .toEqual(['link', 'link', 'link', 'link'])
-    await link.click({ position: { x: 3, y: box.height - 3 } })
+    const height = await link.evaluate(
+      (element) => element.getBoundingClientRect().height
+    )
+    await link.click({ position: { x: 3, y: height - 3 } })
     await expect(page).toHaveURL(
       name === 'Workspace' ? /\/documents(?:\?|$)/ : /\/mcp-tokens(?:\?|$)/
     )
