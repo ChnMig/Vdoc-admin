@@ -137,6 +137,40 @@ export async function getPublicShareContent(
   )
 }
 
+export async function getPublicShareImage(
+  request: PublicShareVersionRequest & { readonly assetId: string }
+): Promise<Blob> {
+  if (!/^[0-9a-f]{64}$/.test(request.assetId))
+    throw new PublicShareRequestError(400, 'INVALID_IMAGE')
+  return publicShareRequest(
+    request,
+    `/versions/${request.versionId}/images/${request.assetId}`,
+    async (response) => {
+      const mime = response.headers
+        .get('Content-Type')
+        ?.split(';')[0]
+        .trim()
+        .toLowerCase()
+      if (
+        response.status !== 200 ||
+        !mime ||
+        !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mime)
+      ) {
+        await parsePublicEnvelope(response)
+        throw new PublicShareRequestError(undefined, 'INVALID_IMAGE')
+      }
+      if (declaredBodyExceedsLimit(response, 4 * 1024 * 1024)) {
+        await response.body?.cancel()
+        throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
+      }
+      const blob = await response.blob()
+      if (!blob.size || blob.size > 4 * 1024 * 1024)
+        throw new PublicShareRequestError(413, 'RESPONSE_TOO_LARGE')
+      return blob
+    }
+  )
+}
+
 export async function downloadPublicShareVersion(
   request: PublicShareVersionRequest
 ): Promise<PublicShareDownload> {

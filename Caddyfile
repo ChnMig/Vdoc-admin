@@ -6,7 +6,7 @@
 	root * /usr/share/caddy
 
 	header {
-		Content-Security-Policy "default-src 'self'; base-uri 'none'; connect-src 'self' {$VDOC_PUBLIC_SHARE_CONNECT_SRC}; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+		Content-Security-Policy "default-src 'self'; base-uri 'none'; connect-src 'self' {$VDOC_PUBLIC_SHARE_CONNECT_SRC}; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
 		Cross-Origin-Opener-Policy "same-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		Referrer-Policy "no-referrer"

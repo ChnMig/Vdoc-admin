@@ -8,6 +8,22 @@ export const LANGUAGE_COOKIE_NAME = 'vdoc-admin-language'
 export const LANGUAGE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
 
 const en = {
+  images: {
+    insert: 'Insert image',
+    choose: 'Choose document images',
+    uploading: 'Uploading images…',
+    preview: 'Preview',
+    editSource: 'Edit source',
+    hint: 'Choose, paste or drop PNG, JPEG, GIF or WebP images, up to 4 MB each. Images are inserted at the cursor and saved with the document.',
+    tooLarge:
+      'Each image must be between 1 byte and 4 MB. Choose a smaller image and try again.',
+    invalidType: 'Choose a PNG, JPEG, GIF or WebP image.',
+    uploadFailed:
+      'Image upload failed. Your text is preserved. Check your connection and choose the image again.',
+    loading: 'Loading image…',
+    loadFailed: 'Image could not be loaded.',
+    retry: 'Retry',
+  },
   app: {
     name: 'Vdoc Admin',
     openSourceRepository: 'Open Vdoc on GitHub',
@@ -1839,6 +1855,20 @@ export type TFunction = (
 ) => string
 
 const zhCN = {
+  images: {
+    insert: '插入图片',
+    choose: '选择文档图片',
+    uploading: '正在上传图片…',
+    preview: '预览',
+    editSource: '编辑源码',
+    hint: '选择、粘贴或拖入 PNG、JPEG、GIF、WebP 图片，每张不超过 4 MB。图片插入光标所在位置，保存正文后生效。',
+    tooLarge: '图片不能为空且每张不超过 4 MB，请选择较小的图片重试。',
+    invalidType: '请选择 PNG、JPEG、GIF 或 WebP 图片。',
+    uploadFailed: '图片上传失败，正文已保留。请检查网络后重新选择图片。',
+    loading: '正在加载图片…',
+    loadFailed: '图片加载失败。',
+    retry: '重试',
+  },
   app: {
     name: 'Vdoc Admin',
     openSourceRepository: '访问 Vdoc 开源仓库',

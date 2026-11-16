@@ -28,6 +28,7 @@ describe('public share production privacy policy', () => {
     )
     expect(caddyfile).not.toContain("connect-src 'self' http: https:")
     expect(caddyfile).toContain("frame-ancestors 'none'")
+    expect(caddyfile).toContain("img-src 'self' data: blob:")
     expect(caddyfile.indexOf('Content-Security-Policy')).toBeLessThan(
       caddyfile.indexOf('@public_share')
     )

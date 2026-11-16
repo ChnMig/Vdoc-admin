@@ -252,7 +252,7 @@ for (const width of [1440, 390]) {
     await tool(page, 'Read')
     await tool(page, 'Edit')
     await expect(editor).toHaveValue('# Shared guide\n\nKeep this edit.\n')
-    await page.locator('input[type=file]').setInputFiles({
+    await page.getByLabel('Choose file', { exact: true }).setInputFiles({
       name: 'wrong.txt',
       mimeType: 'text/plain',
       buffer: Buffer.from('Wrong type'),
@@ -263,7 +263,7 @@ for (const width of [1440, 390]) {
       )
     ).toBeVisible()
     await expect(editor).toHaveValue('# Shared guide\n\nKeep this edit.\n')
-    await page.locator('input[type=file]').setInputFiles({
+    await page.getByLabel('Choose file', { exact: true }).setInputFiles({
       name: 'replacement.md',
       mimeType: 'text/markdown',
       buffer: Buffer.from('# Imported body\n\nLiteral <script>text</script>\n'),

@@ -30,6 +30,7 @@ import type { TranslationKey } from '@/lib/i18n'
 import {
   downloadPublicShareVersion,
   getPublicShareContent,
+  getPublicShareImage,
   getPublicShareMetadata,
   listPublicShareVersions,
   PublicShareRequestError,
@@ -66,6 +67,10 @@ import {
   DocumentReader,
   DocumentReadingPreferences,
 } from '@/features/document-reader/document-reader'
+import {
+  MarkdownImageProvider,
+  type MarkdownImageLoader,
+} from '@/features/document-reader/markdown-images'
 
 type LoadState = 'loading' | 'locked' | 'ready' | 'recoverable' | 'unavailable'
 
@@ -128,6 +133,21 @@ function PublicDocumentShareSession({
   const [message, setMessage] = useState<TranslationKey>()
   const [failedVersionId, setFailedVersionId] = useState('')
   const passwordValidationError = documentSharePasswordError(password)
+  const loadImage = useCallback<MarkdownImageLoader>(
+    (assetId, signal) => {
+      if (!shareId || !secret || !versionId || loadState !== 'ready')
+        return Promise.reject(new Error('Image scope is unavailable'))
+      return getPublicShareImage({
+        shareId,
+        secret,
+        versionId: parsePublicVersionId(versionId),
+        unlockProof,
+        assetId,
+        signal,
+      })
+    },
+    [shareId, secret, versionId, unlockProof, loadState]
+  )
 
   const loadShare = useCallback(
     async (session: PublicShareSession, proof?: string) => {
@@ -576,71 +596,73 @@ function PublicDocumentShareSession({
             )}
             <div className='grid min-w-0 items-start gap-10 lg:grid-cols-[minmax(0,52rem)_minmax(12rem,1fr)]'>
               <div ref={readingRootRef} className='min-w-0'>
-                <DocumentReader
-                  title={metadata.document_name}
-                  documentType={metadata.document_type}
-                  content={
-                    content?.version_id === versionId
-                      ? content.content
-                      : undefined
-                  }
-                  onDownload={() => void handleDownload()}
-                  downloading={downloading}
-                  metadata={
-                    <div className='flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground'>
-                      <Badge variant='secondary'>
-                        {metadata.document_type === 3
-                          ? t('publicShare.textLabel')
-                          : metadata.document_type === 2
-                            ? 'Markdown'
-                            : 'OpenAPI'}
-                      </Badge>
-                      {versions.length > 1 ? (
-                        <div className='w-48'>
-                          <OptionsSelect
-                            id='public-version'
-                            aria-label={t('publicShare.version')}
-                            value={versionId}
-                            onChange={(value) =>
-                              void handleVersionChange(value)
-                            }
-                            options={versions.map((version) => ({
-                              value: version.id,
-                              label: version.version_name,
-                            }))}
-                          />
-                        </div>
-                      ) : (
-                        <Badge variant='outline'>
-                          {selectedVersion?.version_name}
+                <MarkdownImageProvider loadImage={loadImage}>
+                  <DocumentReader
+                    title={metadata.document_name}
+                    documentType={metadata.document_type}
+                    content={
+                      content?.version_id === versionId
+                        ? content.content
+                        : undefined
+                    }
+                    onDownload={() => void handleDownload()}
+                    downloading={downloading}
+                    metadata={
+                      <div className='flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground'>
+                        <Badge variant='secondary'>
+                          {metadata.document_type === 3
+                            ? t('publicShare.textLabel')
+                            : metadata.document_type === 2
+                              ? 'Markdown'
+                              : 'OpenAPI'}
                         </Badge>
-                      )}
-                      <span>
-                        {metadata.version_scope === 1
-                          ? t('publicShare.latestOnly')
-                          : metadata.version_scope === 2
-                            ? t('publicShare.history')
-                            : t('publicShare.fixedOnly')}
-                      </span>
-                      {metadata.expires_at && (
+                        {versions.length > 1 ? (
+                          <div className='w-48'>
+                            <OptionsSelect
+                              id='public-version'
+                              aria-label={t('publicShare.version')}
+                              value={versionId}
+                              onChange={(value) =>
+                                void handleVersionChange(value)
+                              }
+                              options={versions.map((version) => ({
+                                value: version.id,
+                                label: version.version_name,
+                              }))}
+                            />
+                          </div>
+                        ) : (
+                          <Badge variant='outline'>
+                            {selectedVersion?.version_name}
+                          </Badge>
+                        )}
                         <span>
-                          {t('publicShare.expires', {
-                            date: new Date(
-                              metadata.expires_at
-                            ).toLocaleString(),
-                          })}
+                          {metadata.version_scope === 1
+                            ? t('publicShare.latestOnly')
+                            : metadata.version_scope === 2
+                              ? t('publicShare.history')
+                              : t('publicShare.fixedOnly')}
                         </span>
-                      )}
-                    </div>
-                  }
-                >
-                  <p
-                    role='status'
-                    className='py-10 text-sm text-muted-foreground'
+                        {metadata.expires_at && (
+                          <span>
+                            {t('publicShare.expires', {
+                              date: new Date(
+                                metadata.expires_at
+                              ).toLocaleString(),
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    }
                   >
-                    {t('publicShare.loading')}
-                  </p>
-                </DocumentReader>
+                    <p
+                      role='status'
+                      className='py-10 text-sm text-muted-foreground'
+                    >
+                      {t('publicShare.loading')}
+                    </p>
+                  </DocumentReader>
+                </MarkdownImageProvider>
               </div>
               <aside className='hidden min-w-0 border-s ps-6 lg:sticky lg:top-6 lg:block'>
                 <DocumentWorkspaceOutline

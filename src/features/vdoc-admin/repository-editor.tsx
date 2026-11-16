@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { documentTypeFromFilename } from './document-form-fields'
+import { MarkdownImageEditor } from './markdown-image-editor'
 import {
   ConfirmActionButton,
   FormDialog,
@@ -98,6 +99,7 @@ export function RepositoryEditor({
   const [uploadError, setUploadError] = useState<Error>()
   const retry = useRef<{ body: string; key: string } | undefined>(undefined)
   const [uploadPending, setUploadPending] = useState(false)
+  const [imagePending, setImagePending] = useState(false)
   const write = (patch: Partial<RepositoryEdit>) => {
     const next = { ...edit, ...patch, dirty: true }
     setEdit(next)
@@ -167,7 +169,8 @@ export function RepositoryEditor({
     branch.is_protected ||
     contentPending ||
     saveMutation.isPending ||
-    uploadPending
+    uploadPending ||
+    imagePending
   const hasChanges = edit.dirty || edit.extras.length > 0
   const importFiles = async (uploads: FileList | null) => {
     if (!uploads) return
@@ -334,24 +337,41 @@ export function RepositoryEditor({
             </div>
             <div className='grid gap-2'>
               <Label htmlFor={`${inputId}-content`}>{copy.content}</Label>
-              <Textarea
-                id={`${inputId}-content`}
-                value={edit.content}
-                disabled={blocked}
-                onChange={(event) => {
-                  const original =
-                    content?.content ?? initialEdit?.content ?? ''
-                  const crlf =
-                    original.includes('\r\n') && !/(^|[^\r])\n/.test(original)
-                  write({
-                    content: crlf
-                      ? event.target.value.replace(/\r?\n/g, '\r\n')
-                      : event.target.value,
-                  })
-                }}
-                className='min-h-80 resize-y font-mono text-sm leading-6'
-                spellCheck={false}
-              />
+              {document.document_type === 2 ? (
+                <MarkdownImageEditor
+                  key={`${session}:${document.id}`}
+                  id={`${inputId}-content`}
+                  projectId={
+                    typeof projectId === 'string'
+                      ? projectId
+                      : projectId.projectId
+                  }
+                  documentId={document.id}
+                  value={edit.content}
+                  disabled={blocked}
+                  onChange={(value) => write({ content: value })}
+                  onBusyChange={setImagePending}
+                />
+              ) : (
+                <Textarea
+                  id={`${inputId}-content`}
+                  value={edit.content}
+                  disabled={blocked}
+                  onChange={(event) => {
+                    const original =
+                      content?.content ?? initialEdit?.content ?? ''
+                    const crlf =
+                      original.includes('\r\n') && !/(^|[^\r])\n/.test(original)
+                    write({
+                      content: crlf
+                        ? event.target.value.replace(/\r?\n/g, '\r\n')
+                        : event.target.value,
+                    })
+                  }}
+                  className='min-h-80 resize-y font-mono text-sm leading-6'
+                  spellCheck={false}
+                />
+              )}
             </div>
           </>
         )}

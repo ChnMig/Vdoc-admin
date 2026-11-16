@@ -1,7 +1,9 @@
 import type { ComponentPropsWithoutRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { managedImageId } from '@/lib/markdown-image'
 import { cn } from '@/lib/utils'
+import { ManagedMarkdownImage } from '@/features/document-reader/markdown-images'
 import { publicMarkdownLink } from './public-markdown-link'
 
 export type MarkdownDocumentViewerProps = {
@@ -27,13 +29,21 @@ export function MarkdownDocumentViewer({
       <ReactMarkdown
         skipHtml
         remarkPlugins={[remarkGfm]}
-        urlTransform={(url) => {
+        urlTransform={(url, key, node) => {
+          if (key === 'src' && node.tagName === 'img')
+            return managedImageId(url) ? url : ''
           const link = publicMarkdownLink(url)
           return link.kind === 'safe' ? link.href : ''
         }}
         components={{
           a: PublicMarkdownAnchor,
-          img: () => null,
+          img: ({ src, alt, title }) => (
+            <ManagedMarkdownImage
+              src={typeof src === 'string' ? src : undefined}
+              alt={alt}
+              title={title}
+            />
+          ),
           input: ({ checked, className, node: _node, type, ...props }) => (
             <input
               {...props}
