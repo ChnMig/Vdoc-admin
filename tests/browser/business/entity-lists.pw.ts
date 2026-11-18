@@ -342,7 +342,10 @@ test('collapsed sidebar links have unobstructed clickable edges and keyboard acc
 }) => {
   await fixture(page)
   await page.goto('/teams')
-  await page.locator('[data-sidebar="trigger"]').click()
+  await page
+    .getByRole('banner')
+    .getByRole('button', { name: 'Toggle Sidebar' })
+    .click()
   for (const name of ['Workspace', 'MCP Tokens']) {
     const link = page.getByRole('link', { name, exact: true })
     await expect(link).toBeVisible()
