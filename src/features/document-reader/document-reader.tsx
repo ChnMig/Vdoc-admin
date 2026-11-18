@@ -10,6 +10,7 @@ import {
 import { Check, Code2, Copy, Download, Eye } from 'lucide-react'
 import { useLanguage } from '@/context/language-provider'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +34,34 @@ export function DocumentReadingPreferences() {
     <div className='flex shrink-0 items-center gap-0.5'>
       <LanguageSwitch />
       <ThemeSwitch />
+    </div>
+  )
+}
+
+export function DocumentBodySkeleton() {
+  const { t } = useLanguage()
+  return (
+    <div
+      role='status'
+      aria-label={t('admin.common.loading')}
+      className='grid max-w-prose gap-3 py-1'
+    >
+      <Skeleton
+        aria-hidden
+        className='h-5 w-1/3 bg-muted motion-reduce:animate-none'
+      />
+      <Skeleton
+        aria-hidden
+        className='mt-2 h-3.5 w-full bg-muted motion-reduce:animate-none'
+      />
+      <Skeleton
+        aria-hidden
+        className='h-3.5 w-11/12 bg-muted motion-reduce:animate-none'
+      />
+      <Skeleton
+        aria-hidden
+        className='h-3.5 w-2/3 bg-muted motion-reduce:animate-none'
+      />
     </div>
   )
 }
@@ -159,9 +188,7 @@ export function DocumentReader({
       <div id={contentId} data-document-content className='min-w-0'>
         {documentType === 2 ? (
           view === 'preview' ? (
-            <Suspense
-              fallback={<p role='status'>{t('admin.common.loading')}</p>}
-            >
+            <Suspense fallback={<DocumentBodySkeleton />}>
               <MarkdownDocumentViewer
                 content={content}
                 variant={variant}
@@ -196,7 +223,7 @@ export function DocumentReader({
             <DocumentTypeIcon
               documentType={documentType}
               aria-hidden
-              className='mt-2 size-5 shrink-0 text-muted-foreground'
+              className='mt-2 size-5 shrink-0 text-primary'
             />
             <span className='min-w-0 break-words'>{title}</span>
           </h1>

@@ -21,6 +21,7 @@ import {
   LockKeyhole,
   RefreshCw,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   listRepositoryCommits,
@@ -33,6 +34,7 @@ import {
   type RepositoryBranch,
   type RepositoryCommit,
 } from '@/lib/repository-api'
+import { cn } from '@/lib/utils'
 import type { DocumentDTO } from '@/lib/vdoc-api'
 import type { VdocRouteSearch } from '@/lib/vdoc-route-search'
 import { useLanguage } from '@/context/language-provider'
@@ -45,8 +47,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { RepositoryLink } from '@/components/repository-link'
 import {
+  DocumentBodySkeleton,
   DocumentReader,
   DocumentReadingPreferences,
 } from '@/features/document-reader/document-reader'
@@ -121,7 +129,11 @@ export function RepositoryWorkspace({
       : requestedView
   )
   const [sidebarOpen, setSidebarOpen] = useState<boolean | undefined>(
-    requestedView === 'content' || requestedView === 'edit' ? undefined : true
+    requestedView === 'edit'
+      ? false
+      : requestedView === 'content'
+        ? undefined
+        : true
   )
   const [expanded, setExpanded] = useState(false)
   const [previousRequestedView, setPreviousRequestedView] =
@@ -199,6 +211,11 @@ export function RepositoryWorkspace({
     enabled: Boolean(file && document?.id && commitId),
     refetchOnWindowFocus: false,
   })
+  const refreshing =
+    branchesQuery.isFetching ||
+    versionsQuery.isFetching ||
+    commitQuery.isFetching ||
+    contentQuery.isFetching
   const editKey = `${branch?.id ?? ''}:${document?.id ?? ''}`
   const edit = edits[editKey]
   const dirty = Object.values(edits).some((item) => item.dirty)
@@ -248,7 +265,7 @@ export function RepositoryWorkspace({
   const startEditing = () => {
     if (!branch) return
     setExpanded(false)
-    if (!wideLayout) setSidebarOpen(false)
+    if (!wideLayout || tool === 'outline') setSidebarOpen(false)
     onSearchChange({ commit_id: undefined, repository_view: 'edit' })
   }
   const isReading = view === 'content'
@@ -256,6 +273,7 @@ export function RepositoryWorkspace({
   const goToContent = () => {
     setExpanded(false)
     if (!wideLayout) setSidebarOpen(false)
+    else if (tool === 'outline') setSidebarOpen(true)
     restoreReadingFocus.current = true
     setView('content')
   }
@@ -313,18 +331,18 @@ export function RepositoryWorkspace({
       data-document-page
       aria-label={projectName}
     >
-      <header className='flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-2 sm:px-6'>
-        <div className='flex max-w-full min-w-0 items-center gap-2.5'>
+      <header className='flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-3 py-2 sm:px-6'>
+        <div className='flex max-w-full min-w-28 flex-1 items-center gap-2 sm:gap-2.5'>
           {navigationActions}
           {document && (
             <DocumentTypeIcon
               documentType={document.document_type}
-              className='shrink-0 text-muted-foreground'
+              className='hidden shrink-0 text-primary sm:block'
             />
           )}
           <div className='min-w-0'>
             <p
-              className='truncate text-sm font-medium'
+              className='truncate text-sm font-semibold'
               title={document?.name ?? projectName}
             >
               {document?.name ?? projectName}
@@ -336,7 +354,7 @@ export function RepositoryWorkspace({
             )}
           </div>
         </div>
-        <div className='ms-auto flex shrink-0 items-center gap-1.5'>
+        <div className='ms-auto flex shrink-0 items-center gap-1 sm:gap-1.5'>
           {renderHeaderMenu ? (
             <div ref={headerMenuRef} className='contents'>
               {renderHeaderMenu({
@@ -378,11 +396,15 @@ export function RepositoryWorkspace({
           )}
           {canWrite && (
             <Button
-              size='sm'
+              size='default'
               aria-label={
                 view === 'edit' ? t('admin.workspace.backToContent') : copy.edit
               }
-              disabled={!interactive || !branch}
+              disabled={
+                !interactive ||
+                !branch ||
+                (view !== 'edit' && Boolean(file && !contentQuery.isSuccess))
+              }
               onClick={view === 'edit' ? goToContent : startEditing}
             >
               {view === 'edit' ? (
@@ -401,7 +423,7 @@ export function RepositoryWorkspace({
           <RepositoryLink />
         </div>
       </header>
-      <div className='grid shrink-0 grid-cols-2 items-end gap-x-4 gap-y-2 border-b px-4 py-2 sm:grid-cols-[minmax(8rem,12rem)_minmax(10rem,16rem)_minmax(0,1fr)] sm:px-6'>
+      <div className='grid shrink-0 grid-cols-2 items-end gap-x-3 gap-y-2 border-b bg-surface-panel px-4 py-3 sm:grid-cols-[minmax(8rem,12rem)_minmax(10rem,16rem)_minmax(0,1fr)] sm:gap-x-4 sm:px-6'>
         <NativeSelect
           label={copy.branch}
           placeholder={copy.branch}
@@ -420,7 +442,9 @@ export function RepositoryWorkspace({
           options={[
             {
               value: 'latest',
-              label: `${copy.latest}${versions[0]?.version_name ? ` · ${versions[0].version_name}` : ''}`,
+              label: versions[0]?.version_name
+                ? `${copy.latestVersion} · ${versions[0].version_name}`
+                : copy.latest,
             },
             ...versions.map((item) => ({
               value: item.id,
@@ -463,7 +487,7 @@ export function RepositoryWorkspace({
               {copy.latest}
             </Button>
           )}
-          {edit?.dirty && (
+          {view !== 'edit' && edit?.dirty && (
             <span role='status' className='text-muted-foreground'>
               {copy.unsaved}
             </span>
@@ -483,11 +507,20 @@ export function RepositoryWorkspace({
             variant='ghost'
             size='icon'
             className='size-8'
-            onClick={() => void invalidate()}
-            aria-label={copy.refresh}
+            aria-disabled={refreshing}
+            onClick={() => {
+              if (!refreshing) void invalidate()
+            }}
+            aria-label={refreshing ? copy.refreshing : copy.refresh}
             title={copy.refresh}
           >
-            <RefreshCw aria-hidden className='size-4' />
+            <RefreshCw
+              aria-hidden
+              className={cn(
+                'size-4',
+                refreshing && 'animate-spin motion-reduce:animate-none'
+              )}
+            />
           </Button>
         </div>
       </div>
@@ -573,31 +606,41 @@ export function RepositoryWorkspace({
                     )}
                   {document ? (
                     <>
-                      <LoadingErrorState state={contentQuery} />
+                      {contentQuery.isError && (
+                        <div className='mb-5 grid justify-items-start gap-2'>
+                          <LoadingErrorState state={contentQuery} />
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            disabled={contentQuery.isFetching}
+                            onClick={() => void contentQuery.refetch()}
+                          >
+                            {t('admin.workspace.retry')}
+                          </Button>
+                        </div>
+                      )}
                       {file ? (
-                        contentQuery.data && (
-                          <DocumentReader
-                            title={contentQuery.data.document.name}
-                            filePath={contentQuery.data.document.relative_path}
-                            documentType={
-                              contentQuery.data.document.document_type
-                            }
-                            content={contentQuery.data.content}
-                            metadata={
-                              <details className='text-xs text-muted-foreground'>
-                                <summary className='w-fit cursor-pointer leading-6'>
-                                  {language === 'zh-CN'
-                                    ? '版本说明'
-                                    : 'Version details'}{' '}
-                                  · {commitQuery.data?.version_name}
-                                </summary>
-                                <p className='mt-2 break-words'>
-                                  {commitQuery.data?.message}
-                                </p>
-                              </details>
-                            }
-                          />
-                        )
+                        <DocumentReader
+                          title={file.name}
+                          filePath={file.relative_path}
+                          documentType={file.document_type}
+                          content={contentQuery.data?.content}
+                          metadata={
+                            <details className='text-xs text-muted-foreground'>
+                              <summary className='w-fit cursor-pointer leading-6'>
+                                {language === 'zh-CN'
+                                  ? '版本说明'
+                                  : 'Version details'}{' '}
+                                · {commitQuery.data?.version_name}
+                              </summary>
+                              <p className='mt-2 break-words'>
+                                {commitQuery.data?.message}
+                              </p>
+                            </details>
+                          }
+                        >
+                          {contentQuery.isPending && <DocumentBodySkeleton />}
+                        </DocumentReader>
                       ) : (
                         <div className='grid gap-3 py-10'>
                           <h1 className='text-xl font-semibold'>
@@ -662,8 +705,21 @@ export function RepositoryWorkspace({
             onClose={goToContent}
             backButton={false}
           >
-            {view === 'edit' && file && !contentQuery.isSuccess && (
-              <LoadingErrorState state={contentQuery} />
+            {view === 'edit' && file && contentQuery.isPending && (
+              <DocumentBodySkeleton />
+            )}
+            {view === 'edit' && file && contentQuery.isError && (
+              <div className='mb-5 grid justify-items-start gap-2'>
+                <LoadingErrorState state={contentQuery} />
+                <Button
+                  variant='outline'
+                  size='sm'
+                  disabled={contentQuery.isFetching}
+                  onClick={() => void contentQuery.refetch()}
+                >
+                  {t('admin.workspace.retry')}
+                </Button>
+              </div>
             )}
             {(view === 'edit' || edit) &&
               branch &&
@@ -700,6 +756,10 @@ export function RepositoryWorkspace({
                       )
                       await invalidate()
                       if (ownerRef.current !== scope) return
+                      toast.success(copy.success, {
+                        description: saved.version_name,
+                      })
+                      restoreReadingFocus.current = true
                       onSearchChange({
                         repository_branch_id: savedBranchId,
                         commit_id: saved.id,
@@ -851,39 +911,50 @@ export function RepositoryWorkspace({
           </RepositoryToolPane>
         </DocumentToolSidebar>
         <nav
-          className='hidden min-h-0 flex-col items-center gap-2 overflow-y-auto border-s bg-card px-1 py-4 xl:col-start-3 xl:flex'
+          className='hidden min-h-0 flex-col items-center gap-2 overflow-y-auto border-s bg-surface-panel px-1 py-3 xl:col-start-3 xl:flex'
           aria-label={t('admin.workspace.tools')}
         >
-          <Button
-            variant={
-              sidebarVisible && tool === 'outline' ? 'secondary' : 'ghost'
-            }
-            size='icon'
-            className='size-9 shrink-0'
-            title={t('admin.workspace.outline')}
-            aria-label={t('admin.workspace.outline')}
-            aria-pressed={sidebarVisible && tool === 'outline'}
-            ref={tool === 'outline' && wideLayout ? toolTriggerRef : undefined}
-            onClick={() => {
-              activateTool('outline')
-            }}
-          >
-            <ListTree aria-hidden className='size-4' />
-          </Button>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              <Button
+                variant={
+                  sidebarVisible && tool === 'outline' ? 'secondary' : 'ghost'
+                }
+                size='icon'
+                className='size-10 shrink-0 rounded-lg text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground [&>svg]:size-4.5'
+                aria-label={t('admin.workspace.outline')}
+                aria-pressed={sidebarVisible && tool === 'outline'}
+                ref={
+                  tool === 'outline' && wideLayout ? toolTriggerRef : undefined
+                }
+                onClick={() => activateTool('outline')}
+              >
+                <ListTree aria-hidden className='size-4' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='left'>
+              {t('admin.workspace.outline')}
+            </TooltipContent>
+          </Tooltip>
           {toolItems.map(({ id, label, icon: Icon }) => (
-            <Button
-              key={id}
-              variant={sidebarVisible && tool === id ? 'secondary' : 'ghost'}
-              size='icon'
-              className='size-9 shrink-0'
-              title={label}
-              aria-label={label}
-              aria-pressed={sidebarVisible && tool === id}
-              ref={id === tool && wideLayout ? toolTriggerRef : undefined}
-              onClick={() => activateTool(id)}
-            >
-              <Icon aria-hidden className='size-4' />
-            </Button>
+            <Tooltip key={id} delayDuration={300}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={
+                    sidebarVisible && tool === id ? 'secondary' : 'ghost'
+                  }
+                  size='icon'
+                  className='size-10 shrink-0 rounded-lg text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground [&>svg]:size-4.5'
+                  aria-label={label}
+                  aria-pressed={sidebarVisible && tool === id}
+                  ref={id === tool && wideLayout ? toolTriggerRef : undefined}
+                  onClick={() => activateTool(id)}
+                >
+                  <Icon aria-hidden className='size-4' />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='left'>{label}</TooltipContent>
+            </Tooltip>
           ))}
         </nav>
       </div>

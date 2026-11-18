@@ -37,13 +37,13 @@ export function LanguageSwitch() {
         <Button
           variant='ghost'
           size='sm'
-          className='h-8 rounded-full px-3'
+          className='h-9 gap-2 rounded-lg px-3 text-muted-foreground hover:text-foreground'
           aria-label={t('language.switchLabel', {
             language: currentLanguageLabel,
           })}
         >
           <Languages aria-hidden='true' className='size-4' />
-          <span className='text-xs font-semibold tracking-wide'>
+          <span className='text-sm font-medium'>
             {t(languageShortLabelKey[language])}
           </span>
         </Button>

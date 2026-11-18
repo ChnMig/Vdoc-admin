@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { RepositoryLink } from '@/components/repository-link'
 
@@ -36,14 +35,16 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
     >
       <div
         className={cn(
-          'relative flex h-full items-center gap-2 px-4 py-3 sm:gap-4 sm:px-5',
+          'relative flex h-full items-center gap-1 px-3 sm:gap-2 sm:px-5',
           offset > 10 &&
             fixed &&
             'after:absolute after:inset-0 after:-z-10 after:border-b after:bg-background/92 after:backdrop-blur-sm'
         )}
       >
-        <SidebarTrigger variant='outline' className='size-8 max-md:scale-110' />
-        <Separator orientation='vertical' className='h-5' />
+        <SidebarTrigger
+          variant='ghost'
+          className='size-9 text-muted-foreground'
+        />
         {children}
         <RepositoryLink />
       </div>

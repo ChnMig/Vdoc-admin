@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/button'
 export function RepositoryLink() {
   const { t } = useLanguage()
   return (
-    <Button variant='ghost' size='icon' className='size-8 shrink-0' asChild>
+    <Button
+      variant='ghost'
+      size='icon'
+      className='shrink-0 text-muted-foreground hover:text-foreground'
+      asChild
+    >
       <a
         href='https://github.com/ChnMig/Vdoc'
         target='_blank'

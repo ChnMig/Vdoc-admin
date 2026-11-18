@@ -1,6 +1,5 @@
-import { Link } from '@tanstack/react-router'
-import { Menu, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Logo } from '@/assets/logo'
+import { getAdminBranding } from '@/lib/branding'
 import { useLanguage } from '@/context/language-provider'
 import {
   SidebarMenu,
@@ -8,7 +7,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { Button } from '../ui/button'
+import { NavigationLink } from './navigation-link'
 
 export function AppTitle() {
   const { setOpenMobile } = useSidebar()
@@ -18,53 +17,28 @@ export function AppTitle() {
     <SidebarMenu>
       <SidebarMenuItem>
         <SidebarMenuButton
-          size='lg'
-          className='gap-0 py-0 hover:bg-transparent active:bg-transparent'
           asChild
+          size='lg'
+          tooltip={t('app.name')}
+          className='h-10 gap-3 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center'
         >
-          <div>
-            <Link
-              to='/'
-              onClick={() => setOpenMobile(false)}
-              className='grid flex-1 text-start text-sm leading-tight'
-            >
-              <span className='truncate font-bold'>{t('app.name')}</span>
-              <span className='truncate text-xs'>
-                {t('app.serviceConsole')}
-              </span>
-            </Link>
-            <ToggleSidebar />
-          </div>
+          <NavigationLink
+            to='/documents'
+            aria-label={t('app.name')}
+            onClick={() => setOpenMobile(false)}
+          >
+            <Logo className='size-6' />
+            <span className='flex min-w-0 flex-1 items-center gap-2 font-semibold group-data-[collapsible=icon]:hidden'>
+              <span className='truncate'>{t('app.name')}</span>
+              {getAdminBranding().beta && (
+                <span className='rounded-md bg-surface-control px-2 py-1 text-xs font-medium text-muted-foreground'>
+                  Beta
+                </span>
+              )}
+            </span>
+          </NavigationLink>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
-}
-
-function ToggleSidebar({
-  className,
-  onClick,
-  ...props
-}: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
-  const { t } = useLanguage()
-
-  return (
-    <Button
-      data-sidebar='trigger'
-      data-slot='sidebar-trigger'
-      variant='ghost'
-      size='icon'
-      className={cn('aspect-square size-8 max-md:scale-125', className)}
-      onClick={(event) => {
-        onClick?.(event)
-        toggleSidebar()
-      }}
-      {...props}
-    >
-      <X className='md:hidden' />
-      <Menu className='max-md:hidden' />
-      <span className='sr-only'>{t('app.toggleSidebar')}</span>
-    </Button>
   )
 }

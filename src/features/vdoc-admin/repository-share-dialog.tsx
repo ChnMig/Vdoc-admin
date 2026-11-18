@@ -93,7 +93,7 @@ export function RepositoryDocumentShareDialog({
       <DialogTrigger asChild>
         <Button
           variant='outline'
-          size='sm'
+          size='default'
           disabled={disabled}
           aria-label={t('admin.workspace.share')}
         >

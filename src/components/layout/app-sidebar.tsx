@@ -6,13 +6,13 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarRail,
+  SidebarTrigger,
 } from '@/components/ui/sidebar'
-// import { AppTitle } from './app-title'
+import { AppTitle } from './app-title'
 import { sidebarData } from './data/sidebar-data'
 import { visibleNavGroups } from './data/visible-sidebar-data'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
-import { TeamSwitcher } from './team-switcher'
 
 export function AppSidebar({
   hasAuditAccess = false,
@@ -30,21 +30,18 @@ export function AppSidebar({
     <Sidebar
       collapsible={workspace ? 'icon' : collapsible}
       variant={variant}
-      className='border-sidebar-border/90'
+      className='border-sidebar-border/90 [&_[data-sidebar=menu-button]>svg]:size-5 [&_[data-sidebar=menu-button]>svg]:text-muted-foreground [&_[data-sidebar=menu-button][data-active=true]>svg]:text-sidebar-primary-foreground'
     >
-      <SidebarHeader className='border-b border-sidebar-border/80'>
-        <TeamSwitcher teams={sidebarData.teams} />
-
-        {/* Replace <TeamSwitch /> with the following <AppTitle />
-         /* if you want to use the normal app title instead of TeamSwitch dropdown */}
-        {/* <AppTitle /> */}
+      <SidebarHeader className='h-14 flex-row items-center justify-between px-3 py-2'>
+        <AppTitle />
+        <SidebarTrigger className='size-9 shrink-0 text-muted-foreground md:hidden' />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className='gap-1 py-3'>
         {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>
-      <SidebarFooter className='border-t border-sidebar-border/80'>
+      <SidebarFooter className='items-center px-3 py-4'>
         <NavUser user={sidebarData.user} />
       </SidebarFooter>
       <SidebarRail />

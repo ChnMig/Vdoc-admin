@@ -8,7 +8,7 @@ import {
   type RepositoryBranch,
   type RepositoryCommit,
 } from '@/lib/repository-api'
-import type { DocumentDTO } from '@/lib/vdoc-api'
+import { VdocApiError, type DocumentDTO } from '@/lib/vdoc-api'
 import { LanguageProvider } from '@/context/language-provider'
 import { RepositoryEditor } from './repository-editor'
 
@@ -106,6 +106,9 @@ describe('repository editor', () => {
     await view.user.type(body, 'new content')
     await view.user.click(view.getByRole('button', { name: 'Save version' }))
     await view.findByText('HEAD changed')
+    expect(
+      view.queryByRole('button', { name: 'Save changes on a new branch' })
+    ).not.toBeInTheDocument()
     expect(body).toHaveValue('new content')
     const first = vi.mocked(saveRepositoryCommit).mock.calls[0][2]
     expect(first).toMatchObject({
@@ -123,7 +126,13 @@ describe('repository editor', () => {
   })
   it('preserves a conflicting edit on a branch created from the original baseline', async () => {
     vi.mocked(saveRepositoryCommit).mockRejectedValueOnce(
-      new Error('HEAD changed')
+      new VdocApiError({
+        code: 409,
+        status: 'ABORTED',
+        description: 'HEAD changed',
+        timestamp: 1,
+        detail: null,
+      })
     )
     vi.mocked(createRepositoryBranch).mockResolvedValue({
       ...branch,
@@ -137,7 +146,9 @@ describe('repository editor', () => {
       ' addition'
     )
     await view.user.click(view.getByRole('button', { name: 'Save version' }))
-    await view.findByText('HEAD changed')
+    await view.findByText(
+      'The branch changed after editing started. Your changes are preserved. Compare the commits or save your work on a new branch.'
+    )
     await view.user.click(
       view.getByRole('button', { name: 'Save changes on a new branch' })
     )

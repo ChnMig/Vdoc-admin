@@ -183,7 +183,7 @@ function MarkdownImageEditorSession({
           disabled={blocked}
           aria-describedby={hintId}
           spellCheck={false}
-          className='min-h-80 resize-y font-mono text-sm leading-6'
+          className='min-h-72 resize-y bg-card font-mono leading-6 shadow-none dark:bg-card'
           onChange={(event) =>
             onChange(
               value.includes('\r\n') && !/(^|[^\r])\n/.test(value)

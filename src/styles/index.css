@@ -15,20 +15,11 @@
   }
   body {
     @apply min-h-svh w-full bg-background text-foreground antialiased has-[div[data-variant='inset']]:bg-sidebar;
-    background-image:
-      radial-gradient(
-        circle at 18% -8rem,
-        var(--workspace-glow),
-        transparent 30rem
-      ),
-      radial-gradient(
-        circle at 100% 12rem,
-        var(--workspace-vignette),
-        transparent 34rem
-      );
-    background-attachment: fixed;
-    background-size: auto, auto;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'tnum';
+  }
+
+  svg.lucide {
+    stroke-width: 1.75;
   }
 
   ::selection {

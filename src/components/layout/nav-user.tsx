@@ -37,7 +37,7 @@ export function NavUser({ user }: NavUserProps) {
     ? {
         name: authUser.name || authUser.email,
         email: authUser.email,
-        avatar: user.avatar,
+        avatar: '',
       }
     : {
         name: t('app.name'),
@@ -59,24 +59,24 @@ export function NavUser({ user }: NavUserProps) {
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
                 size='lg'
-                className='data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+                className='group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
               >
-                <Avatar className='h-8 w-8 rounded-lg'>
+                <Avatar className='size-8 rounded-full'>
                   <AvatarImage
                     src={displayUser.avatar}
                     alt={displayUser.name}
                   />
-                  <AvatarFallback className='rounded-lg'>
+                  <AvatarFallback className='rounded-full bg-surface-control text-xs font-medium text-foreground'>
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <div className='grid flex-1 text-start text-sm leading-tight'>
+                <div className='grid min-w-0 flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden'>
                   <span className='truncate font-semibold'>
                     {displayUser.name}
                   </span>
                   <span className='truncate text-xs'>{displayUser.email}</span>
                 </div>
-                <ChevronsUpDown className='ms-auto size-4' />
+                <ChevronsUpDown className='ms-auto size-4 group-data-[collapsible=icon]:hidden' />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent

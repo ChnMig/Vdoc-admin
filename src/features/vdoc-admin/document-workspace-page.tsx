@@ -486,23 +486,22 @@ export function DocumentWorkspacePage({
   const fileNavigation = (
     <div
       id='workspace-files'
-      className='flex h-full min-h-0 min-w-0 flex-col bg-muted/20'
+      className='flex h-full min-h-0 min-w-0 flex-col bg-surface-panel'
     >
-      <div className='shrink-0 border-b px-3 py-3'>
+      <div className='shrink-0 px-4 pt-3 pb-5'>
         <Button
           variant='ghost'
           size='sm'
-          className='mb-4 h-8 gap-2 text-muted-foreground'
+          className='mb-5 h-9 w-full justify-start gap-3 px-3 text-muted-foreground'
           onClick={backToWorkspace}
         >
           <ArrowLeft aria-hidden className='size-4' />
           {t('admin.workspace.backToWorkspace')}
         </Button>
-        <div className='flex min-w-0 items-center gap-2 px-2 pb-1'>
-          <FolderGit2
-            aria-hidden
-            className='size-5 shrink-0 text-muted-foreground'
-          />
+        <div className='flex min-w-0 items-center gap-3 px-2'>
+          <span className='flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-muted-foreground'>
+            <FolderGit2 aria-hidden className='size-4' />
+          </span>
           <div className='min-w-0'>
             <p className='truncate text-sm font-semibold' title={project?.name}>
               {project?.name ?? t('admin.fields.project')}
@@ -513,7 +512,7 @@ export function DocumentWorkspacePage({
           </div>
         </div>
       </div>
-      <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-3'>
+      <div className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pb-4'>
         <LoadingErrorState
           state={legacySelection ? documentsQuery : catalogQuery}
         />

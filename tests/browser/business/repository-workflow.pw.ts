@@ -223,12 +223,30 @@ for (const width of [1440, 390]) {
       .getByRole('button', { name: 'Save version', exact: true })
       .click()
     await expect(
-      page.getByRole('alert').filter({ hasText: 'Backend request failed' })
+      page.getByRole('alert').filter({ hasText: 'Could not save this version' })
     ).toBeVisible()
+    await expect(
+      page.getByText('Your edits are still here. You can try saving again.', {
+        exact: true,
+      })
+    ).toBeVisible()
+    await expect(
+      page.getByText(
+        'The branch changed after editing started. Your changes are preserved. Compare the commits or save your work on a new branch.',
+        { exact: true }
+      )
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('button', {
+        name: 'Save changes on a new branch',
+        exact: true,
+      })
+    ).toHaveCount(0)
     const saved = await save(page)
     await expect(
       page.getByText('Retry this exact content.', { exact: true })
     ).toBeVisible()
+    await expect(page.getByText('Version saved', { exact: true })).toBeVisible()
     const attempts = api.requests.filter(
       (request) =>
         request.method === 'POST' && request.path.endsWith(`/${workId}/commits`)

@@ -134,10 +134,10 @@ export function DocumentFileTree({
   }, [scrollSelection, folders])
   return (
     <div className='grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] content-start gap-3'>
-      <div className='relative px-3'>
+      <div className='relative px-4'>
         <Search
           aria-hidden
-          className='pointer-events-none absolute start-6 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
+          className='pointer-events-none absolute start-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
         />
         <Input
           aria-label={t('admin.workspace.searchFiles')}
@@ -150,7 +150,7 @@ export function DocumentFileTree({
               setSearchExpansion({ query: nextQuery, collapsed: new Set() })
           }}
           placeholder={t('admin.workspace.searchFiles')}
-          className='h-8 border-transparent bg-muted/60 ps-9 text-sm shadow-none hover:border-input focus-visible:border-input'
+          className='h-9 border-border bg-card ps-10 text-sm shadow-none hover:border-input focus-visible:border-ring'
         />
       </div>
       <nav

@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
+import { isAxiosError } from 'axios'
 import { useMutation } from '@tanstack/react-query'
-import { FilePlus2, Save, Trash2, Upload } from 'lucide-react'
+import { FilePlus2, LoaderCircle, Save, Trash2, Upload } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { readUtf8File } from '@/lib/read-utf8-file'
 import {
@@ -15,9 +16,9 @@ import {
   type RepositoryFile,
   type RepositorySave,
 } from '@/lib/repository-api'
-import type { DocumentDTO } from '@/lib/vdoc-api'
+import { VdocApiError, type DocumentDTO } from '@/lib/vdoc-api'
 import { useLanguage } from '@/context/language-provider'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -164,6 +165,14 @@ export function RepositoryEditor({
   const changedHead =
     edit.baseCommitId !== branch.head_commit_id ||
     edit.generation !== branch.generation
+  const saveError = saveMutation.error
+  const saveErrorCode =
+    saveError instanceof VdocApiError
+      ? saveError.code
+      : isAxiosError(saveError)
+        ? saveError.response?.status
+        : undefined
+  const conflicted = changedHead || saveErrorCode === 409
   const blocked =
     !canWrite ||
     branch.is_protected ||
@@ -231,17 +240,20 @@ export function RepositoryEditor({
   return (
     <div className='grid min-w-0 gap-5'>
       <div className='flex flex-wrap items-start justify-between gap-3'>
-        <div>
-          <h1 className='text-xl font-semibold'>
+        <div className='min-w-0'>
+          <h1 className='text-2xl font-semibold tracking-tight break-words'>
             {document?.name ?? copy.changedFiles}
           </h1>
           <p className='mt-1 text-xs text-muted-foreground'>{copy.generated}</p>
         </div>
         <span
-          className='font-mono text-xs text-muted-foreground'
+          className='flex max-w-full flex-wrap items-center gap-x-2 rounded-md bg-surface-control px-2.5 py-1.5 text-xs text-muted-foreground'
           title={edit.baseCommitId}
         >
-          {copy.nextVersion}: {branch.name}.{(branch.revision ?? 0) + 1}
+          {copy.nextVersion}
+          <span className='min-w-0 font-mono break-all text-foreground'>
+            {branch.name}.{(branch.revision ?? 0) + 1}
+          </span>
         </span>
       </div>
       {contentPending && <p role='status'>{t('admin.common.loading')}</p>}
@@ -271,18 +283,20 @@ export function RepositoryEditor({
           </AlertDescription>
         </Alert>
       )}
-      {(changedHead || saveMutation.isError) && (
+      {conflicted && (
         <Alert variant='destructive'>
           <AlertDescription>{copy.conflict}</AlertDescription>
         </Alert>
       )}
-      <LoadingErrorState
-        state={{
-          isLoading: false,
-          isError: saveMutation.isError,
-          error: saveMutation.error,
-        }}
-      />
+      {saveError && !conflicted && (
+        <Alert variant='destructive'>
+          <AlertTitle>{copy.saveErrorTitle}</AlertTitle>
+          <AlertDescription>
+            <p>{saveError.message}</p>
+            <p>{copy.saveFailed}</p>
+          </AlertDescription>
+        </Alert>
+      )}
       <LoadingErrorState
         state={{
           isLoading: false,
@@ -368,7 +382,7 @@ export function RepositoryEditor({
                         : event.target.value,
                     })
                   }}
-                  className='min-h-80 resize-y font-mono text-sm leading-6'
+                  className='min-h-72 resize-y bg-card font-mono leading-6 shadow-none dark:bg-card'
                   spellCheck={false}
                 />
               )}
@@ -397,9 +411,11 @@ export function RepositoryEditor({
             <Upload aria-hidden className='size-4' />
             {copy.addFile}
           </Button>
-          <span className='text-xs text-muted-foreground'>
-            {copy.changedFiles}: {(document ? 1 : 0) + edit.extras.length}
-          </span>
+          {edit.extras.length > 0 && (
+            <span className='text-xs text-muted-foreground'>
+              {copy.changedFiles}: {(document ? 1 : 0) + edit.extras.length}
+            </span>
+          )}
         </div>
         {edit.extras.length > 0 && (
           <ul className='divide-y border-y'>
@@ -437,17 +453,14 @@ export function RepositoryEditor({
             onChange={(event) => write({ message: event.target.value })}
           />
         </div>
-        <div className='sticky bottom-0 flex flex-wrap gap-2 border-t bg-card py-3'>
-          <Button type='submit' disabled={blocked || !hasChanges}>
-            <Save aria-hidden className='size-4' />
-            {saveMutation.isPending ? copy.saving : copy.save}
-          </Button>
+        <div className='flex flex-wrap items-center gap-2 pb-1'>
           {document &&
             files.some((file) => file.document_id === document.id) && (
               <ConfirmActionButton
                 label={copy.deleteFile}
                 title={copy.deleteFile}
                 description={copy.deleteConfirm}
+                variant='ghost'
                 disabled={blocked}
                 onConfirm={async () => {
                   await saveMutation.mutateAsync({
@@ -457,33 +470,7 @@ export function RepositoryEditor({
                 }}
               />
             )}
-          {hasChanges && (
-            <ConfirmActionButton
-              label={copy.discard}
-              title={copy.discard}
-              description={copy.switchWarning}
-              onConfirm={async () => {
-                const next = {
-                  baseCommitId: branch.head_commit_id,
-                  generation: branch.generation,
-                  content: content?.content ?? '',
-                  name: content?.document.name ?? document?.name ?? '',
-                  path:
-                    content?.document.relative_path ??
-                    document?.relative_path ??
-                    '',
-                  description: content?.document.description ?? '',
-                  message: '',
-                  extras: [],
-                  dirty: false,
-                }
-                setEdit(next)
-                onEdit(next)
-                retry.current = undefined
-              }}
-            />
-          )}
-          {canWrite && (changedHead || saveMutation.isError) && (
+          {canWrite && conflicted && (
             <FormDialog
               title={copy.newBranch}
               triggerLabel={copy.preserveBranch}
@@ -507,6 +494,63 @@ export function RepositoryEditor({
               <TextField name='name' label={copy.branchName} required />
             </FormDialog>
           )}
+        </div>
+        <div className='sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-card px-5 py-3 sm:-mx-10 sm:px-10'>
+          <span
+            role='status'
+            className='flex min-w-0 items-center gap-2 text-xs text-muted-foreground'
+          >
+            {hasChanges && (
+              <span
+                aria-hidden
+                className='size-1.5 shrink-0 rounded-full bg-primary'
+              />
+            )}
+            {hasChanges ? copy.unsaved : copy.clean}
+          </span>
+          <div className='ms-auto flex flex-wrap items-center justify-end gap-2'>
+            {hasChanges && (
+              <ConfirmActionButton
+                label={copy.discard}
+                title={copy.discard}
+                description={copy.switchWarning}
+                variant='ghost'
+                disabled={
+                  saveMutation.isPending || uploadPending || imagePending
+                }
+                onConfirm={async () => {
+                  const next = {
+                    baseCommitId: branch.head_commit_id,
+                    generation: branch.generation,
+                    content: content?.content ?? '',
+                    name: content?.document.name ?? document?.name ?? '',
+                    path:
+                      content?.document.relative_path ??
+                      document?.relative_path ??
+                      '',
+                    description: content?.document.description ?? '',
+                    message: '',
+                    extras: [],
+                    dirty: false,
+                  }
+                  setEdit(next)
+                  onEdit(next)
+                  retry.current = undefined
+                }}
+              />
+            )}
+            <Button type='submit' disabled={blocked || !hasChanges}>
+              {saveMutation.isPending ? (
+                <LoaderCircle
+                  aria-hidden
+                  className='animate-spin motion-reduce:animate-none'
+                />
+              ) : (
+                <Save aria-hidden />
+              )}
+              {saveMutation.isPending ? copy.saving : copy.save}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

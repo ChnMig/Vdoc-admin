@@ -48,7 +48,7 @@ export function NavGroup({ title, titleKey, items }: NavGroupProps) {
   const groupLabel = titleKey ? t(titleKey) : title
 
   return (
-    <SidebarGroup className='group-data-[collapsible=icon]:p-1'>
+    <SidebarGroup className='group-data-[collapsible=icon]:px-3 group-data-[collapsible=icon]:py-1'>
       <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
       <SidebarMenu className='group-data-[collapsible=icon]:items-center'>
         {items.map((item) => {

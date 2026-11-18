@@ -124,6 +124,7 @@ describe('ConfigDrawer (integration)', () => {
     })
 
     it('selecting sidebar updates layout_variant cookie', async () => {
+      setCookie('layout_variant', 'floating')
       const screen = await renderConfigDrawer()
       await openDrawer(screen)
 
@@ -214,7 +215,7 @@ describe('ConfigDrawer (integration)', () => {
           name: /reset sidebar style to default/i,
         })
       )
-      await waitFor(() => expect(getCookie('layout_variant')).toBe('inset'))
+      await waitFor(() => expect(getCookie('layout_variant')).toBe('sidebar'))
     })
 
     it('resets layout via section control after choosing compact', async () => {
@@ -299,7 +300,7 @@ describe('ConfigDrawer (integration)', () => {
     await waitFor(() => expect(getCookie('sidebar_state')).toBe('true'))
     await waitFor(() => expect(getCookie('dir')).toBeUndefined())
     await waitFor(() => expect(getCookie('vite-ui-theme')).toBeUndefined())
-    await waitFor(() => expect(getCookie('layout_variant')).toBe('inset'))
+    await waitFor(() => expect(getCookie('layout_variant')).toBe('sidebar'))
     await waitFor(() => expect(getCookie('layout_collapsible')).toBe('icon'))
     await waitFor(() =>
       expect(document.documentElement.getAttribute('dir')).toBe('ltr')

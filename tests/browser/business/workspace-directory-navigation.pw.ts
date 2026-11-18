@@ -74,7 +74,24 @@ for (const { width, reducedMotion } of [
       name: 'Search files',
       exact: true,
     })
+    if (width < 1024) {
+      const navigation = page.getByRole('button', {
+        name: 'Teams and projects',
+        exact: true,
+      })
+      await expect(navigation).toHaveAttribute('aria-expanded', 'false')
+      await expect(filter).toBeInViewport()
+      await navigation.focus()
+      await page.keyboard.press('Enter')
+      await expect(navigation).toHaveAttribute('aria-expanded', 'true')
+    }
     await filter.fill('Source')
+    const historyLength = await page.evaluate(() => history.length)
+    await breadcrumb
+      .getByRole('button', { name: 'guides', exact: true })
+      .click()
+    await expect(filter).toHaveValue('Source')
+    expect(await page.evaluate(() => history.length)).toBe(historyLength)
     await page
       .getByRole('button', { name: 'Collapse Commit team', exact: true })
       .click()

@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -11,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   Building2,
+  ChevronDown,
   ChevronRight,
   Folder,
   FolderGit2,
@@ -20,6 +22,7 @@ import {
   Search as SearchIcon,
   Settings2,
   Users,
+  X,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { listRepositoryDocuments, repositoryKeys } from '@/lib/repository-api'
@@ -117,7 +120,9 @@ type TeamSummary = { id: string; name: string; description?: string }
 type MutationScope = { owner: string; sessionVersion: number }
 
 const breadcrumbLinkClass =
-  'inline-flex min-h-9 min-w-0 max-w-[min(12rem,60vw)] items-center gap-1.5 rounded-md px-2 text-muted-foreground hover:text-foreground hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring aria-[current=location]:font-medium aria-[current=location]:text-foreground'
+  'inline-flex min-h-8 min-w-0 max-w-[min(12rem,60vw)] items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-surface-control hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-[current=location]:font-medium aria-[current=location]:text-foreground [&>svg]:size-3.5 [&>svg]:opacity-70'
+const workspaceTabClass =
+  'h-12 flex-none gap-2 rounded-none border-0 border-b-2 border-transparent px-1 text-muted-foreground hover:text-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-foreground dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-foreground'
 
 export function WorkspaceHierarchyPage({
   search = {},
@@ -132,6 +137,10 @@ export function WorkspaceHierarchyPage({
   const [localSearch, setLocalSearch] = useState<VdocRouteSearch>(search)
   const routeSearch = onSearchChange ? search : localSearch
   const [panel, setPanel] = useState<HubPanel>('browse')
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const navigationId = useId()
+  const navigationRef = useRef<HTMLElement>(null)
+  const navigationTrigger = useRef<HTMLButtonElement>(null)
   const [filter, setFilter] = useState('')
   const [fileFilter, setFileFilter] = useState('')
   const newFileAttempt = useRef<RepositoryNewFileAttempt | undefined>(undefined)
@@ -265,15 +274,26 @@ export function WorkspaceHierarchyPage({
     (projectsQuery.isSuccess &&
       (!isSuperAdmin || teamsQuery.isSuccess) &&
       ((teamId && !team) || (routeSearch.project_id && !project))) ||
-    (projectId && foldersQuery.isSuccess && folderId && !folder)
+    (projectId &&
+      documentsQuery.isSuccess &&
+      foldersQuery.isSuccess &&
+      folderId &&
+      !folder)
   )
   const changeSearch = (patch: Partial<VdocRouteSearch>) => {
     if (onSearchChange) onSearchChange(patch)
     else setLocalSearch((current) => ({ ...current, ...patch }))
   }
+  const closeNavigation = () => {
+    if (!navigationOpen) return
+    if (navigationRef.current?.contains(document.activeElement))
+      navigationTrigger.current?.focus()
+    setNavigationOpen(false)
+  }
   const selectScope = (nextTeam?: string, nextProject?: string) => {
     projectNavigationRef.current?.browse()
     setPanel('browse')
+    closeNavigation()
     setFileFilter('')
     if (nextTeam) setExpanded((current) => ({ ...current, [nextTeam]: true }))
     changeSearch({
@@ -286,8 +306,8 @@ export function WorkspaceHierarchyPage({
   }
   const selectFolder = (id: string) => {
     projectNavigationRef.current?.browse()
-    setFileFilter('')
     if (id === folderId) return
+    setFileFilter('')
     pendingFolderFocus.current = { projectId, sessionVersion, folderId: id }
     changeSearch({ folder_id: id || 'root' })
   }
@@ -458,6 +478,9 @@ export function WorkspaceHierarchyPage({
             .includes(normalizedFileFilter))
     )
     .sort((left, right) => left.name.localeCompare(right.name, language))
+  const visibleItemCount = visibleFolders.length + visibleDocuments.length
+  const directoryReady = documentsQuery.isSuccess && foldersQuery.isSuccess
+  const directoryError = documentsQuery.error ?? foldersQuery.error
   const breadcrumbFolders = folderAncestors(activeFolderId, folders)
   const management = panel !== 'browse' && isSuperAdmin
   const listLoading =
@@ -504,6 +527,10 @@ export function WorkspaceHierarchyPage({
       />
     )
   const refreshingFolder = documentsQuery.isFetching || foldersQuery.isFetching
+  const refreshFolder = () => {
+    if (!refreshingFolder)
+      void Promise.all([documentsQuery.refetch(), foldersQuery.refetch()])
+  }
   const createTeamAction = isSuperAdmin && (
     <FormDialog
       title={t('admin.sections.createTeam')}
@@ -567,42 +594,59 @@ export function WorkspaceHierarchyPage({
   )
   return (
     <>
-      <Header>
+      <Header fixed className='border-b bg-card'>
         <Search className='me-auto' />
         <LanguageSwitch />
         <ThemeSwitch />
       </Header>
-      <Main fluid className='min-w-0 pt-3'>
-        <div className='mb-5'>
-          <h1 className='text-2xl font-semibold tracking-tight'>
-            {t('admin.hierarchy.title')}
-          </h1>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            {t('admin.hierarchy.description')}
-          </p>
-        </div>
-        <div className='grid min-w-0 overflow-hidden rounded-lg border bg-card lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[15.5rem_minmax(0,1fr)]'>
-          <aside
-            aria-label={t('admin.hierarchy.navigation')}
-            className='flex min-w-0 flex-col border-b bg-muted/20 lg:border-r lg:border-b-0'
+      <Main fluid className='min-w-0 bg-card p-0 sm:px-0 lg:px-0'>
+        <h1 className='sr-only'>{t('admin.hierarchy.title')}</h1>
+        <p className='sr-only'>{t('admin.hierarchy.description')}</p>
+        <div className='grid min-h-[calc(100dvh-3.5rem)] min-w-0 content-start lg:grid-cols-[16rem_minmax(0,1fr)] lg:content-stretch'>
+          <button
+            ref={navigationTrigger}
+            type='button'
+            aria-expanded={navigationOpen}
+            aria-controls={navigationId}
+            className='flex min-h-14 min-w-0 items-center gap-3 border-b bg-surface-panel px-5 text-start text-sm font-medium hover:bg-surface-control focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring lg:hidden'
+            onClick={() => setNavigationOpen((open) => !open)}
           >
-            <div className='border-b p-3'>
-              <div className='relative'>
-                <SearchIcon
-                  aria-hidden
-                  className='pointer-events-none absolute start-2.5 top-2.5 size-4 text-muted-foreground'
-                />
-                <Input
-                  aria-label={t('admin.hierarchy.search')}
-                  placeholder={t('admin.hierarchy.search')}
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  className='h-9 bg-background ps-8 text-xs'
-                />
-              </div>
+            <FolderTree aria-hidden className='size-4 shrink-0 text-primary' />
+            <span className='min-w-0 flex-1'>
+              {t('admin.hierarchy.navigation')}
+            </span>
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'workspace-tree-chevron size-4 shrink-0 text-muted-foreground',
+                navigationOpen && 'rotate-180'
+              )}
+            />
+          </button>
+          <aside
+            id={navigationId}
+            ref={navigationRef}
+            aria-label={t('admin.hierarchy.navigation')}
+            className={cn(
+              'min-w-0 flex-col border-b bg-surface-panel lg:flex lg:border-e lg:border-b-0',
+              navigationOpen ? 'flex' : 'hidden'
+            )}
+          >
+            <div className='px-4 pt-5 pb-3'>
+              <p
+                aria-hidden
+                className='mb-4 hidden px-1 text-sm font-semibold lg:block'
+              >
+                {t('admin.hierarchy.title')}
+              </p>
+              <WorkspaceFilter
+                label={t('admin.hierarchy.search')}
+                value={filter}
+                onChange={setFilter}
+              />
             </div>
             <nav
-              className='max-h-72 space-y-1 overflow-y-auto p-2 lg:max-h-none lg:flex-1'
+              className='max-h-72 space-y-1 overflow-y-auto px-3 pb-4 lg:max-h-none lg:flex-1'
               aria-label={t('admin.hierarchy.navigation')}
             >
               <button
@@ -631,7 +675,7 @@ export function WorkspaceHierarchyPage({
                   (expanded[item.id] ?? teamId === item.id)
                 return (
                   <div key={item.id}>
-                    <div className='flex min-w-0 items-center gap-0.5'>
+                    <div className='flex min-w-0 items-center'>
                       <button
                         type='button'
                         aria-label={t(
@@ -641,7 +685,7 @@ export function WorkspaceHierarchyPage({
                           { name: item.name }
                         )}
                         aria-expanded={isExpanded}
-                        className='flex size-7 shrink-0 items-center justify-center rounded hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring'
+                        className='flex h-10 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring'
                         onClick={() =>
                           setExpanded((current) => {
                             return { ...current, [item.id]: !isExpanded }
@@ -681,7 +725,7 @@ export function WorkspaceHierarchyPage({
                       </button>
                     </div>
                     {isExpanded && (
-                      <div className='workspace-pane-enter ms-3.5 border-s ps-3'>
+                      <div className='workspace-pane-enter ms-3 border-s border-border/70 ps-3'>
                         {children.map((candidate) => (
                           <button
                             key={candidate.id}
@@ -726,10 +770,13 @@ export function WorkspaceHierarchyPage({
               )}
             </nav>
             {isSuperAdmin && (
-              <div className='grid gap-1 border-t p-2'>
+              <div className='mx-3 grid gap-1 border-t border-border/70 py-3'>
                 <button
                   type='button'
-                  onClick={() => setPanel('people')}
+                  onClick={() => {
+                    closeNavigation()
+                    setPanel('people')
+                  }}
                   aria-current={panel === 'people' ? 'page' : undefined}
                   className={navRow(panel === 'people')}
                 >
@@ -742,7 +789,10 @@ export function WorkspaceHierarchyPage({
                 </button>
                 <button
                   type='button'
-                  onClick={() => setPanel('teams')}
+                  onClick={() => {
+                    closeNavigation()
+                    setPanel('teams')
+                  }}
                   aria-current={panel === 'teams' ? 'page' : undefined}
                   className={navRow(panel === 'teams')}
                 >
@@ -753,10 +803,10 @@ export function WorkspaceHierarchyPage({
             )}
           </aside>
           <section className='min-w-0'>
-            <div className='flex min-w-0 items-start justify-between gap-2 border-b px-4 py-2.5 sm:px-5'>
+            <div className='flex min-h-14 min-w-0 items-start justify-between gap-2 border-b border-border/70 px-3 py-2.5 sm:items-center sm:px-6'>
               <nav
                 aria-label={t('admin.hierarchy.breadcrumb')}
-                className='flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-1 text-sm text-muted-foreground'
+                className='flex min-h-9 min-w-0 flex-1 flex-wrap items-center text-xs text-muted-foreground sm:text-sm'
               >
                 <button
                   type='button'
@@ -839,7 +889,7 @@ export function WorkspaceHierarchyPage({
                 )}
               </nav>
               {project && !management && (
-                <div className='flex shrink-0 items-center gap-1'>
+                <div className='flex shrink-0 items-center text-muted-foreground'>
                   <CopyPathButton
                     path={folderId ? folder?.path : ''}
                     scope={pathScope}
@@ -849,19 +899,14 @@ export function WorkspaceHierarchyPage({
                     variant='ghost'
                     size='icon'
                     className='size-9'
-                    disabled={refreshingFolder}
+                    aria-disabled={refreshingFolder}
                     aria-label={t(
                       refreshingFolder
                         ? 'admin.workspace.refreshingFolder'
                         : 'admin.workspace.refreshFolder'
                     )}
                     title={t('admin.workspace.refreshFolder')}
-                    onClick={() => {
-                      void Promise.all([
-                        documentsQuery.refetch(),
-                        foldersQuery.refetch(),
-                      ])
-                    }}
+                    onClick={refreshFolder}
                   >
                     <RefreshCw
                       aria-hidden
@@ -876,7 +921,7 @@ export function WorkspaceHierarchyPage({
                 </div>
               )}
             </div>
-            <div className='min-w-0 p-4 sm:p-6'>
+            <div className='mx-auto max-w-7xl min-w-0 px-5 py-6 sm:px-8 sm:py-8 xl:px-12'>
               <LoadingErrorState
                 state={{
                   isLoading: false,
@@ -884,6 +929,20 @@ export function WorkspaceHierarchyPage({
                   error: listError,
                 }}
               />
+              {listError && (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='mt-3'
+                  disabled={listLoading}
+                  onClick={() => {
+                    void projectsQuery.refetch()
+                    if (isSuperAdmin) void teamsQuery.refetch()
+                  }}
+                >
+                  {t('admin.workspace.retry')}
+                </Button>
+              )}
               {listLoading && <ResourceLoadingState />}
               {management ? (
                 <ManagementFallback>
@@ -901,27 +960,29 @@ export function WorkspaceHierarchyPage({
                 !listLoading &&
                 !listError && (
                   <>
-                    <div className='mb-5 flex min-w-0 flex-wrap items-start justify-between gap-3'>
+                    <div className='mb-6 flex min-w-0 flex-wrap items-start justify-between gap-4'>
                       <div className='min-w-0'>
-                        <h2 className='flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight'>
-                          {project ? (
-                            <FolderGit2
-                              data-hierarchy-kind='project'
-                              aria-hidden
-                              className='size-5 shrink-0 text-muted-foreground'
-                            />
-                          ) : team ? (
-                            <Building2
-                              data-hierarchy-kind='team'
-                              aria-hidden
-                              className='size-5 shrink-0 text-muted-foreground'
-                            />
-                          ) : (
-                            <FolderTree
-                              aria-hidden
-                              className='size-5 shrink-0 text-muted-foreground'
-                            />
-                          )}
+                        <h2 className='flex min-w-0 items-center gap-3 text-xl font-semibold tracking-tight sm:text-2xl'>
+                          <span className='flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-surface-panel text-muted-foreground [&>svg]:size-5 [&>svg]:text-current'>
+                            {project ? (
+                              <FolderGit2
+                                data-hierarchy-kind='project'
+                                aria-hidden
+                                className='size-5 shrink-0 text-primary'
+                              />
+                            ) : team ? (
+                              <Building2
+                                data-hierarchy-kind='team'
+                                aria-hidden
+                                className='size-5 shrink-0 text-primary'
+                              />
+                            ) : (
+                              <FolderTree
+                                aria-hidden
+                                className='size-5 shrink-0 text-primary'
+                              />
+                            )}
+                          </span>
                           <span className='truncate'>
                             {project?.name ??
                               team?.name ??
@@ -954,22 +1015,52 @@ export function WorkspaceHierarchyPage({
                       >
                         {(activePanel, visitedPanels) => (
                           <>
-                            <TabsList className='max-w-full overflow-x-auto'>
-                              <TabsTrigger value='documents'>
-                                <FolderOpen aria-hidden />
+                            <TabsList className='h-auto w-full flex-wrap gap-x-6 overflow-visible rounded-none border-b border-border/70 bg-transparent p-0'>
+                              <TabsTrigger
+                                value='documents'
+                                className={workspaceTabClass}
+                              >
+                                <FolderOpen
+                                  aria-hidden
+                                  className='hidden sm:block'
+                                />
                                 {t('admin.hierarchy.documents')}
                               </TabsTrigger>
-                              <TabsTrigger value='members'>
+                              <TabsTrigger
+                                value='members'
+                                aria-label={t('admin.hierarchy.members')}
+                                className={workspaceTabClass}
+                              >
                                 <Users
                                   data-hierarchy-kind='people'
                                   aria-hidden
+                                  className='hidden sm:block'
                                 />
-                                {t('admin.hierarchy.members')}
+                                <span className='hidden sm:inline'>
+                                  {t('admin.hierarchy.members')}
+                                </span>
+                                <span className='sm:hidden'>
+                                  {t('admin.hierarchy.membersCompact')}
+                                </span>
                               </TabsTrigger>
                               {canManageProject && (
-                                <TabsTrigger value='settings'>
-                                  <Settings2 aria-hidden />
-                                  {t('admin.hierarchy.projectSettings')}
+                                <TabsTrigger
+                                  value='settings'
+                                  aria-label={t(
+                                    'admin.hierarchy.projectSettings'
+                                  )}
+                                  className={workspaceTabClass}
+                                >
+                                  <Settings2
+                                    aria-hidden
+                                    className='hidden sm:block'
+                                  />
+                                  <span className='hidden sm:inline'>
+                                    {t('admin.hierarchy.projectSettings')}
+                                  </span>
+                                  <span className='sm:hidden'>
+                                    {t('admin.hierarchy.settingsCompact')}
+                                  </span>
                                 </TabsTrigger>
                               )}
                             </TabsList>
@@ -983,7 +1074,7 @@ export function WorkspaceHierarchyPage({
                               }
                               className='workspace-pane-enter min-w-0 data-[state=inactive]:hidden'
                             >
-                              <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+                              <div className='mb-5 flex flex-wrap items-center justify-between gap-4'>
                                 <div className='flex min-w-0 items-center gap-2'>
                                   {folderId && (
                                     <Button
@@ -1005,20 +1096,22 @@ export function WorkspaceHierarchyPage({
                                     {folder?.name ??
                                       t('admin.workspace.rootFolder')}
                                   </h3>
+                                  {directoryReady && (
+                                    <span className='shrink-0 rounded-md bg-surface-panel px-2 py-1 text-xs text-muted-foreground tabular-nums'>
+                                      {visibleItemCount === 1
+                                        ? t('admin.hierarchy.singleItem')
+                                        : t('admin.hierarchy.itemCount', {
+                                            count: visibleItemCount,
+                                          })}
+                                    </span>
+                                  )}
                                 </div>
-                                <div className='flex flex-wrap items-center gap-2'>
-                                  <Input
-                                    aria-label={t(
-                                      'admin.workspace.searchFiles'
-                                    )}
-                                    placeholder={t(
-                                      'admin.workspace.searchFiles'
-                                    )}
-                                    className='h-8 w-44 text-xs'
+                                <div className='flex w-full flex-wrap items-center gap-2 xl:w-auto'>
+                                  <WorkspaceFilter
+                                    label={t('admin.workspace.searchFiles')}
+                                    className='w-full sm:w-48'
                                     value={fileFilter}
-                                    onChange={(event) =>
-                                      setFileFilter(event.target.value)
-                                    }
+                                    onChange={setFileFilter}
                                   />
                                   {canCreateDocument && (
                                     <>
@@ -1027,7 +1120,7 @@ export function WorkspaceHierarchyPage({
                                           'admin.workspace.createFolder'
                                         )}
                                         triggerVariant='outline'
-                                        triggerSize='sm'
+                                        triggerSize='default'
                                         submitLabel={t('admin.common.create')}
                                         pending={folderMutation.isPending}
                                         disabled={
@@ -1057,7 +1150,7 @@ export function WorkspaceHierarchyPage({
                                         title={t(
                                           'admin.sections.createDocument'
                                         )}
-                                        triggerSize='sm'
+                                        triggerSize='default'
                                         submitLabel={t('admin.common.create')}
                                         pending={documentMutation.isPending}
                                         disabled={
@@ -1107,137 +1200,158 @@ export function WorkspaceHierarchyPage({
                                   )}
                                 </div>
                               </div>
-                              <LoadingErrorState
-                                state={{
-                                  isLoading: false,
-                                  isError:
-                                    documentsQuery.isError ||
-                                    foldersQuery.isError,
-                                  error:
-                                    documentsQuery.error ?? foldersQuery.error,
-                                }}
-                              />
+                              {directoryError && (
+                                <div className='mb-4 grid justify-items-start gap-2'>
+                                  <LoadingErrorState
+                                    state={{
+                                      isLoading: false,
+                                      isError: true,
+                                      error: directoryError,
+                                    }}
+                                  />
+                                  <Button
+                                    variant='outline'
+                                    size='sm'
+                                    disabled={refreshingFolder}
+                                    onClick={refreshFolder}
+                                  >
+                                    {t('admin.workspace.retry')}
+                                  </Button>
+                                </div>
+                              )}
                               {(documentsQuery.isLoading ||
                                 foldersQuery.isLoading) && (
                                 <ResourceLoadingState />
                               )}
-                              {documentsQuery.isSuccess &&
-                                foldersQuery.isSuccess && (
-                                  <div
-                                    key={`${projectId}:${folderId}`}
-                                    className='workspace-pane-enter divide-y border-y'
-                                  >
-                                    {visibleFolders.map((item) => (
-                                      <ResourceRow
-                                        key={item.id}
-                                        icon={
-                                          <Folder
-                                            data-hierarchy-kind='folder'
-                                            aria-hidden
-                                            className='size-5 text-muted-foreground'
-                                          />
-                                        }
-                                        name={item.name}
-                                        onClick={() => selectFolder(item.id)}
-                                        detail={item.path}
-                                        actions={renderFolderActions(item)}
-                                      />
-                                    ))}
-                                    {visibleDocuments.map((item) => (
-                                      <ResourceRow
-                                        key={item.id}
-                                        icon={
-                                          <DocumentTypeIcon
-                                            documentType={item.document_type}
-                                            data-document-type={
-                                              item.document_type
+                              {directoryReady && (
+                                <div
+                                  key={`${projectId}:${folderId}`}
+                                  className='workspace-pane-enter divide-y divide-border/60 border-y border-border/70'
+                                >
+                                  {visibleFolders.map((item) => (
+                                    <ResourceRow
+                                      key={item.id}
+                                      icon={
+                                        <Folder
+                                          data-hierarchy-kind='folder'
+                                          aria-hidden
+                                          className='size-5'
+                                        />
+                                      }
+                                      name={item.name}
+                                      onClick={() => selectFolder(item.id)}
+                                      detail={
+                                        item.path === item.name
+                                          ? undefined
+                                          : item.path
+                                      }
+                                      actions={renderFolderActions(item)}
+                                    />
+                                  ))}
+                                  {visibleDocuments.map((item) => (
+                                    <ResourceRow
+                                      key={item.id}
+                                      icon={
+                                        <DocumentTypeIcon
+                                          documentType={item.document_type}
+                                          data-document-type={
+                                            item.document_type
+                                          }
+                                          className='size-5'
+                                        />
+                                      }
+                                      name={item.name}
+                                      detail={
+                                        item.file_name ?? item.relative_path
+                                      }
+                                      onClick={() => openDocument(item)}
+                                      actions={
+                                        canCreateDocument ? (
+                                          <Suspense
+                                            fallback={
+                                              <span className='size-9' />
                                             }
-                                            className='size-5 text-muted-foreground'
-                                          />
-                                        }
-                                        name={item.name}
-                                        detail={
-                                          item.file_name ?? item.relative_path
-                                        }
-                                        onClick={() => openDocument(item)}
-                                        actions={
-                                          canCreateDocument ? (
-                                            <Suspense
-                                              fallback={
-                                                <span className='size-9' />
+                                          >
+                                            <DocumentActions
+                                              projectId={projectId}
+                                              pathScope={pathScope}
+                                              document={item}
+                                              folders={folders}
+                                              disabled={
+                                                foldersQuery.isPending ||
+                                                foldersQuery.isError ||
+                                                documentsQuery.isError
                                               }
-                                            >
-                                              <DocumentActions
-                                                projectId={projectId}
-                                                pathScope={pathScope}
-                                                document={item}
-                                                folders={folders}
-                                                disabled={
-                                                  foldersQuery.isPending ||
-                                                  foldersQuery.isError ||
-                                                  documentsQuery.isError
-                                                }
-                                                submissionScope={scope}
-                                                isCurrent={() =>
-                                                  currentScope.current === scope
-                                                }
-                                              />
-                                            </Suspense>
-                                          ) : (
-                                            <CopyPathMenu
-                                              path={
-                                                item.relative_path ??
-                                                item.file_name
+                                              submissionScope={scope}
+                                              isCurrent={() =>
+                                                currentScope.current === scope
                                               }
-                                              scope={pathScope}
-                                              documentId={item.id}
-                                              label={`${t('admin.workspace.moreActions')}: ${item.name}`}
                                             />
-                                          )
-                                        }
-                                        trailing={
-                                          <>
-                                            <Badge
-                                              variant={
-                                                documentWorkflowState(item) ===
-                                                'published'
-                                                  ? 'secondary'
-                                                  : 'outline'
-                                              }
-                                            >
-                                              {item.head_version_name ||
-                                                item.default_branch_name ||
-                                                t(
-                                                  `admin.workspace.${documentWorkflowState(item)}`
-                                                )}
-                                            </Badge>
-                                            {item.status !== ACTIVE_STATUS && (
-                                              <Badge variant='outline'>
-                                                {t('admin.statuses.archived')}
-                                              </Badge>
-                                            )}
-                                            <span className='hidden w-32 text-end text-xs text-muted-foreground xl:block'>
-                                              {formatDate(
-                                                item.updated_at,
-                                                language
+                                          </Suspense>
+                                        ) : (
+                                          <CopyPathMenu
+                                            path={
+                                              item.relative_path ??
+                                              item.file_name
+                                            }
+                                            scope={pathScope}
+                                            documentId={item.id}
+                                            label={`${t('admin.workspace.moreActions')}: ${item.name}`}
+                                          />
+                                        )
+                                      }
+                                      trailing={
+                                        <>
+                                          <Badge
+                                            className='min-w-16 justify-center rounded-md border-border/80 bg-surface-panel py-1 text-xs font-normal text-muted-foreground'
+                                            variant={
+                                              documentWorkflowState(item) ===
+                                              'published'
+                                                ? 'secondary'
+                                                : 'outline'
+                                            }
+                                          >
+                                            {item.head_version_name ||
+                                              item.default_branch_name ||
+                                              t(
+                                                `admin.workspace.${documentWorkflowState(item)}`
                                               )}
-                                            </span>
-                                          </>
-                                        }
-                                      />
-                                    ))}
-                                    {!visibleFolders.length &&
-                                      !visibleDocuments.length && (
-                                        <p className='py-12 text-center text-sm text-muted-foreground'>
-                                          {t(
-                                            normalizedFileFilter
-                                              ? 'search.empty'
-                                              : 'admin.hierarchy.emptyFolder'
+                                          </Badge>
+                                          {item.status !== ACTIVE_STATUS && (
+                                            <Badge variant='outline'>
+                                              {t('admin.statuses.archived')}
+                                            </Badge>
                                           )}
-                                        </p>
-                                      )}
-                                  </div>
-                                )}
+                                          <span className='hidden w-36 text-end text-xs text-muted-foreground tabular-nums xl:block'>
+                                            {formatDate(
+                                              item.updated_at,
+                                              language
+                                            )}
+                                          </span>
+                                        </>
+                                      }
+                                    />
+                                  ))}
+                                  {!visibleItemCount && (
+                                    <div className='grid justify-items-center gap-3 px-4 py-10 text-center'>
+                                      <FolderOpen
+                                        aria-hidden
+                                        className='size-6 text-muted-foreground'
+                                      />
+                                      <p
+                                        role='status'
+                                        className='text-sm text-muted-foreground'
+                                      >
+                                        {t(
+                                          normalizedFileFilter
+                                            ? 'admin.hierarchy.noFilesMatch'
+                                            : 'admin.hierarchy.emptyFolder'
+                                        )}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </TabsContent>
                             <TabsContent
                               value='members'
@@ -1386,7 +1500,7 @@ function ProjectWorkspaceTabs({
           previous.includes(nextPanel) ? previous : [...previous, nextPanel]
         )
       }}
-      className='gap-5'
+      className='gap-6'
     >
       {children(activePanel, visitedPanels)}
     </Tabs>
@@ -1418,12 +1532,58 @@ function ResourceLoadingState() {
   )
 }
 
+function WorkspaceFilter({
+  label,
+  value,
+  onChange,
+  className,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  className?: string
+}) {
+  const { t } = useLanguage()
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div className={cn('relative min-w-0', className)}>
+      <SearchIcon
+        aria-hidden
+        className='pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground'
+      />
+      <Input
+        ref={inputRef}
+        aria-label={label}
+        placeholder={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className='h-9 border-border bg-card ps-10 pe-9 shadow-none hover:border-input'
+      />
+      {value && (
+        <Button
+          type='button'
+          variant='ghost'
+          size='icon'
+          className='absolute inset-y-0 end-0.5 z-10 my-auto size-8 active:translate-y-0'
+          aria-label={t('admin.hierarchy.clearSearch')}
+          onClick={() => {
+            onChange('')
+            inputRef.current?.focus()
+          }}
+        >
+          <X aria-hidden />
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function navRow(selected: boolean) {
   return cn(
-    'flex min-h-9 w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-start text-[13px] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring',
+    'flex min-h-10 w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-start text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring',
     selected
       ? 'bg-accent font-medium text-accent-foreground'
-      : 'text-muted-foreground'
+      : 'text-muted-foreground hover:bg-surface-control hover:text-foreground'
   )
 }
 
@@ -1443,14 +1603,14 @@ function ResourceRow({
   onClick: () => void
 }) {
   return (
-    <div className='flex min-w-0 items-center'>
+    <div className='group/resource flex min-w-0 items-center transition-colors focus-within:bg-surface-panel hover:bg-surface-panel'>
       <button
         type='button'
         aria-label={name}
         onClick={onClick}
-        className='flex min-h-[4.5rem] w-full min-w-0 items-center gap-3 px-2 py-3 text-start transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-3'
+        className='flex min-h-20 w-full min-w-0 items-center gap-3 px-3 py-4 text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:gap-4 sm:px-4'
       >
-        <span className='flex size-9 shrink-0 items-center justify-center'>
+        <span className='flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-control text-muted-foreground [&>svg]:size-5 [&>svg]:text-current'>
           {icon}
         </span>
         <span className='min-w-0 flex-1'>
@@ -1461,12 +1621,21 @@ function ResourceRow({
             </span>
           )}
         </span>
-        <span className='flex shrink-0 items-center gap-3'>
+        <span className='flex shrink-0 items-center gap-4 sm:gap-6'>
           {trailing}
-          <ChevronRight aria-hidden className='size-4 text-muted-foreground' />
+          {!actions && (
+            <ChevronRight
+              aria-hidden
+              className='size-4 text-muted-foreground'
+            />
+          )}
         </span>
       </button>
-      {actions && <div className='shrink-0 pe-2'>{actions}</div>}
+      {actions && (
+        <div className='shrink-0 pe-2 text-muted-foreground sm:pe-3'>
+          {actions}
+        </div>
+      )}
     </div>
   )
 }
